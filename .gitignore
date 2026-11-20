@@ -1,0 +1,25 @@
+# Android / Gradle
+.gradle/
+build/
+*/build/
+*/.cxx/
+captures/
+externalNativeBuild/
+local.properties
+.idea/
+.DS_Store
+*.iml
+*.hprof
+
+# Local Firebase and secrets
+app/google-services.json
+*.jks
+*.keystore
+*.p12
+*.pem
+service-account*.json
+.env
+.env.*
+
+# Sensitive demo artifacts
+eKYC/

@@ -1,0 +1,11 @@
+package com.example.final_term.auth;
+
+import androidx.lifecycle.LiveData;
+
+import com.google.android.gms.tasks.Task;
+
+public interface AuthRepository {
+    LiveData<AuthState> observeAuthState();
+    Task<AppUser> signIn(String email, String password);
+    void signOut();
+}

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="bg_mist">#FFF4F6FA</color>
+    <color name="bg_fog">#FFE4E9F2</color>
+    <color name="bg_slate_soft">#FFB9C4DC</color>
+    <color name="bg_slate">#FF8D9CC0</color>
+    <color name="navy">#FF2F3E6E</color>
+    <color name="navy_deep">#FF222E55</color>
+    <color name="slate_blue">#FF5A6C99</color>
+    <color name="ink">#FF1B2340</color>
+    <color name="ink_muted">#FF6B7694</color>
+    <color name="ink_faint">#FF9AA4BC</color>
+    <color name="success">#FF2E9E7B</color>
+    <color name="danger">#FFD8475F</color>
+    <color name="warning">#FFE0A030</color>
+    <color name="glass">#B8FFFFFF</color>
+    <color name="glass_soft">#8FFFFFFF</color>
+    <color name="glass_border">#D9FFFFFF</color>
+    <color name="setup_fill">#33D8475F</color>
+    <color name="setup_stroke">#66D8475F</color>
+    <color name="disabled_button">#809AA4BC</color>
+</resources>

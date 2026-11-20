@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/login">
+    <fragment
+        android:id="@+id/login"
+        android:name="com.example.final_term.ui.auth.LoginFragment"
+        android:label="@string/login_title">
+        <action android:id="@+id/action_login_to_customerHome" app:destination="@id/customerHome" />
+        <action android:id="@+id/action_login_to_officerHome" app:destination="@id/officerHome" />
+    </fragment>
+    <fragment
+        android:id="@+id/customerHome"
+        android:name="com.example.final_term.ui.customer.CustomerHomeFragment"
+        android:label="@string/customer_home_title" />
+    <fragment
+        android:id="@+id/officerHome"
+        android:name="com.example.final_term.ui.officer.OfficerHomeFragment"
+        android:label="@string/officer_home_title" />
+</navigation>
