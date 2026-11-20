@@ -1,6 +1,5 @@
 package com.example.final_term.domain;
 
-/** Small provider-neutral contracts for the base phase. Money is represented in minor units. */
 public final class DomainDtos {
     private DomainDtos() { }
 

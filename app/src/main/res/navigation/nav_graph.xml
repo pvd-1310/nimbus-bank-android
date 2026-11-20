@@ -18,4 +18,12 @@
         android:id="@+id/officerHome"
         android:name="com.example.final_term.ui.officer.OfficerHomeFragment"
         android:label="@string/officer_home_title" />
+    <fragment
+        android:id="@+id/accountList"
+        android:name="com.example.final_term.ui.customer.AccountListFragment"
+        android:label="Tài khoản và thông báo" />
+    <fragment
+        android:id="@+id/transactionHistory"
+        android:name="com.example.final_term.ui.customer.TransactionHistoryFragment"
+        android:label="Lịch sử giao dịch" />
 </navigation>

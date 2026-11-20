@@ -35,6 +35,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /notifications/{notificationId} {
+      allow read: if signedIn() && (resource.data.ownerUid == request.auth.uid || isActiveOfficer());
+      allow write: if false;
+    }
+
     match /auditLogs/{auditId} {
       allow read: if isActiveOfficer();
       allow write: if false;

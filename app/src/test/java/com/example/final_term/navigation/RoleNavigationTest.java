@@ -22,4 +22,9 @@ public class RoleNavigationTest {
         assertEquals(RootViewModel.RootRoute.LOGIN, viewModel.routeFor(AuthState.signedIn(new AppUser("x", "x", UserRole.UNKNOWN, true))));
         assertEquals(RootViewModel.RootRoute.LOGIN, viewModel.routeFor(AuthState.signedIn(new AppUser("x", "x", UserRole.CUSTOMER, false))));
     }
+
+    @Test public void signedInProfileKeepsFullNameForGreeting() {
+        AppUser user = new AppUser("c", "customer.demo@example.com", "PHAN VAN DUONG", UserRole.CUSTOMER, true);
+        assertEquals("PHAN VAN DUONG", user.getFullName());
+    }
 }

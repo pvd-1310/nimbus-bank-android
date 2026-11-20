@@ -10,6 +10,8 @@ This utility is intentionally outside the APK. It never creates passwords and ne
    - `officer.demo@example.com`
 5. Copy the real Firebase UIDs into environment variables, and run the utility from a trusted machine with Application Default Credentials:
 
+The utility seeds `fullName` for both demo profiles so the Android home greeting can show a real profile name.
+
 ```bash
 export FIREBASE_PROJECT_ID="your-project-id"
 export GOOGLE_APPLICATION_CREDENTIALS="/secure/path/service-account.json"

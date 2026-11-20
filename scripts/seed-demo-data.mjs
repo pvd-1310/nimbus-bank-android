@@ -39,8 +39,8 @@ if (process.argv.includes('--reset')) {
 }
 
 const users = [
-  { id: customerUid, role: 'CUSTOMER', email: 'customer.demo@example.com', active: true },
-  { id: officerUid, role: 'OFFICER', email: 'officer.demo@example.com', active: true }
+  { id: customerUid, role: 'CUSTOMER', email: 'customer.demo@example.com', fullName: 'Nguyễn Minh Anh', active: true },
+  { id: officerUid, role: 'OFFICER', email: 'officer.demo@example.com', fullName: 'Nguyễn Văn Officer', active: true }
 ];
 for (const user of users) {
   await db.collection('users').doc(user.id).set({ ...demo, ...user }, { merge: true });
@@ -53,9 +53,30 @@ const demoAccount = {
   ownerUid: customerUid,
   currency: 'VND',
   status: 'ACTIVE',
+  balanceMinor: 25000000,
   type: 'CHECKING'
 };
 await db.collection('accounts').doc('demo_customer_checking').set(demoAccount, { merge: true });
+
+await db.collection('transactions').doc('demo_customer_transaction_001').set({
+  ...demo,
+  ownerUid: customerUid,
+  accountId: 'demo_customer_checking',
+  type: 'DEPOSIT',
+  currency: 'VND',
+  amountMinor: 25000000,
+  status: 'SETTLED',
+  createdAt: now
+}, { merge: true });
+
+await db.collection('notifications').doc('demo_customer_notification_001').set({
+  ...demo,
+  ownerUid: customerUid,
+  title: 'Chào mừng đến Nimbus Bank',
+  body: 'Tài khoản demo đã sẵn sàng để xem dữ liệu.',
+  read: false,
+  createdAt: now
+}, { merge: true });
 
 console.log(process.argv.includes('--reset')
   ? 'Reset and restored demo profiles and account shell idempotently.'

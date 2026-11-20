@@ -11,7 +11,6 @@ import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.Source;
 
-/** Auth adapter. Profile data, not email text, is the role authority for this demo. */
 public final class FirebaseAuthRepository implements AuthRepository {
     private final FirebaseAuth firebaseAuth;
     private final FirebaseFirestore firestore;
@@ -26,7 +25,6 @@ public final class FirebaseAuthRepository implements AuthRepository {
                 if (current == null) {
                     authState.postValue(AuthState.signedOut());
                 } else {
-                    // Never grant a restored cached role without a fresh server profile read.
                     authState.postValue(AuthState.loading());
                     resolveProfile(current).addOnFailureListener(error -> {
                         authState.postValue(AuthState.error("Không thể xác thực hồ sơ người dùng."));
@@ -83,8 +81,10 @@ public final class FirebaseAuthRepository implements AuthRepository {
                     if (role == UserRole.UNKNOWN || !Boolean.TRUE.equals(active)) {
                         throw new IllegalStateException("PROFILE_NOT_ALLOWED");
                     }
+                    String fullName = profileTask.getResult().getString("fullName");
                     AppUser appUser = new AppUser(user.getUid(),
-                            user.getEmail() == null ? "" : user.getEmail(), role, true);
+                            user.getEmail() == null ? "" : user.getEmail(),
+                            fullName == null ? "" : fullName, role, true);
                     authState.postValue(AuthState.signedIn(appUser));
                     return appUser;
                 });

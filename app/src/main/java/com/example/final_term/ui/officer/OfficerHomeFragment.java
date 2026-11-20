@@ -14,6 +14,8 @@ import com.example.final_term.auth.AuthState;
 import com.example.final_term.auth.UserRole;
 import com.example.final_term.core.FinalTermApplication;
 import com.example.final_term.databinding.FragmentOfficerHomeBinding;
+import androidx.navigation.Navigation;
+import com.example.final_term.navigation.BottomNavigationBinder;
 
 public final class OfficerHomeFragment extends Fragment {
     private FragmentOfficerHomeBinding binding;
@@ -34,9 +36,15 @@ public final class OfficerHomeFragment extends Fragment {
                 return;
             }
             binding.roleText.setText(getString(R.string.role_officer));
-            binding.identityText.setText(authState.getUser().getEmail());
+            String fullName = authState.getUser().getFullName();
+            binding.identityText.setText(fullName == null || fullName.trim().isEmpty()
+                    ? authState.getUser().getEmail() : fullName);
         });
         binding.signOutButton.setOnClickListener(v -> app.getAppContainer().getAuthRepository().signOut());
+        binding.accountButton.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.accountList));
+        binding.historyButton.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.transactionHistory));
+        BottomNavigationBinder.bind(binding.bottomNavigation.getRoot(), Navigation.findNavController(view),
+                R.id.officerHome, R.id.officerHome);
     }
 
     @Override public void onDestroyView() { super.onDestroyView(); binding = null; }

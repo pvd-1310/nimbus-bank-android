@@ -1,22 +1,32 @@
-# Mobile Banking Base Implementation Plan
+# Mobile Banking Incremental Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the first runnable Android APK foundation for the template-aligned mobile banking demo, with Firebase Authentication, two seeded roles, role-based navigation, Firestore-backed demo state, and replaceable service boundaries.
+**Goal:** Build the mobile banking product incrementally from the existing base, completing UC-01 to UC-12 through independently testable read, mutation-contract, and provider phases.
 
-**Architecture:** Use a single-activity Java/XML app with Fragments and Navigation Component. ViewModels call repositories, repositories call domain services, and domain services use Spark-compatible implementations now while preserving interfaces for later Cloud Functions, S3/Firebase Storage, Stripe, Maps, and OpenAI adapters.
+**Architecture:** Use a single-activity Java/XML app with Fragments and Navigation Component. ViewModels call repositories, repositories call provider-neutral domain services, and each capability is enabled behind an explicit backend/provider adapter. The Android client never authoritatively writes balances, ledger entries, role/status, audit, OTP, or settlement results.
 
 **Tech Stack:** Android Studio, Java, XML, AndroidX, Material Components, Navigation Component, ViewModel, LiveData or StateFlow-equivalent Java observable state, Firebase Authentication, Cloud Firestore, Room/cache only where needed, JUnit, AndroidX Test.
 
 **Spec:** `docs/superpowers/specs/2026-11-20-mobile-banking-spark-demo-design.md`
+
+## Implementation Status
+
+Updated after the current base pass:
+
+- Foundation, Firebase configuration boundary, View Binding, native XML login, Customer/Officer shells, role routing, Firestore rules/indexes, Firebase Console setup documentation, and external seed/reset utility are implemented. Firebase Console setup has been completed.
+- `google-services.json` is intentionally local-only and excluded by `.gitignore`.
+- Build output was produced successfully after Android Studio Gradle sync, and Firebase login/role routing was verified successfully on the emulator. Unit tests and lint still require a complete Gradle test run.
+- Auth repository contracts and minimal provider-neutral DTO/service interfaces are present. The next controlled step is Phase 1 read-model work; trusted seed tooling remains outside the APK, and complete UC-01–UC-12 flows remain pending.
+- No Git repository or commit was created, per user instruction.
 
 ## Global Constraints
 
 - One APK must contain both Customer and Bank Officer flows.
 - Seed accounts are `customer.demo@example.com` and `officer.demo@example.com`.
 - Offline mode is read-only; transfer, OTP, payment, eKYC review, officer policy updates, and other mutations require online access.
-- The base phase uses Firestore/Auth where available, local app-private storage only as temporary capture/cache, a private AWS S3 target accessed through backend-issued presigned URLs, local demo services instead of deployed Cloud Functions, and deterministic mock Stripe behavior.
-- Client-side role and transaction checks are demonstrational until server-side claims, rules, and Cloud Functions are deployed.
+- The current base uses Firestore/Auth where available, local app-private storage only as temporary capture/cache, and explicit setup-required states for unavailable providers.
+- Client-side validation is UX validation only; authoritative role, balance, ledger, audit, OTP, payment, and settlement checks belong to rules/backend/provider adapters.
 - Preserve the template collection names and domain terminology.
 
 ## Review Focus
@@ -24,8 +34,23 @@
 - Missing or stale Firebase configuration must show a recoverable setup error instead of crashing; test in the configuration validator task.
 - A signed-in user with an unknown, inactive, or malformed role must be denied protected navigation; test in the role-routing task.
 - Firestore read failure/offline state must expose cached/read-only state and must not allow mutation; test in the repository/service task.
-- Repeated reset-seed requests must be idempotent and must not duplicate demo records; test in the seed task.
-- Customer and Officer must not reach each other’s destinations through back navigation or deep links; test in the navigation task.
+- Trusted seed/reset tooling must be idempotent, namespace-scoped, and must not be exposed as an Android privilege; test in the tooling task.
+- Customer and Officer must not reach each other’s destinations through back navigation, restored state, or deep links; test in the navigation task.
+
+## Incremental Execution Order
+
+Work is intentionally gated. Complete and verify one phase before starting the next:
+
+1. **Phase 1 — Read foundation:** profile, account summaries, transaction history, notifications, loading/error/empty/offline-read-only states, and Firestore rules tests.
+2. **Phase 2 — Customer read workflows:** checking, savings, mortgage details, history filters, profile/preferences, and request screens that do not mutate authoritative money.
+3. **Phase 3 — Mutation contracts:** transfer/payment/eKYC/OTP DTOs, validation, idempotency, state machines, repositories, and blocked/setup-required UI. No fake success.
+4. **Phase 4 — Backend operations:** callable/backend adapter for transfer, ledger, OTP challenge verification, audit, and officer authorization.
+5. **Phase 5 — eKYC provider:** capture metadata and local temporary cache, then private S3 upload through backend-issued presigned URLs and officer review.
+6. **Phase 6 — Payments and services:** Stripe PaymentIntent/webhook adapter, bills/top-up/orders, and explicit pending/failed/settled states.
+7. **Phase 7 — Branch and chatbot:** branch data, permission/manual-origin fallback, Routes provider, and server-side allowlisted chatbot actions.
+8. **Phase 8 — Officer workflows and hardening:** customer provisioning, eKYC review, rate policy, audit views, rules/security tests, accessibility, screenshot comparison, and release checklist.
+
+Each phase must leave the app buildable and must record its verification result before the next phase begins.
 
 ### Task 1: Establish the Android project foundation
 
@@ -58,7 +83,7 @@
 
 - [ ] **Step 4: Implement `AppContainer`**
 
-  Define one composition root that owns Firebase Auth, Firestore, repositories, and demo service implementations; later tasks must receive dependencies from this container rather than constructing Firebase clients inside screens.
+  Define one composition root that owns Firebase Auth, Firestore, repositories, and provider-neutral service adapters; later tasks must receive dependencies from this container rather than constructing Firebase clients inside screens.
 
 - [ ] **Step 5: Run verification**
 
@@ -99,7 +124,7 @@
 
 - [ ] **Step 3: Implement the role and auth contracts**
 
-  Keep role names aligned with the template. Treat Firestore profile role as demo authority and document that production will use custom claims/server checks.
+  Keep role names aligned with the template. Treat Firestore profile role as the current configured authority and document that production will use custom claims/server checks.
 
 - [ ] **Step 4: Implement Firebase Auth integration**
 
@@ -163,56 +188,57 @@
 
   Commit: `feat: add seeded role based navigation shell`
 
-### Task 4: Add Firestore demo repositories and seed/reset support
+### Task 4: Add Firestore read repositories and trusted seed/reset support
 
 **Files:**
 - Create: `app/src/main/java/<package>/data/FirestoreCollections.java`
-- Create: `app/src/main/java/<package>/data/DemoSeedRepository.java`
-- Create: `app/src/main/java/<package>/data/FirestoreDemoRepository.java`
+- Create: `app/src/main/java/<package>/data/FirestoreProfileRepository.java`
+- Create: `app/src/main/java/<package>/data/FirestoreReadRepository.java`
 - Create: `app/src/main/java/<package>/data/ConnectivityGate.java`
-- Create: `app/src/main/java/<package>/data/DemoResetResult.java`
-- Create: `app/src/test/java/<package>/data/DemoSeedRepositoryTest.java`
+- Create: `app/src/main/java/<package>/data/ReadModelResult.java`
+- Create: `app/src/test/java/<package>/data/FirestoreReadRepositoryTest.java`
 - Create: `scripts/seed-demo-data.md`
 
 **Interfaces:**
-- `DemoSeedRepository.seedIfMissing(): Result<SeedSummary>`
-- `DemoSeedRepository.resetDemo(): Result<SeedSummary>`
+- `FirestoreReadRepository.observeAccounts(uid: String): LiveData<ReadModelResult<List<AccountSummary>>>`
+- `FirestoreReadRepository.observeTransactions(uid: String): LiveData<ReadModelResult<List<TransactionSummary>>>`
 - `ConnectivityGate.requireOnlineForMutation(): Result<Void>`
+- Seed/reset remains external trusted tooling and must not be callable from Android UI.
 - `FirestoreCollections` constants for `users`, `customers`, `officers`, `accounts`, `transactions`, `auditLogs`, and the remaining template collections.
 
 - [ ] **Step 1: Write failing seed/reset tests**
 
-  Test idempotent seed creation, reset replacement of known demo records, preservation of non-demo records, and rejection of mutations when offline.
+  Test permitted account/history reads, cached-read metadata, rejection of unauthorized profile access, idempotent external seed creation, namespace-scoped reset, and rejection of mutations when offline.
 
 - [ ] **Step 2: Run the tests to verify failure**
 
-  Run: `./gradlew testDebugUnitTest --tests '*DemoSeedRepositoryTest'`
+  Run: `./gradlew testDebugUnitTest --tests '*FirestoreReadRepositoryTest'`
 
-  Expected: FAIL because seed/reset and connectivity gate are not implemented.
+  Expected: FAIL because the read repository and its result states are not implemented.
 
 - [ ] **Step 3: Define collection constants and demo record keys**
 
-  Use stable IDs such as `demo_customer_user`, `demo_officer_user`, and prefixed account/branch/transaction IDs so reset is scoped and repeatable.
+  Preserve template collection names. Use stable IDs only in trusted seed tooling so reset is scoped and repeatable; Android repositories must not assume demo IDs.
 
-- [ ] **Step 4: Implement idempotent seed/reset**
+- [ ] **Step 4: Implement Firestore read repositories**
 
-  Seed both users, role profiles, representative checking/savings/mortgage accounts, branches, bills, and catalog records required by the template. Reset only records carrying the demo marker.
+  Read only documents allowed by Firestore rules, expose loading/success/empty/error/cache metadata, and never treat cached role data as sufficient authorization at startup.
 
 - [ ] **Step 5: Add read-only offline behavior**
 
-  Allow Firestore cached reads where available, but make every mutation path call `ConnectivityGate` first and return a user-visible online-required state.
+  Keep UID-based seed/reset in `scripts/seed-demo-data.mjs`; require external Admin credentials and a named demo namespace. Do not add seed/reset controls to customer or officer screens.
 
 - [ ] **Step 6: Run tests and emulator verification**
 
-  Run: `./gradlew testDebugUnitTest --tests '*DemoSeedRepositoryTest'`
+  Run: `./gradlew testDebugUnitTest --tests '*FirestoreReadRepositoryTest'`
 
-  Expected: PASS. Run the documented seed/reset procedure against the Firebase Emulator Suite if available.
+  Expected: PASS. Run rules/read verification against the Firebase Console project or Emulator Suite when available.
 
 - [ ] **Step 7: Commit**
 
   Commit: `feat: add firestore demo seed and reset support`
 
-### Task 5: Introduce replaceable domain service interfaces
+### Task 5: Introduce production-shaped domain contracts
 
 **Files:**
 - Create: `app/src/main/java/<package>/domain/AccountService.java`
@@ -221,40 +247,36 @@
 - Create: `app/src/main/java/<package>/domain/PaymentService.java`
 - Create: `app/src/main/java/<package>/domain/BranchService.java`
 - Create: `app/src/main/java/<package>/domain/ChatbotService.java`
-- Create: `app/src/main/java/<package>/domain/LocalAccountService.java`
-- Create: `app/src/main/java/<package>/domain/LocalTransferService.java`
-- Create: `app/src/main/java/<package>/domain/LocalEkycService.java`
-- Create: `app/src/main/java/<package>/domain/LocalPaymentService.java`
-- Create: `app/src/main/java/<package>/domain/LocalBranchService.java`
-- Create: `app/src/main/java/<package>/domain/LocalChatbotService.java`
-- Create: `app/src/test/java/<package>/domain/LocalTransferServiceTest.java`
+- Create: `app/src/main/java/<package>/domain/OperationState.java`
+- Create: `app/src/main/java/<package>/domain/MutationUnavailableException.java`
+- Create: `app/src/test/java/<package>/domain/MutationContractTest.java`
 
 **Interfaces:**
-- `TransferService.createTransferIntent(TransferRequest): Result<TransactionIntent>`
-- `TransferService.verifyOtp(OtpVerification): Result<AuthorizationResult>`
-- `TransferService.commitTransfer(TransactionIntent, AuthorizationResult): Result<TransactionReceipt>`
-- `PaymentService.createPayment(PaymentRequest): Result<PaymentRecord>`
-- `EkycService.submit(EkycSubmission): Result<EkycRequest>`
-- `BranchService.findNearest(Origin): Result<BranchRecommendation>`
-- `ChatbotService.reply(ChatMessage): Result<ChatReply>`
+- `TransferService.createTransferIntent(TransferRequest): Task<TransactionIntent>`
+- `TransferService.verifyOtp(OtpVerification): Task<AuthorizationResult>`
+- `TransferService.commitTransfer(TransactionIntent, AuthorizationResult): Task<TransactionReceipt>`
+- `PaymentService.createPayment(PaymentRequest): Task<PaymentRecord>`
+- `EkycService.submit(EkycSubmission): Task<EkycRequest>`
+- `BranchService.findNearest(Origin): Task<BranchRecommendation>`
+- `ChatbotService.reply(ChatMessage): Task<ChatReply>`
 
 - [ ] **Step 1: Write failing domain tests**
 
-  Test transfer validation for positive amount, owner, sufficient balance, transaction-bound OTP, one-use OTP, duplicate request ID, balanced ledger records, and audit record creation. Test that mock payment, eKYC, branch, and chatbot results use template states/action IDs.
+  Test positive amount, owner/currency validation, idempotency keys, transaction-bound one-use OTP semantics, explicit pending/failed/setup-required states, and the rule that Android cannot claim authoritative ledger/audit/settlement success.
 
 - [ ] **Step 2: Run the tests to verify failure**
 
-  Run: `./gradlew testDebugUnitTest --tests '*LocalTransferServiceTest'`
+  Run: `./gradlew testDebugUnitTest --tests '*MutationContractTest'`
 
-  Expected: FAIL because the domain models and services are not implemented.
+  Expected: FAIL because the production-shaped contracts and operation states are not implemented.
 
 - [ ] **Step 3: Define domain request/result models and interfaces**
 
   Keep money in minor units, preserve the template status names, and use stable IDs/request IDs. Keep providers out of UI contracts.
 
-- [ ] **Step 4: Implement local services**
+- [ ] **Step 4: Implement provider-neutral contract adapters**
 
-  Local services validate the template rules, write Firestore demo state when online, and expose explicit `DEMO_SIMULATED` metadata. They must not claim production authorization or external settlement.
+  Implement validation and unavailable/pending states. Do not write balances, ledger entries, audit records, role/status, or external settlement from Android. Backend/provider adapters are added only in later phases.
 
 - [ ] **Step 5: Wire services through `AppContainer`**
 
@@ -262,30 +284,30 @@
 
 - [ ] **Step 6: Run tests**
 
-  Run: `./gradlew testDebugUnitTest --tests '*LocalTransferServiceTest'`
+  Run: `./gradlew testDebugUnitTest --tests '*MutationContractTest'`
 
   Expected: PASS.
 
 - [ ] **Step 7: Commit**
 
-  Commit: `feat: add replaceable demo domain services`
+  Commit: `feat: add production shaped domain contracts`
 
-### Task 6: Add base demo controls and verification documentation
+### Task 6: Add phase-1 read UI and verification documentation
 
 **Files:**
 - Modify: `app/src/main/java/<package>/ui/customer/CustomerHomeFragment.java`
 - Modify: `app/src/main/java/<package>/ui/officer/OfficerHomeFragment.java`
-- Create: `app/src/main/java/<package>/ui/demo/DemoControlsFragment.java`
-- Create: `app/src/main/res/layout/fragment_demo_controls.xml`
-- Create: `docs/demo/base-demo-checklist.md`
+- Create: `app/src/main/java/<package>/ui/customer/AccountListFragment.java`
+- Create: `app/src/main/java/<package>/ui/customer/TransactionHistoryFragment.java`
+- Create: `docs/verification/phase-1-read-foundation.md`
 - Create: `app/src/androidTest/java/<package>/BaseFlowInstrumentedTest.java`
 
 **Interfaces:**
-- Demo controls expose `Seed demo`, `Reset demo`, current role, connectivity state, and an explicit demo-mode notice.
+- Read screens expose loading, empty, stale-cache, offline-read-only, permission-denied, and retry states.
 
 - [ ] **Step 1: Write the failing instrumented flow test**
 
-  Test launch → login → Customer home, sign out → Officer login → Officer home, role-specific screen visibility, and reset-demo confirmation.
+  Test launch → login → Customer home → permitted account/history reads, then sign out → Officer login → Officer home with role-specific read access.
 
 - [ ] **Step 2: Run the test to verify the environment is ready**
 
@@ -293,9 +315,9 @@
 
   Expected before implementation: FAIL at missing screens or IDs; if no device/emulator is available, record the environment limitation rather than skipping the test silently.
 
-- [ ] **Step 3: Implement demo controls and notices**
+- [ ] **Step 3: Implement phase-1 read states**
 
-  Keep reset destructive only within the demo-marked dataset. Show that Spark mode is a classroom demo and that production server enforcement is not active.
+  Show cached data as read-only, require retry for transient errors, and show setup-required when the provider/backend is unavailable. Do not display fabricated balances or transaction success.
 
 - [ ] **Step 4: Run all verification**
 
@@ -309,5 +331,5 @@
 
 ## Self-Review Coverage
 
-The plan covers the approved base scope: Android shell, Auth, two seeded roles, Firestore data boundary, Spark-compatible offline behavior, demo seed/reset, replaceable service interfaces, and a repeatable base demo flow. Full account, transfer, eKYC, utility, maps, chatbot, and payment screens remain follow-on implementation tasks that consume the interfaces created here; they are intentionally not hidden inside the base plan.
+The plan covers the approved incremental direction: Android shell, Auth, two roles, Firestore read boundary, trusted external seed tooling, production-shaped mutation contracts, explicit unavailable states, and a phase-1 read flow. Transfer/OTP, eKYC/S3, Stripe payments, Maps/Routes, chatbot backend, and officer mutations remain separate gated phases; they must not be represented as completed by local Android-only writes.
 
