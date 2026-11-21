@@ -17,19 +17,23 @@ import com.example.final_term.core.FinalTermApplication;
 import com.example.final_term.data.FirestoreReadRepository;
 import com.example.final_term.data.ReadModelResult;
 import com.example.final_term.data.ReadModels;
+import com.example.final_term.data.ReadSummaryFormatter;
 import com.example.final_term.databinding.FragmentTransactionHistoryBinding;
-import com.example.final_term.navigation.BottomNavigationBinder;
 import androidx.navigation.Navigation;
 
-import java.text.NumberFormat;
 import java.util.List;
-import java.util.Locale;
+import android.text.Editable;
+import android.text.TextWatcher;
+import android.widget.ArrayAdapter;
+import android.widget.AdapterView;
 
 public final class TransactionHistoryFragment extends Fragment {
     private FragmentTransactionHistoryBinding binding;
     private FinalTermApplication application;
     private String uid;
     private UserRole role;
+    private List<ReadModels.TransactionSummary> rows;
+    private String baseStatus = "";
 
     @Nullable @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle state) {
@@ -41,13 +45,27 @@ public final class TransactionHistoryFragment extends Fragment {
         super.onViewCreated(view, state);
         application = (FinalTermApplication) requireActivity().getApplication();
         binding.retryButton.setOnClickListener(v -> load());
+        binding.typeFilter.setAdapter(new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_dropdown_item,
+                new String[]{"ALL", "CREDIT", "DEBIT"}));
+        binding.statusFilter.setAdapter(new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_dropdown_item,
+                new String[]{"ALL", "SETTLED", "PENDING", "FAILED"}));
+        TextWatcher watcher = new TextWatcher() {
+            public void beforeTextChanged(CharSequence s, int st, int c, int a) { }
+            public void onTextChanged(CharSequence s, int st, int b, int c) { renderFiltered(); }
+            public void afterTextChanged(Editable e) { }
+        };
+        binding.searchInput.addTextChangedListener(watcher);
+        AdapterView.OnItemSelectedListener selected = new AdapterView.OnItemSelectedListener() {
+            public void onItemSelected(AdapterView<?> p, View v, int pos, long id) { renderFiltered(); }
+            public void onNothingSelected(AdapterView<?> p) { }
+        };
+        binding.typeFilter.setOnItemSelectedListener(selected);
+        binding.statusFilter.setOnItemSelectedListener(selected);
         application.getAppContainer().getAuthRepository().observeAuthState()
                 .observe(getViewLifecycleOwner(), authState -> {
                     if (authState != null && authState.getStatus() == AuthState.Status.SIGNED_IN && authState.getUser() != null) {
                         uid = authState.getUser().getUid();
                         role = authState.getUser().getRole();
-                        BottomNavigationBinder.bind(binding.bottomNavigation.getRoot(), Navigation.findNavController(view),
-                                role == UserRole.OFFICER ? R.id.officerHome : R.id.customerHome, R.id.accountList);
                         load();
                     }
                 });
@@ -65,14 +83,25 @@ public final class TransactionHistoryFragment extends Fragment {
 
     private void render(ReadModelResult<List<ReadModels.TransactionSummary>> result) {
         if (result == null) return;
-        binding.statusText.setText(statusMessage(result));
+        baseStatus = statusMessage(result);
+        binding.statusText.setText(baseStatus);
+        rows = result.getData();
+        renderFiltered();
+    }
+
+    private void renderFiltered() {
         binding.content.removeAllViews();
-        if (result.getData() == null) return;
-        for (ReadModels.TransactionSummary transaction : result.getData()) {
-            addLine(transaction.type + "  •  " + transaction.status,
-                    formatMoney(transaction.amountMinor, transaction.currency));
+        if (rows == null) return;
+        String query = binding.searchInput.getText() == null ? "" : binding.searchInput.getText().toString();
+        String type = binding.typeFilter.getSelectedItem() == null ? "ALL" : binding.typeFilter.getSelectedItem().toString();
+        String status = binding.statusFilter.getSelectedItem() == null ? "ALL" : binding.statusFilter.getSelectedItem().toString();
+        List<ReadModels.TransactionSummary> filtered = TransactionHistoryFilter.apply(rows, query, type, status);
+        binding.statusText.setText(baseStatus + " · " + filtered.size() + " kết quả");
+        for (ReadModels.TransactionSummary transaction : filtered) {
+            addLine(ReadSummaryFormatter.transactionTitle(transaction),
+                    ReadSummaryFormatter.transactionDetail(transaction));
         }
-        if (result.getStatus() == ReadModelResult.Status.EMPTY) {
+        if (filtered.isEmpty()) {
             addLine("Chưa có giao dịch", "Lịch sử sẽ được hiển thị khi Firestore có dữ liệu.");
         }
     }
@@ -94,11 +123,6 @@ public final class TransactionHistoryFragment extends Fragment {
         line.setTextSize(16);
         line.setPadding(0, 18, 0, 18);
         binding.content.addView(line);
-    }
-
-    private String formatMoney(long amountMinor, String currency) {
-        return NumberFormat.getIntegerInstance(new Locale("vi", "VN")).format(amountMinor)
-                + " " + (currency == null ? "" : currency);
     }
 
     @Override public void onDestroyView() { super.onDestroyView(); binding = null; }

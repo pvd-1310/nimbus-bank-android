@@ -7,6 +7,7 @@ import androidx.annotation.NonNull;
 import com.example.final_term.auth.AuthRepository;
 import com.example.final_term.auth.FirebaseAuthRepository;
 import com.example.final_term.data.FirestoreReadRepository;
+import com.example.final_term.data.BackendApiClient;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.FirebaseFirestore;
@@ -15,6 +16,7 @@ public final class AppContainer {
     private final boolean firebaseConfigured;
     private final AuthRepository authRepository;
     private final FirestoreReadRepository readRepository;
+    private final BackendApiClient backendApiClient;
 
     public AppContainer(@NonNull Context context) {
         FirebaseApp firebaseApp;
@@ -31,9 +33,11 @@ public final class AppContainer {
                     FirebaseAuth.getInstance(firebaseApp),
                     firestore);
             readRepository = new FirestoreReadRepository(firestore);
+            backendApiClient = new BackendApiClient(FirebaseAuth.getInstance(firebaseApp));
         } else {
             authRepository = new FirebaseAuthRepository(null, null);
             readRepository = new FirestoreReadRepository(null);
+            backendApiClient = new BackendApiClient(null);
         }
     }
 
@@ -47,5 +51,9 @@ public final class AppContainer {
 
     public FirestoreReadRepository getReadRepository() {
         return readRepository;
+    }
+
+    public BackendApiClient getBackendApiClient() {
+        return backendApiClient;
     }
 }

@@ -31,6 +31,8 @@ export class TransactionService {
           amountMinor: x.amountMinor,
           currency: x.currency,
           status: x.status,
+          ...(x.failureCode ? { failureCode: x.failureCode } : {}),
+          ...(Number.isSafeInteger(x.balanceAfterMinor) ? { balanceAfterMinor: x.balanceAfterMinor } : {}),
           committedAt: x.committedAt,
         }));
     });

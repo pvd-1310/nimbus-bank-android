@@ -7,10 +7,7 @@
     <string name="password_label">Mật khẩu</string>
     <string name="password_hint">Nhập mật khẩu</string>
     <string name="sign_in">Đăng nhập</string>
-    <string name="setup_required_title">Cần cấu hình Firebase</string>
-    <string name="setup_required_message">Chưa có google-services.json. App chưa thể xác thực người dùng.</string>
-    <string name="setup_required_detail">Thêm file vào app/google-services.json, bật Email/Password và Firestore trong Firebase Console, sau đó build lại.</string>
-    <string name="retry_setup">Thử lại</string>
+    <string name="production_configuration_required">Ứng dụng chưa được cấu hình production. Vui lòng liên hệ quản trị hệ thống.</string>
     <string name="error_email_required">Vui lòng nhập email.</string>
     <string name="error_password_required">Vui lòng nhập mật khẩu.</string>
     <string name="error_sign_in">Không thể đăng nhập. Kiểm tra thông tin hoặc thử lại.</string>
@@ -22,9 +19,8 @@
     <string name="role_officer">Bank Officer</string>
     <string name="sign_out">Đăng xuất</string>
     <string name="data_not_loaded">Chưa tải dữ liệu tài khoản</string>
-    <string name="data_not_loaded_detail">Kết nối Firebase và seed dữ liệu demo để hiển thị thông tin được cấp quyền.</string>
-    <string name="demo_notice">Chế độ nền tảng demo</string>
-    <string name="demo_notice_detail">Các chức năng chưa triển khai được giữ ở trạng thái chờ, không giả thành công.</string>
+    <string name="data_not_loaded_detail">Không thể tải dữ liệu từ hệ thống ngân hàng production.</string>
+    <string name="production_notice_detail">Các thao tác nhạy cảm chỉ được thực hiện sau khi backend production xác thực quyền.</string>
     <string name="customer_actions">Dịch vụ khách hàng</string>
     <string name="officer_actions">Tác vụ nghiệp vụ</string>
     <string name="coming_soon">Đang chuẩn bị</string>

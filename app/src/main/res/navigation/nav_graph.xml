@@ -26,4 +26,16 @@
         android:id="@+id/transactionHistory"
         android:name="com.example.final_term.ui.customer.TransactionHistoryFragment"
         android:label="Lịch sử giao dịch" />
+    <fragment
+        android:id="@+id/profile"
+        android:name="com.example.final_term.ui.profile.ProfileFragment"
+        android:label="Cá nhân và cài đặt" />
+    <fragment android:id="@+id/accountDetail" android:name="com.example.final_term.ui.customer.AccountDetailFragment" android:label="Chi tiết tài khoản" />
+    <fragment android:id="@+id/savingsDetail" android:name="com.example.final_term.ui.customer.SavingsDetailFragment" android:label="Tài khoản tiết kiệm" />
+    <fragment android:id="@+id/mortgageDetail" android:name="com.example.final_term.ui.customer.MortgageDetailFragment" android:label="Khoản vay thế chấp" />
+    <fragment android:id="@+id/moneyRequest" android:name="com.example.final_term.ui.customer.MoneyRequestFragment" android:label="Yêu cầu nạp/rút" />
+    <fragment android:id="@+id/transfer" android:name="com.example.final_term.ui.customer.TransferFragment" android:label="Chuyển tiền" />
+    <fragment android:id="@+id/officerEkyc" android:name="com.example.final_term.ui.officer.OfficerFeatureFragment" android:label="Duyệt eKYC" />
+    <fragment android:id="@+id/officerAudit" android:name="com.example.final_term.ui.officer.OfficerFeatureFragment" android:label="Kiểm tra giao dịch" />
+    <fragment android:id="@+id/officerRates" android:name="com.example.final_term.ui.officer.OfficerFeatureFragment" android:label="Chính sách lãi suất" />
 </navigation>

@@ -42,16 +42,16 @@ export function registerTransfersRoutes(route: Route, d: AppDependencies) {
   route("post", "/intents/:id/otp", (a, r) =>
     d.bank.transfers.challenge(a, String(r.params.id)),
   );
-  route("post", "/intents/:id/verify-otp", (a, r) =>
-    d.bank.transfers.verify(
-      a,
-      String(r.params.id),
-      z
-        .object({ code: z.string().min(1).max(20) })
-        .strict()
-        .parse(r.body).code,
-    ),
-  );
+  route("post", "/intents/:id/verify-otp", (a, r) => {
+    const body = z.union([
+      z.object({ code: z.string().min(1).max(20) }).strict(),
+      z.object({ phoneIdToken: z.string().min(1).max(8192) }).strict(),
+    ]).parse(r.body);
+    const intentId = String(r.params.id);
+    return "phoneIdToken" in body
+      ? d.bank.transfers.verifyDemoPhone(a, intentId, body.phoneIdToken)
+      : d.bank.transfers.verify(a, intentId, body.code);
+  });
   route("post", "/transfers/:id/commit", (a, r) =>
     d.bank.transfers.commit(a, String(r.params.id)),
   );

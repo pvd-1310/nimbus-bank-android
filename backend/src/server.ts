@@ -6,6 +6,7 @@ const r = runtime();
 const app = createApp({
   ...r,
   otpCapability:
+    r.bank.options.demoPhone ? "FIREBASE_PHONE_DEMO" :
     r.cfg.mode === "emulator" && r.cfg.host === "127.0.0.1"
       ? "LOCAL_DEMO_INBOX"
       : "SETUP_REQUIRED",
@@ -14,7 +15,7 @@ const app = createApp({
 });
 const server = app.listen(r.cfg.port, r.cfg.host, () =>
   console.log(
-    `Banking demo API http://${r.cfg.host}:${r.cfg.port} (${r.cfg.mode}); chatbot deferred`,
+    `Banking API listening on ${r.cfg.host}:${r.cfg.port} (${r.cfg.mode})`,
   ),
 );
 for (const signal of ["SIGINT", "SIGTERM"])

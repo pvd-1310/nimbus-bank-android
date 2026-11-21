@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="@drawable/background_gradient"
+    android:padding="20dp">
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="Cá nhân &amp; cài đặt" android:textColor="@color/ink" android:textSize="24sp"
+        android:textStyle="bold" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="20dp" android:background="@drawable/glass_tile"
+        android:orientation="vertical" android:padding="20dp">
+        <TextView android:id="@+id/name_text" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textColor="@color/ink" android:textSize="20sp" android:textStyle="bold" />
+        <TextView android:id="@+id/email_text" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="6dp" android:textColor="@color/ink_muted" />
+        <TextView android:id="@+id/role_text" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_marginTop="12dp" android:background="@drawable/glass_tile" android:padding="8dp"
+            android:textColor="@color/navy" />
+    </LinearLayout>
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="18dp" android:background="@drawable/glass_tile" android:padding="16dp"
+        android:text="Tuỳ chọn cá nhân · chỉ đọc\n\nNgôn ngữ: Tiếng Việt (giao diện hiện tại)\nThông báo: chưa tải tuỳ chọn\n\nChỉnh sửa tuỳ chọn chưa khả dụng; cần kết nối API profile."
+        android:textColor="@color/ink_muted" />
+    <com.google.android.material.button.MaterialButton android:id="@+id/logout_button"
+        android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp"
+        android:text="Đăng xuất tài khoản" android:textColor="@color/danger" />
+    <Space android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
+</LinearLayout>

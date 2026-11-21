@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
+import com.google.firebase.Timestamp;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.Query;
@@ -100,7 +101,8 @@ public final class FirestoreReadRepository {
         for (DocumentSnapshot document : snapshot.getDocuments()) {
             result.add(new ReadModels.AccountSummary(document.getId(),
                     document.getString("type"), document.getString("currency"),
-                    longValue(document, "balanceMinor"), document.getString("status")));
+                    longValue(document, "balanceMinor"), document.getString("status"),
+                    document.getString("ownerUid"), document.getLong("availableMinor")));
         }
         return result;
     }
@@ -108,11 +110,17 @@ public final class FirestoreReadRepository {
     private List<ReadModels.TransactionSummary> mapTransactions(QuerySnapshot snapshot) {
         List<ReadModels.TransactionSummary> result = new ArrayList<>();
         for (DocumentSnapshot document : snapshot.getDocuments()) {
+            String accountId = document.getString("accountId");
             result.add(new ReadModels.TransactionSummary(document.getId(),
-                    document.getString("accountId"), document.getString("type"),
+                    accountId == null ? document.getString("sourceAccountId") : accountId, document.getString("type"),
                     document.getString("currency"), longValue(document, "amountMinor"),
-                    document.getString("status"), document.getTimestamp("createdAt")));
+                    document.getString("status"),
+                    readTimestamp(document.get("createdAt"), document.get("committedAt")),
+                    document.getString("failureCode"), document.getLong("balanceAfterMinor")));
         }
+        result.sort(java.util.Comparator.comparing(
+                (ReadModels.TransactionSummary item) -> item.createdAt,
+                java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())));
         return result;
     }
 
@@ -122,9 +130,24 @@ public final class FirestoreReadRepository {
             Boolean read = document.getBoolean("read");
             result.add(new ReadModels.NotificationSummary(document.getId(),
                     document.getString("title"), document.getString("body"),
-                    Boolean.TRUE.equals(read), document.getTimestamp("createdAt")));
+                    Boolean.TRUE.equals(read), readTimestamp(document.get("createdAt"), null)));
         }
         return result;
+    }
+
+    static Timestamp readTimestamp(Object createdAt, Object committedAt) {
+        Timestamp timestamp = asTimestamp(createdAt);
+        return timestamp != null ? timestamp : asTimestamp(committedAt);
+    }
+
+    private static Timestamp asTimestamp(Object value) {
+        if (value instanceof Timestamp) return (Timestamp) value;
+        // Backend writes epoch milliseconds; Firestore returns integer fields as Long.
+        if (!(value instanceof Long)) return null;
+        long millis = (Long) value;
+        long seconds = Math.floorDiv(millis, 1_000L);
+        if (seconds < -62_135_596_800L || seconds >= 253_402_300_800L) return null;
+        return new Timestamp(seconds, (int) Math.floorMod(millis, 1_000L) * 1_000_000);
     }
 
     private static long longValue(DocumentSnapshot document, String field) {

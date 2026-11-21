@@ -7,8 +7,23 @@ import {
 import type { Banking } from "../../core/banking.js";
 import type { Doc, Tx } from "../../core/store.js";
 import { digest } from "../../shared/crypto.js";
-import { check, key, minor } from "../../shared/errors.js";
+import { check, Fault, key, minor } from "../../shared/errors.js";
 import type { Actor } from "../auth/auth.types.js";
+
+export interface DemoPhoneOtp {
+  customerUid: string;
+  sourceId: string;
+  recipientId: string;
+  phoneNumber: string;
+  verify(token: string): Promise<{ uid: string; authTime: number }>;
+}
+
+const transferRejections = new Set([
+  "INVALID_DESTINATION", "ACCOUNT_INACTIVE", "CURRENCY_MISMATCH",
+  "INSUFFICIENT_FUNDS", "POLICY_CHANGED", "DAILY_LIMIT_EXCEEDED",
+  "AMOUNT_OVERFLOW", "EXPIRED", "STEP_UP_UNAVAILABLE",
+]);
+
 export class TransferService {
   constructor(private bank: Banking) {}
   async intent(a: Actor, input: Doc) {
@@ -69,6 +84,9 @@ export class TransferService {
       };
       t.set("transactionIntents/" + id, d);
       return { id, intentId: id, status: d.status, expiresAt: d.expiresAt };
+    }).catch(async (error: unknown) => {
+      await this.recordRejection(a, id, "INTENT", error, { ...payload, requestId: input.requestId });
+      throw error;
     });
   }
   async getIntent(t: Tx, a: Actor, id: string): Promise<Doc> {
@@ -95,6 +113,7 @@ export class TransferService {
   async challenge(a: Actor, id: string) {
     const code = String(randomInt(100000, 1000000)),
       nonce = randomUUID();
+    const demoPhone = this.bank.options.demoPhone;
     await this.bank.store.run(async (t) => {
       await this.bank.authorize(t, a);
       const i = await this.getIntent(t, a, id),
@@ -103,11 +122,12 @@ export class TransferService {
       check(this.bank.now() < i.expiresAt, "EXPIRED");
       check(!old || this.bank.now() - old.sentAt >= 30000, "RATE_LIMITED", 429);
       check(!old || old.attempts < 5, "OTP_LOCKED", 429);
+      if (demoPhone) await this.requireDemoScope(t, a, i);
       t.set("otpChallenges/" + id, {
         actorUid: a.uid,
         intentDigest: i.digest,
         nonce,
-        hash: this.hashOtp(id, nonce, code),
+        ...(demoPhone ? { method: "FIREBASE_PHONE_DEMO" } : { hash: this.hashOtp(id, nonce, code) }),
         expiresAt: i.expiresAt,
         sentAt: this.bank.now(),
         attempts: old?.attempts ?? 0,
@@ -115,6 +135,7 @@ export class TransferService {
         used: false,
       });
     });
+    if (demoPhone) return { method: "FIREBASE_PHONE_DEMO", phoneNumber: demoPhone.phoneNumber };
     await this.bank.options.deliver(a.uid, code, id);
     return { sent: true };
   }
@@ -124,6 +145,7 @@ export class TransferService {
       const i = await this.getIntent(t, a, id),
         c = await t.get("otpChallenges/" + id);
       check(c, "OTP_REQUIRED");
+      check(c.method !== "FIREBASE_PHONE_DEMO", "OTP_METHOD_MISMATCH");
       check(!c.used, "OTP_USED");
       check(c.attempts < 5, "OTP_LOCKED", 429);
       check(this.bank.now() < (c.expiry ?? c.expiresAt), "EXPIRED");
@@ -142,6 +164,77 @@ export class TransferService {
     check(outcome, "INVALID_OTP");
     return { authorized: true };
   }
+
+  async verifyDemoPhone(a: Actor, id: string, token: string) {
+    const demo = this.bank.options.demoPhone;
+    check(demo && a.uid === demo.customerUid && a.role === "CUSTOMER", "OTP_PROVIDER_REQUIRED", 503);
+    const proof = await demo.verify(token);
+    check(Number.isSafeInteger(proof.authTime), "INVALID_OTP");
+    const proofPath = "demoPhoneProofs/" + digest([proof.uid, proof.authTime]);
+    await this.bank.store.run(async (t) => {
+      await this.bank.authorize(t, a);
+      const intent = await this.getIntent(t, a, id);
+      await this.requireDemoScope(t, a, intent);
+      const challenge = await t.get("otpChallenges/" + id);
+      check(challenge && challenge.method === "FIREBASE_PHONE_DEMO", "OTP_REQUIRED");
+      check(!challenge.used && challenge.intentDigest === intent.digest, "OTP_REQUIRED");
+      check(this.bank.now() < (challenge.expiry ?? challenge.expiresAt), "EXPIRED");
+      check(proof.authTime >= Math.floor(challenge.sentAt / 1000), "OTP_PROOF_STALE");
+      const used = await t.get(proofPath);
+      if (used) {
+        check(used.intentId === id && challenge.verified, "OTP_PROOF_REUSED", 409);
+        return;
+      }
+      t.set(proofPath, { intentId: id, createdAt: this.bank.now() });
+      t.set("otpChallenges/" + id, { ...challenge, verified: true });
+    });
+    return { authorized: true };
+  }
+
+  private async requireDemoScope(t: Tx, a: Actor, intent: Doc) {
+    const demo = this.bank.options.demoPhone;
+    check(demo && a.role === "CUSTOMER" && a.uid === demo.customerUid
+      && intent.sourceAccountId === demo.sourceId && intent.destinationAccountId === demo.recipientId
+      && intent.currency === "VND" && intent.amountMinor > 0 && intent.amountMinor <= 10_000,
+    "OTP_PROVIDER_REQUIRED", 503);
+    for (const accountId of [demo.sourceId, demo.recipientId]) {
+      const account = await this.bank.owned(t, a, accountId);
+      check(account.type === "CHECKING" && account.status === "ACTIVE" && account.currency === "VND"
+        && (account.demo === true || account.demoNamespace === "demo_customer"),
+      "OTP_PROVIDER_REQUIRED", 503);
+    }
+  }
+
+  private async recordRejection(
+    actor: Actor, id: string, stage: "INTENT" | "COMMIT", error: unknown, input?: Doc,
+  ) {
+    if (!(error instanceof Fault) || !transferRejections.has(error.code)) return;
+    await this.bank.store.run(async (t) => {
+      await this.bank.authorize(t, actor);
+      const transfer = input ?? await this.getIntent(t, actor, id);
+      const source = await t.get("accounts/" + transfer.sourceAccountId);
+      if (source?.ownerUid !== actor.uid) return;
+      const recordId = digest([id, stage, "FAILED"]);
+      const path = "transactions/" + recordId;
+      if (await t.get("transactions/" + id) || await t.get(path)) return;
+      t.set(path, {
+        ownerUid: actor.uid,
+        actorUid: actor.uid,
+        requestId: transfer.requestId,
+        sourceAccountId: transfer.sourceAccountId,
+        type: "INTERNAL_TRANSFER",
+        amountMinor: transfer.amountMinor,
+        currency: transfer.currency,
+        status: "FAILED",
+        failureCode: error.code,
+        failureStage: stage,
+        // The history API uses committedAt as its ordering field for every outcome.
+        committedAt: this.bank.now(),
+      });
+      this.bank.audit(t, actor, "TRANSFER_REJECTED", recordId, transfer.requestId);
+    });
+  }
+
   async commit(a: Actor, id: string) {
     return this.bank.store.run(async (t) => {
       await this.bank.authorize(t, a);
@@ -156,6 +249,7 @@ export class TransferService {
         "OTP_REQUIRED",
       );
       check(this.bank.now() < (c.expiry ?? c.expiresAt), "EXPIRED");
+      if (c.method === "FIREBASE_PHONE_DEMO") await this.requireDemoScope(t, a, i);
       const src = await this.bank.owned(t, a, i.sourceAccountId),
         dst = await t.get("accounts/" + i.destinationAccountId);
       check(
@@ -230,6 +324,7 @@ export class TransferService {
         amountMinor: i.amountMinor,
         currency: i.currency,
         status: "SETTLED",
+        balanceAfterMinor: src.bookedMinor - i.amountMinor,
         committedAt: this.bank.now(),
       };
       t.set("transactions/" + id, tx);
@@ -242,6 +337,7 @@ export class TransferService {
         amountMinor: i.amountMinor,
         currency: i.currency,
         status: "SETTLED",
+        balanceAfterMinor: dst.bookedMinor + i.amountMinor,
         committedAt: this.bank.now(),
       });
       for (const uid of new Set([a.uid, dst.ownerUid]))
@@ -265,6 +361,9 @@ export class TransferService {
         currency: i.currency,
       });
       return { transactionId: id, status: "SETTLED" };
+    }).catch(async (error: unknown) => {
+      await this.recordRejection(a, id, "COMMIT", error);
+      throw error;
     });
   }
 }

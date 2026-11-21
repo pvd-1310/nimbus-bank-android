@@ -15,7 +15,6 @@ import com.example.final_term.auth.UserRole;
 import com.example.final_term.core.FinalTermApplication;
 import com.example.final_term.databinding.FragmentOfficerHomeBinding;
 import androidx.navigation.Navigation;
-import com.example.final_term.navigation.BottomNavigationBinder;
 
 public final class OfficerHomeFragment extends Fragment {
     private FragmentOfficerHomeBinding binding;
@@ -39,12 +38,25 @@ public final class OfficerHomeFragment extends Fragment {
             String fullName = authState.getUser().getFullName();
             binding.identityText.setText(fullName == null || fullName.trim().isEmpty()
                     ? authState.getUser().getEmail() : fullName);
+            binding.accountMetric.setText("Xem");
+            binding.ekycMetric.setText("—");
         });
         binding.signOutButton.setOnClickListener(v -> app.getAppContainer().getAuthRepository().signOut());
         binding.accountButton.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.accountList));
         binding.historyButton.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.transactionHistory));
-        BottomNavigationBinder.bind(binding.bottomNavigation.getRoot(), Navigation.findNavController(view),
-                R.id.officerHome, R.id.officerHome);
+        binding.ekycButton.setOnClickListener(v -> openFeature(v, R.id.officerEkyc,
+                "Duyệt hồ sơ eKYC", "Xem và xử lý các yêu cầu xác thực danh tính."));
+        binding.auditButton.setOnClickListener(v -> openFeature(v, R.id.officerAudit,
+                "Kiểm tra giao dịch", "Theo dõi lịch sử và audit log theo permission."));
+        binding.ratesButton.setOnClickListener(v -> openFeature(v, R.id.officerRates,
+                "Chính sách lãi suất", "Quản lý policy có version và lý do thay đổi."));
+    }
+
+    private void openFeature(View anchor, int destination, String title, String subtitle) {
+        Bundle args = new Bundle();
+        args.putString("title", title);
+        args.putString("subtitle", subtitle);
+        Navigation.findNavController(anchor).navigate(destination, args);
     }
 
     @Override public void onDestroyView() { super.onDestroyView(); binding = null; }

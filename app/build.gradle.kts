@@ -1,11 +1,13 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
 }
 
-// Keep the repository buildable before Firebase creates google-services.json.
-if (file("google-services.json").exists()) {
-    apply(plugin = "com.google.gms.google-services")
+check(file("google-services.json").exists()) {
+    "Production Android build requires app/google-services.json"
 }
+apply(plugin = "com.google.gms.google-services")
 
 android {
     namespace = "com.example.final_term"
@@ -19,6 +21,29 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "1.0"
+        val localProperties = Properties().apply {
+            val localPropertiesFile = rootProject.file("local.properties")
+            if (localPropertiesFile.isFile) {
+                localPropertiesFile.inputStream().use { load(it) }
+            }
+        }
+        val configuredBackendUrl = providers.gradleProperty("backendBaseUrl").orNull
+            ?: localProperties.getProperty("backendBaseUrl")
+        val simulatorBackendUrl = configuredBackendUrl ?: "http://10.0.2.2:3001"
+        val releaseRequested = gradle.startParameter.taskNames.any {
+            it.contains("release", ignoreCase = true)
+        }
+        if (releaseRequested && configuredBackendUrl == null) {
+            error(
+                "Release Android build requires backendBaseUrl=https://... "
+                    + "in local.properties or -PbackendBaseUrl=https://..."
+            )
+        }
+        check(simulatorBackendUrl.startsWith("https://")
+                || simulatorBackendUrl.startsWith("http://10.0.2.2:")) {
+            "Backend URL must use HTTPS, or http://10.0.2.2:<port> for the Android Simulator"
+        }
+        buildConfigField("String", "BACKEND_BASE_URL", "\"$simulatorBackendUrl\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

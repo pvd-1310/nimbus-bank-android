@@ -1,4 +1,4 @@
-// Public contract. Schemas intentionally describe the local demo, not a live banking API.
+// Public contract for the production-shaped banking API.
 import { templateFields } from "../database/template-schema.js";
 const text = { type: "string" },
   integer = { type: "integer" },
@@ -261,12 +261,12 @@ paths["/webhooks/stripe"] = {
 export const openapi = {
   openapi: "3.1.0",
   info: {
-    title: "Mobile banking local demo API",
+    title: "Nimbus Bank API",
     version: "0.1.0",
     description:
-      "Firebase Spark + external local backend. Chatbot deferred. No live deployment.",
+      "Authenticated banking API. Provider capabilities are explicit; chatbot and unavailable external providers remain deferred.",
   },
-  servers: [{ url: "http://127.0.0.1:3000/v1" }],
+  servers: [{ url: process.env.PUBLIC_API_URL ?? "https://api.example.com/v1" }],
   security: [{ firebaseToken: [] }],
   components: {
     securitySchemes: {

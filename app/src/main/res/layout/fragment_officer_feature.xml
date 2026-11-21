@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="@drawable/background_gradient"
+    android:padding="20dp">
+    <ImageButton android:id="@+id/back_button" android:layout_width="48dp" android:layout_height="48dp"
+        android:background="@drawable/glass_tile" android:contentDescription="Quay lại"
+        android:padding="14dp" android:src="@drawable/ic_nav_back" />
+    <TextView android:id="@+id/eyebrow_text" android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_marginTop="34dp" android:textColor="@color/slate_blue" android:textSize="12sp"
+        android:textStyle="bold" android:letterSpacing="0.12" />
+    <TextView android:id="@+id/title_text" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="8dp" android:textColor="@color/ink" android:textSize="30sp" />
+    <TextView android:id="@+id/subtitle_text" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="10dp" android:textColor="@color/ink_muted" android:textSize="16sp" />
+    <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="28dp" app:cardBackgroundColor="@color/glass" xmlns:app="http://schemas.android.com/apk/res-auto"
+        app:cardCornerRadius="28dp" app:cardElevation="0dp" app:strokeColor="@color/glass_border" app:strokeWidth="1dp">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
+            <TextView android:id="@+id/status_text" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:background="@drawable/glass_tile" android:padding="10dp" android:textColor="@color/navy" android:textSize="11sp" android:textStyle="bold" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="18dp"
+                android:text="Màn hình đã sẵn sàng cho contract production. Quyền thao tác và kết quả cuối cùng do backend xác thực." android:textColor="@color/ink_muted" android:textSize="15sp" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/primary_button" android:layout_width="match_parent" android:layout_height="56dp"
+                android:layout_marginTop="24dp" android:text="Quay lại dashboard" app:cornerRadius="20dp" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+</LinearLayout>

@@ -1,6 +1,6 @@
-# Backend demo ngân hàng
+# Nimbus Bank backend
 
-Backend TypeScript chạy local, Firebase Auth/Firestore Spark, S3 private và Stripe test mode. Chatbot được hoãn theo yêu cầu. Backend chưa được nối vào các màn hình Android và chưa deploy online.
+Backend TypeScript production-shaped cho Nimbus Bank. Firebase Admin xác thực bearer token, Firestore là nguồn dữ liệu authoritative, còn OTP/S3/Stripe được bảo vệ bằng capability checkpoints. Backend đã có contract REST để Android kết nối; deploy thật cần chọn hạ tầng HTTPS và cung cấp provider credentials ngoài repository.
 
 ## Tổ chức mã nguồn
 
@@ -40,7 +40,32 @@ Các lệnh `npm run dev`, `start`, `seed`, `migrate`, `worker` giữ nguyên. S
 
 Refactor giữ nguyên endpoint, schema, các field tương thích và thứ tự xử lý raw Stripe webhook. Không chạy seed/migration hoặc thay đổi tài nguyên Firebase/S3 khi refactor.
 
-## Chạy local bằng emulator
+## Connected production deployment
+
+Không chạy production bằng emulator hoặc file seed demo. Trên deployment host:
+
+```sh
+cp .env.production.example .env
+npm ci
+npm run build
+npm start
+```
+
+`APP_MODE=connected`, `FIREBASE_PROJECT_ID` phải là project thật, `GOOGLE_APPLICATION_CREDENTIALS` phải trỏ tới Firebase Admin credential hoặc workload identity của runtime, và `OTP_SECRET` phải là secret manager value. Reverse proxy phải cung cấp HTTPS; không đưa service-account, OTP, AWS hoặc Stripe secret vào Android.
+
+Container production:
+
+```sh
+docker build -t nimbus-bank-api ./backend
+docker run --read-only --cap-drop=ALL --security-opt=no-new-privileges \
+  -p 3000:3000 --env-file backend/.env \
+  -v /secure/firebase-admin.json:/run/secrets/firebase-admin.json:ro \
+  nimbus-bank-api
+```
+
+Chỉ mở cổng qua reverse proxy/API gateway có TLS, rate limit, access log và secret injection. Chưa chạy lệnh deploy vì repository chưa chỉ định AWS/GCP/Cloud Run/Render/Fly hay domain production.
+
+## Chạy local bằng emulator (chỉ dành cho automated tests)
 
 Yêu cầu Node 22 trở lên, Java và Firebase CLI. Tại thư mục gốc project:
 

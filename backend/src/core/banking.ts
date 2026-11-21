@@ -6,7 +6,7 @@ import { ProfileService } from "../modules/profile/profile.service.js";
 import { RateService } from "../modules/rates/rates.service.js";
 import { RequestService } from "../modules/requests/requests.service.js";
 import { TransactionService } from "../modules/transactions/transactions.service.js";
-import { TransferService } from "../modules/transfers/transfers.service.js";
+import { TransferService, type DemoPhoneOtp } from "../modules/transfers/transfers.service.js";
 import { check, key } from "../shared/errors.js";
 import { queryOptions } from "../shared/pagination.js";
 import type { Doc, Store, Tx } from "./store.js";
@@ -14,6 +14,7 @@ interface Options {
   otpSecret: string;
   now?: () => number;
   deliver: (uid: string, code: string, intentId: string) => Promise<void>;
+  demoPhone?: DemoPhoneOtp;
 }
 export class Banking {
   readonly now: () => number;

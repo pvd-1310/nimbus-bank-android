@@ -13,13 +13,27 @@ public final class ReadModels {
         public final String currency;
         public final long balanceMinor;
         public final String status;
+        public final String ownerUid;
+        public final Long availableMinor;
 
         public AccountSummary(@NonNull String id, String type, String currency, long balanceMinor, String status) {
+            this(id, type, currency, balanceMinor, status, "");
+        }
+
+        public AccountSummary(@NonNull String id, String type, String currency, long balanceMinor,
+                              String status, String ownerUid) {
+            this(id, type, currency, balanceMinor, status, ownerUid, null);
+        }
+
+        public AccountSummary(@NonNull String id, String type, String currency, long balanceMinor,
+                              String status, String ownerUid, Long availableMinor) {
             this.id = id;
             this.type = type == null ? "UNKNOWN" : type;
             this.currency = currency == null ? "" : currency;
             this.balanceMinor = balanceMinor;
             this.status = status == null ? "UNKNOWN" : status;
+            this.ownerUid = ownerUid == null ? "" : ownerUid;
+            this.availableMinor = availableMinor;
         }
     }
 
@@ -31,9 +45,17 @@ public final class ReadModels {
         public final long amountMinor;
         public final String status;
         public final Timestamp createdAt;
+        public final String failureCode;
+        public final Long balanceAfterMinor;
 
         public TransactionSummary(@NonNull String id, String accountId, String type, String currency,
                                    long amountMinor, String status, Timestamp createdAt) {
+            this(id, accountId, type, currency, amountMinor, status, createdAt, null, null);
+        }
+
+        public TransactionSummary(@NonNull String id, String accountId, String type, String currency,
+                                   long amountMinor, String status, Timestamp createdAt,
+                                   String failureCode, Long balanceAfterMinor) {
             this.id = id;
             this.accountId = accountId == null ? "" : accountId;
             this.type = type == null ? "TRANSACTION" : type;
@@ -41,7 +63,12 @@ public final class ReadModels {
             this.amountMinor = amountMinor;
             this.status = status == null ? "UNKNOWN" : status;
             this.createdAt = createdAt;
+            this.failureCode = failureCode;
+            this.balanceAfterMinor = balanceAfterMinor;
         }
+
+        public boolean isOutgoing() { return "INTERNAL_TRANSFER".equals(type) || "DEBIT".equals(type); }
+        public boolean isIncoming() { return "TRANSFER_RECEIVED".equals(type) || "CREDIT".equals(type); }
     }
 
     public static final class NotificationSummary {

@@ -18,7 +18,6 @@ import com.example.final_term.data.FirestoreReadRepository;
 import com.example.final_term.data.ReadModelResult;
 import com.example.final_term.data.ReadModels;
 import com.example.final_term.databinding.FragmentAccountListBinding;
-import com.example.final_term.navigation.BottomNavigationBinder;
 import androidx.navigation.Navigation;
 
 import java.text.NumberFormat;
@@ -50,8 +49,8 @@ public final class AccountListFragment extends Fragment {
                     if (authState != null && authState.getStatus() == AuthState.Status.SIGNED_IN && authState.getUser() != null) {
                         uid = authState.getUser().getUid();
                         role = authState.getUser().getRole();
-                        BottomNavigationBinder.bind(binding.bottomNavigation.getRoot(), Navigation.findNavController(view),
-                                role == UserRole.OFFICER ? R.id.officerHome : R.id.customerHome, R.id.accountList);
+                        binding.titleText.setText(role == UserRole.OFFICER
+                                ? "Tài khoản khách hàng" : "Tài khoản và thông báo");
                         load();
                     }
                 });
@@ -87,8 +86,15 @@ public final class AccountListFragment extends Fragment {
         binding.content.removeAllViews();
         if (accounts != null) {
             for (ReadModels.AccountSummary account : accounts) {
-                addLine(account.type + "  •  " + account.status,
-                        formatMoney(account.balanceMinor, account.currency));
+                String owner = role == UserRole.OFFICER && !account.ownerUid.isEmpty()
+                        ? "Khách hàng: " + account.ownerUid + "\n" : "";
+                TextView row = addLine(owner + Phase2Presentation.accountTitle(account.type) + "  •  " + account.status,
+                        formatMoney(account.balanceMinor, account.currency) + "\nMã tài khoản: " + account.id);
+                row.setBackgroundResource(R.drawable.glass_tile);
+                row.setClickable(true);
+                row.setFocusable(true);
+                row.setContentDescription("Mở chi tiết " + Phase2Presentation.accountTitle(account.type));
+                row.setOnClickListener(v -> openDetails(v, account));
             }
             if (accounts.isEmpty()) addLine("Chưa có tài khoản", "Dữ liệu sẽ xuất hiện sau khi seed Firestore.");
         }
@@ -122,13 +128,25 @@ public final class AccountListFragment extends Fragment {
         }
     }
 
-    private void addLine(String title, String detail) {
+    private TextView addLine(String title, String detail) {
         TextView line = new TextView(requireContext());
         line.setText(title + "\n" + detail);
         line.setTextColor(requireContext().getColor(R.color.ink));
         line.setTextSize(16);
         line.setPadding(0, 18, 0, 18);
         binding.content.addView(line);
+        return line;
+    }
+
+    private void openDetails(View view, ReadModels.AccountSummary account) {
+        int destination = "SAVINGS".equalsIgnoreCase(account.type) ? R.id.savingsDetail
+                : "MORTGAGE".equalsIgnoreCase(account.type) ? R.id.mortgageDetail : R.id.accountDetail;
+        Bundle args = new Bundle();
+        args.putString("accountId", account.id);
+        args.putString("accountType", account.type);
+        args.putLong("balanceMinor", account.balanceMinor);
+        args.putString("currency", account.currency);
+        Navigation.findNavController(view).navigate(destination, args);
     }
 
     private String formatMoney(long amountMinor, String currency) {

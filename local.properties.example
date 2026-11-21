@@ -1,0 +1,6 @@
+# Optional for simulator debug builds. Without this line, the app uses the
+# Docker backend published on the host at http://10.0.2.2:3001.
+# backendBaseUrl=http://10.0.2.2:3001
+
+# Required for release builds: replace with the public HTTPS API URL.
+# backendBaseUrl=https://api.example.com

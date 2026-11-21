@@ -33,10 +33,6 @@ public final class LoginFragment extends Fragment {
         FinalTermApplication application = (FinalTermApplication) requireActivity().getApplication();
         application.getAppContainer().getAuthRepository().observeAuthState().observe(getViewLifecycleOwner(), this::renderState);
         binding.signInButton.setOnClickListener(v -> signIn());
-        binding.retryButton.setOnClickListener(v -> {
-            application.refreshContainer();
-            requireActivity().recreate();
-        });
     }
 
     private void signIn() {
@@ -67,11 +63,9 @@ public final class LoginFragment extends Fragment {
         binding.signInButton.setEnabled(!loading);
         binding.progress.setVisibility(loading ? View.VISIBLE : View.GONE);
         if (state.getStatus() == AuthState.Status.SETUP_REQUIRED) {
-            binding.setupPanel.setVisibility(View.VISIBLE);
-            binding.setupText.setText(state.getMessage());
+            binding.errorText.setVisibility(View.VISIBLE);
+            binding.errorText.setText(getString(R.string.production_configuration_required));
             binding.signInButton.setEnabled(false);
-        } else {
-            binding.setupPanel.setVisibility(View.GONE);
         }
         if (state.getStatus() == AuthState.Status.ERROR) {
             binding.errorText.setVisibility(View.VISIBLE);
@@ -85,7 +79,7 @@ public final class LoginFragment extends Fragment {
         if (raw == null) return getString(R.string.error_sign_in);
         if (raw.contains("PROFILE_NOT_FOUND")) return getString(R.string.error_profile_missing);
         if (raw.contains("PROFILE_NOT_ALLOWED")) return getString(R.string.error_profile_denied);
-        if (raw.contains("FIREBASE_SETUP_REQUIRED")) return getString(R.string.setup_required_message);
+        if (raw.contains("FIREBASE_SETUP_REQUIRED")) return getString(R.string.production_configuration_required);
         return getString(R.string.error_sign_in);
     }
 
