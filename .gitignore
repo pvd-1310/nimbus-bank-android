@@ -23,3 +23,8 @@ service-account*.json
 
 # Sensitive demo artifacts
 eKYC/
+
+# Local Firebase Emulator output
+firestore-debug.log
+firebase-debug.log
+ui-debug.log

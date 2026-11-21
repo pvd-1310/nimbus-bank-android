@@ -1,0 +1,122 @@
+import { randomUUID } from "node:crypto";
+import { AccountService } from "../modules/accounts/accounts.service.js";
+import type { Actor } from "../modules/auth/auth.types.js";
+import { NotificationService } from "../modules/notifications/notifications.service.js";
+import { ProfileService } from "../modules/profile/profile.service.js";
+import { RateService } from "../modules/rates/rates.service.js";
+import { RequestService } from "../modules/requests/requests.service.js";
+import { TransactionService } from "../modules/transactions/transactions.service.js";
+import { TransferService } from "../modules/transfers/transfers.service.js";
+import { check, key } from "../shared/errors.js";
+import { queryOptions } from "../shared/pagination.js";
+import type { Doc, Store, Tx } from "./store.js";
+interface Options {
+  otpSecret: string;
+  now?: () => number;
+  deliver: (uid: string, code: string, intentId: string) => Promise<void>;
+}
+export class Banking {
+  readonly now: () => number;
+  readonly accounts: AccountService;
+  readonly profiles: ProfileService;
+  readonly transactions: TransactionService;
+  readonly transfers: TransferService;
+  readonly requests: RequestService;
+  readonly rates: RateService;
+  readonly notifications: NotificationService;
+  constructor(
+    readonly store: Store,
+    readonly options: Options,
+  ) {
+    this.now = options.now ?? Date.now;
+    this.accounts = new AccountService(this);
+    this.profiles = new ProfileService(this);
+    this.transactions = new TransactionService(this);
+    this.transfers = new TransferService(this);
+    this.requests = new RequestService(this);
+    this.rates = new RateService(this);
+    this.notifications = new NotificationService(this);
+  }
+  async authorize(t: Tx, a: Actor, permission?: string) {
+    key(a.uid);
+    const u = await t.get("users/" + a.uid);
+    const active =
+      u &&
+      (u.status !== undefined
+        ? ["ACTIVE", "ONBOARDING"].includes(u.status) && u.active !== false
+        : u.active === true);
+    check(active && u!.role === a.role, "FORBIDDEN", 403);
+    if (permission) {
+      check(
+        a.role === "OFFICER" && a.permissions.includes(permission),
+        "FORBIDDEN",
+        403,
+      );
+      const o = await this.linkedProfile(t, "officers", a.uid);
+      check(
+        o?.active === true && o.permissions?.includes(permission),
+        "FORBIDDEN",
+        403,
+      );
+    }
+    return u!;
+  }
+  async linkedProfile(
+    t: Tx,
+    collection: "customers" | "officers",
+    uid: string,
+  ): Promise<Doc | undefined> {
+    const direct = await t.get(collection + "/" + uid);
+    if (direct) {
+      check(
+        (direct.uidRef ?? direct.uid ?? uid) === uid,
+        "PROFILE_LINK_CONFLICT",
+        403,
+      );
+      return { ...direct, id: uid };
+    }
+    const matches = await t.list(collection, { uidRef: uid }, { limit: 2 });
+    check(matches.length <= 1, "PROFILE_LINK_CONFLICT", 403);
+    return matches[0];
+  }
+  async owned(t: Tx, a: Actor, id: string): Promise<Doc> {
+    key(id);
+    const d = await t.get("accounts/" + id);
+    check(d, "NOT_FOUND", 404);
+    check(d.ownerUid === a.uid, "FORBIDDEN", 403);
+    return { ...d, id };
+  }
+  audit(
+    t: Tx,
+    a: Actor,
+    action: string,
+    resourceId: string,
+    requestId = "",
+    beforeAfterSummary: Doc = { before: null, after: null },
+  ) {
+    t.set("auditLogs/" + randomUUID(), {
+      actorUid: a.uid,
+      action,
+      resourceId,
+      requestId,
+      timestamp: this.now(),
+      beforeAfterSummary,
+    });
+  }
+  async listOwned(a: Actor, collection: string, q: Doc = {}) {
+    return this.store.run(async (t) => {
+      await this.authorize(t, a);
+      return t.list(collection, { ownerUid: a.uid }, queryOptions(q));
+    });
+  }
+  async scoped(a: Actor, collection: string, id: string): Promise<Doc> {
+    key(id);
+    return this.store.run(async (t) => {
+      await this.authorize(t, a);
+      const d = await t.get(collection + "/" + id);
+      check(d, "NOT_FOUND", 404);
+      check((d.ownerUid ?? d.customerUid) === a.uid, "FORBIDDEN", 403);
+      return { ...d, id };
+    });
+  }
+}
