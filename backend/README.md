@@ -85,7 +85,7 @@ npm run dev
 
 Lệnh seed đầu tiên chỉ xem trước; `--apply` tạo dữ liệu nếu chưa có và giữ nguyên số dư đã phát sinh. Tài khoản theo namespace mặc định: `local_demo.customer@example.com`, `local_demo.recipient@example.com`, `local_demo.officer@example.com`. Mật khẩu là `DEMO_PASSWORD` bạn tự đặt. Dữ liệu gồm checking/savings/mortgage, tài khoản người nhận, hóa đơn, danh mục dịch vụ và chi nhánh. Seed không có chức năng xóa dữ liệu.
 
-API: `http://127.0.0.1:3000`; health: `GET /health`; hợp đồng API: `GET /openapi.json`. Đăng nhập bằng Firebase Auth emulator rồi gửi ID token qua `Authorization: Bearer ...`. Auth emulator REST: `POST http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo` với JSON `email`, `password`, `returnSecureToken: true`. Dùng `idToken` nhận được; không in token vào log hoặc chia sẻ.
+API: `http://127.0.0.1:3000`; health: `GET /health`; hợp đồng API: `GET /openapi.json`. Đăng nhập bằng Firebase Auth emulator rồi gửi ID token qua `Authorization: Bearer ...`. Auth emulator REST: `POST http://127.0.0.1:9099/identitytoolkit.googleapis.com/accounts:signInWithPassword?key=demo` với JSON `email`, `password`, `returnSecureToken: true`. Dùng `idToken` nhận được; không in token vào log hoặc chia sẻ.
 
 OTP demo được giao vào file riêng `.local/otp/<intentId>.json` (quyền 0600), hết hạn cùng intent sau 5 phút. File này phục vụ demo trên máy, không đại diện cho SMS/2FA thật. Adapter này chỉ hoạt động với emulator và listener loopback. Connected mode yêu cầu provider OTP riêng trước khi giao dịch được bật.
 
@@ -93,7 +93,7 @@ Android Emulator truy cập API máy qua `10.0.2.2:3000`. Khi tích hợp Androi
 
 ## Luồng API chính
 
-Tất cả endpoint dưới `/v1` yêu cầu bearer token, ngoại trừ webhook Stripe. Lỗi có `error` và `requestId`; không trả stack trace. Danh sách dùng `limit` (1–100, mặc định 25), `cursor` và trả `items`, `nextCursor`.
+Tất cả endpoint nghiệp vụ yêu cầu bearer token, ngoại trừ webhook Stripe. API dùng path không có tiền tố phiên bản, ví dụ `GET /accounts` và `POST /transfers/intents`. Lỗi có `error` và `requestId`; không trả stack trace. Danh sách dùng `limit` (1–100, mặc định 25), `cursor` và trả `items`, `nextCursor`.
 
 | Nghiệp vụ | Endpoint |
 | --- | --- |
@@ -115,7 +115,7 @@ Tất cả endpoint dưới `/v1` yêu cầu bearer token, ngoại trừ webhook
 | Officer quản trị | POST `/officer/customers`, PATCH `/officer/customers/:id`, POST `/officer/rate-policies` |
 | Officer eKYC | POST `/officer/ekyc/:id/review`, GET `/officer/ekyc/:id/evidence/:index` |
 
-Gửi `latitude` và `longitude` tới `POST /v1/branches/routes` để tìm chi nhánh gần nhất theo đường đi bộ. Gửi thêm `branchId` (trường `id` từ `GET /v1/branches`) để chỉ đường tới một chi nhánh cụ thể.
+Gửi `latitude` và `longitude` tới `POST /branches/routes` để tìm chi nhánh gần nhất theo đường đi bộ. Gửi thêm `branchId` (trường `id` từ `GET /branches`) để chỉ đường tới một chi nhánh cụ thể.
 
 Cấu hình `GOOGLE_ROUTES_API_KEY` trong `backend/.env` bằng khóa máy chủ được phép gọi Routes API trên dự án Google Cloud đã bật Routes API và billing. Android `local.properties` dùng `MAPS_API_KEY` giới hạn cho Maps SDK for Android và package `com.example.final_term` cùng SHA-1. Không commit API keys.
 
@@ -155,7 +155,7 @@ URL upload sống 180 giây; URL đọc officer sống 120 giây. S3 không th�
 ## Mốc cấu hình Stripe
 
 1. Dùng Stripe sandbox/test mode; cấu hình `STRIPE_SECRET_KEY=sk_test_...` trên máy. Live keys bị từ chối.
-2. Chạy Stripe CLI: `stripe listen --forward-to localhost:3000/v1/webhooks/stripe`, lưu signing secret vào `STRIPE_WEBHOOK_SECRET`, restart API. Không gửi key/secret vào chat.
+2. Chạy Stripe CLI: `stripe listen --forward-to localhost:3000/webhooks/stripe`, lưu signing secret vào `STRIPE_WEBHOOK_SECRET`, restart API. Không gửi key/secret vào chat.
 3. Tạo payment intent nghiệp vụ với `billId`, `requestId`; dùng cùng luồng OTP như chuyển khoản; gọi POST `/payments` với hai trường đó.
 4. Dùng `clientSecret` trong Stripe test checkout/Android PaymentSheet khi nối UI. API tạo PaymentIntent; chưa có màn checkout trong Android.
 5. Webhook hợp lệ cập nhật hóa đơn; gọi `npm run worker` để xử lý outbox. Đơn demo được ghi `DEMO_FULFILLED`; đơn thật cần provider riêng. Browser return không xác nhận thanh toán.

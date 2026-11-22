@@ -113,7 +113,7 @@ public final class CustomerHomeFragment extends Fragment {
             reads.observeTransactions(authState.getUser().getUid()).observe(getViewLifecycleOwner(), this::renderTransactions);
             reads.observeNotifications(authState.getUser().getUid()).observe(getViewLifecycleOwner(), this::renderNotifications);
 
-            app.getAppContainer().getBackendApiClient().get("/v1/accounts")
+            app.getAppContainer().getBackendApiClient().get("/accounts")
                     .addOnSuccessListener(response -> {
                         if (binding == null) return;
                         binding.backendStatusText.setText(

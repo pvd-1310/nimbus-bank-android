@@ -79,7 +79,7 @@ it("returns a walking route to the branch selected on the map", async () => {
   });
 
   const response = await request(await fixture())
-    .post("/v1/branches/routes")
+    .post("/branches/routes")
     .set("Authorization", "Bearer valid")
     .send({ latitude: 10.7769, longitude: 106.7009, branchId: "west" });
 
@@ -113,7 +113,7 @@ it("selects the closest branch without calling Compute Route Matrix", async () =
   });
 
   const response = await request(await fixture())
-    .post("/v1/branches/routes")
+    .post("/branches/routes")
     .set("Authorization", "Bearer valid")
     .send({ latitude: 10.7769, longitude: 106.7009 });
 
@@ -123,15 +123,15 @@ it("selects the closest branch without calling Compute Route Matrix", async () =
 it("health is public but accounts require a verified token", async () => {
   const app = await fixture();
   expect((await request(app).get("/health")).status).toBe(200);
-  expect((await request(app).get("/v1/accounts")).status).toBe(401);
+  expect((await request(app).get("/accounts")).status).toBe(401);
   expect(
-    (await request(app).get("/v1/accounts").set("Authorization", "Bearer fake"))
+    (await request(app).get("/accounts").set("Authorization", "Bearer fake"))
       .status,
   ).toBe(401);
   expect(
     (
       await request(app)
-        .get("/v1/accounts")
+        .get("/accounts")
         .set("Authorization", "Bearer valid")
     ).body.items,
   ).toHaveLength(1);
@@ -139,7 +139,7 @@ it("health is public but accounts require a verified token", async () => {
 it("accepts template transfer input and returns canonical intentId", async () => {
   const app = await fixture();
   const r = await request(app)
-    .post("/v1/transfers/intents")
+    .post("/transfers/intents")
     .set("Authorization", "Bearer valid")
     .send({
       requestId: "canonical-transfer",
@@ -156,7 +156,7 @@ it("rejects privileged profile fields", async () => {
   expect(
     (
       await request(app)
-        .patch("/v1/me")
+        .patch("/me")
         .set("Authorization", "Bearer valid")
         .send({ role: "OFFICER" })
     ).status,
@@ -165,7 +165,7 @@ it("rejects privileged profile fields", async () => {
 it("reports deferred chatbot and missing providers", async () => {
   const app = await fixture();
   const r = await request(app)
-    .get("/v1/capabilities")
+    .get("/capabilities")
     .set("Authorization", "Bearer valid");
   expect(r.body.chatbot).toBe("DEFERRED");
   expect(r.body.s3).toBe("SETUP_REQUIRED");
@@ -174,14 +174,14 @@ it("reports deferred chatbot and missing providers", async () => {
 it("rejects forged Stripe events at the HTTP boundary", async () => {
   const app = await fixture();
   const r = await request(app)
-    .post("/v1/webhooks/stripe")
+    .post("/webhooks/stripe")
     .send({ type: "payment_intent.succeeded" });
   expect(r.status).toBe(503);
 });
 it("rejects malformed JSON with safe errors", async () => {
   const app = await fixture();
   const r = await request(app)
-    .patch("/v1/me")
+    .patch("/me")
     .set("Authorization", "Bearer valid")
     .set("Content-Type", "application/json")
     .send("{invalid");
@@ -207,7 +207,7 @@ it("configured webhook rejects a forged signature without processing data", asyn
     },
   });
   const r = await request(app)
-    .post("/v1/webhooks/stripe")
+    .post("/webhooks/stripe")
     .set("Stripe-Signature", "t=1,v1=forged")
     .send({ id: "evt_bad" });
   expect(r.status).toBe(400);

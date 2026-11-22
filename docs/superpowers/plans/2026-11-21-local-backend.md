@@ -38,7 +38,7 @@ Consumes Store. Produces `Banking` methods for scoped reads, intent/challenge/ve
 ### Task 3: Providers and HTTP
 
 Files: `src/providers.ts`, `src/payments.ts`, `src/app.ts`, `src/server.ts`, `test/http.test.ts`, `test/payments.test.ts`.
-Consumes Banking and Store. Produces authenticated `/v1` API, S3 tickets, Stripe sandbox webhook/checkout and scoped catalogs/orders, branch directory.
+Consumes Banking and Store. Produces authenticated API without a version prefix, S3 tickets, Stripe sandbox webhook/checkout and scoped catalogs/orders, branch directory.
 
 - [ ] Write failing tests for authentication, object scope, webhook forgery/deduplication/order, quote amount and capabilities.
 - [ ] Implement provider adapters and raw webhook handling; deny unsupported capabilities explicitly.

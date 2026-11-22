@@ -6,7 +6,7 @@
     android:orientation="vertical"
     android:background="@drawable/background_gradient">
 
-    <!-- Top Navigation -->
+    <!-- Top Navigation Bar -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -28,6 +28,7 @@
             app:tint="@color/navy" />
 
         <TextView
+            android:id="@+id/dialog_title"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
@@ -48,213 +49,584 @@
             app:tint="@color/navy" />
     </LinearLayout>
 
-    <!-- Two-step Pill Stepper -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center"
-        android:layout_marginTop="6dp">
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:background="@drawable/glass_panel_soft"
-            android:padding="4dp"
-            android:orientation="horizontal">
-
-            <TextView
-                android:id="@+id/step1_indicator"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@drawable/navy_button_pill"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp"
-                android:paddingTop="6dp"
-                android:paddingBottom="6dp"
-                android:text="1. Chụp CCCD"
-                android:textColor="@color/white"
-                android:textSize="12sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/step2_indicator"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp"
-                android:paddingTop="6dp"
-                android:paddingBottom="6dp"
-                android:text="2. Khuôn mặt"
-                android:textColor="@color/ink_faint"
-                android:textSize="12sp" />
-        </LinearLayout>
-    </LinearLayout>
-
-    <!-- Content Card -->
-    <LinearLayout
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:orientation="vertical"
-        android:gravity="center_horizontal"
-        android:paddingStart="24dp"
-        android:paddingEnd="24dp"
-        android:paddingTop="16dp">
+        android:layout_weight="1">
 
-        <TextView
-            android:id="@+id/ekyc_instruction_title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Chụp ảnh Căn cước công dân"
-            android:textColor="@color/ink"
-            android:textSize="18sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/ekyc_instruction_subtitle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Đặt thẻ CCCD ngay ngắn trong khung hình"
-            android:textColor="@color/ink_muted"
-            android:textSize="13sp" />
-
-        <!-- Viewport Container -->
-        <FrameLayout
+        <!-- 1. CONSENT VIEW (View 1: Purpose & S3 Privacy Notice) -->
+        <ScrollView
+            android:id="@+id/layout_consent"
             android:layout_width="match_parent"
-            android:layout_height="220dp"
-            android:layout_marginTop="20dp"
-            android:background="@drawable/glass_panel_card">
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:visibility="gone"
+            android:scrollbars="none">
 
-            <!-- CCCD Viewport Frame -->
-            <FrameLayout
-                android:id="@+id/frame_cccd"
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:layout_margin="16dp"
-                android:background="@drawable/input_glass_field">
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="24dp"
+                android:paddingEnd="24dp"
+                android:paddingTop="16dp"
+                android:paddingBottom="32dp">
 
-                <ImageView
-                    android:id="@+id/card_watermark"
+                <FrameLayout
                     android:layout_width="64dp"
                     android:layout_height="64dp"
-                    android:layout_gravity="center"
-                    android:src="@drawable/ic_shield"
-                    app:tint="@color/glass_nav"
-                    android:alpha="0.4"
-                    android:contentDescription="Khung chụp thẻ" />
+                    android:layout_gravity="center_horizontal"
+                    android:background="@drawable/circle_action_button">
+
+                    <ImageView
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_shield"
+                        app:tint="@color/navy"
+                        android:contentDescription="Bảo mật eKYC" />
+                </FrameLayout>
 
                 <TextView
-                    android:id="@+id/frame_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:gravity="center"
+                    android:text="Thu thập &amp; Xử lý dữ liệu định danh"
+                    android:textColor="@color/ink"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center"
+                    android:text="Nimbus Bank bảo vệ tuyệt đối quyền riêng tư và thông tin cá nhân của bạn theo tiêu chuẩn an toàn ngân hàng."
+                    android:textColor="@color/ink_muted"
+                    android:textSize="14sp"
+                    android:lineSpacingExtra="2dp" />
+
+                <!-- Detail Points Card -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    app:cardBackgroundColor="@color/glass_card"
+                    app:cardCornerRadius="20dp"
+                    app:cardElevation="0dp"
+                    app:strokeColor="@color/glass_border"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="20dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="1. Mục đích thu thập"
+                            android:textColor="@color/ink"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="Thu thập ảnh CCCD (mặt trước, mặt sau) và ảnh chân dung khuôn mặt nhằm mục đích định danh khách hàng mở tài khoản ngân hàng số."
+                            android:textColor="@color/ink_muted"
+                            android:textSize="13sp"
+                            android:lineSpacingExtra="2dp" />
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginTop="12dp"
+                            android:layout_marginBottom="12dp"
+                            android:background="@color/glass_border" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="2. Lưu trữ an toàn &amp; Quyền hạn thẩm định"
+                            android:textColor="@color/ink"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="Toàn bộ hình ảnh được tải trực tiếp lên bộ nhớ đám mây riêng tư (AWS S3 Private Storage) bằng vé presigned tạm thời. Chỉ Cán bộ ngân hàng được phân quyền EKYC_REVIEW mới có thể xem bằng chứng để phê duyệt."
+                            android:textColor="@color/ink_muted"
+                            android:textSize="13sp"
+                            android:lineSpacingExtra="2dp" />
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginTop="12dp"
+                            android:layout_marginBottom="12dp"
+                            android:background="@color/glass_border" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="3. Quyền truy cập Camera"
+                            android:textColor="@color/ink"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="Ứng dụng chỉ mở Camera để bạn chụp ảnh thật trực tiếp sau khi bạn nhấn nút đồng ý bên dưới."
+                            android:textColor="@color/ink_muted"
+                            android:textSize="13sp"
+                            android:lineSpacingExtra="2dp" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_consent"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="28dp"
+                    android:text="Tôi đồng ý và tiếp tục"
+                    android:textColor="@color/white"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:background="@drawable/navy_button_pill"
+                    app:backgroundTint="@null" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_cancel_consent"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="12dp"
+                    android:text="Để sau"
+                    android:textColor="@color/navy"
+                    android:textSize="14sp"
+                    android:background="@drawable/glass_pill_button"
+                    app:backgroundTint="@null" />
+            </LinearLayout>
+        </ScrollView>
+
+        <!-- 2. CAPTURE VIEW (View 2: Step-by-step real camera capture) -->
+        <LinearLayout
+            android:id="@+id/layout_capture"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:visibility="visible">
+
+            <!-- Three-step Stepper -->
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp">
+
+                <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="bottom|center_horizontal"
-                    android:layout_marginBottom="12dp"
-                    android:text="Mặt trước CCCD"
-                    android:textColor="@color/ink_muted"
-                    android:textSize="12sp"
-                    android:textStyle="bold" />
-            </FrameLayout>
+                    android:background="@drawable/glass_panel_soft"
+                    android:padding="4dp"
+                    android:orientation="horizontal">
 
-            <!-- Face Oval Viewport Frame (Hidden initially) -->
-            <FrameLayout
-                android:id="@+id/frame_face"
-                android:layout_width="160dp"
-                android:layout_height="190dp"
-                android:layout_gravity="center"
-                android:visibility="gone"
-                android:background="@drawable/circle_action_button">
+                    <TextView
+                        android:id="@+id/step1_indicator"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/navy_button_pill"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:paddingTop="6dp"
+                        android:paddingBottom="6dp"
+                        android:text="1. Mặt trước CCCD"
+                        android:textColor="@color/white"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
 
-                <ImageView
-                    android:layout_width="64dp"
-                    android:layout_height="64dp"
-                    android:layout_gravity="center"
-                    android:src="@drawable/ic_ai_spark"
-                    app:tint="@color/navy"
-                    android:contentDescription="Khung khuôn mặt" />
-            </FrameLayout>
-        </FrameLayout>
+                    <TextView
+                        android:id="@+id/step2_indicator"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:paddingTop="6dp"
+                        android:paddingBottom="6dp"
+                        android:text="2. Mặt sau CCCD"
+                        android:textColor="@color/ink_faint"
+                        android:textSize="12sp" />
 
-        <!-- Toggle side chips (Mặt trước / Mặt sau) -->
-        <LinearLayout
-            android:id="@+id/layout_cccd_sides"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:orientation="horizontal">
+                    <TextView
+                        android:id="@+id/step3_indicator"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:paddingTop="6dp"
+                        android:paddingBottom="6dp"
+                        android:text="3. Chân dung Selfie"
+                        android:textColor="@color/ink_faint"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </HorizontalScrollView>
 
-            <TextView
-                android:id="@+id/chip_front"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@drawable/navy_button_pill"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp"
-                android:paddingTop="6dp"
-                android:paddingBottom="6dp"
-                android:text="Mặt trước"
-                android:textColor="@color/white"
-                android:textSize="12sp"
-                android:textStyle="bold" />
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:fillViewport="true"
+                android:scrollbars="none">
 
-            <TextView
-                android:id="@+id/chip_back"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:background="@drawable/glass_panel_soft"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp"
-                android:paddingTop="6dp"
-                android:paddingBottom="6dp"
-                android:text="Mặt sau"
-                android:textColor="@color/ink"
-                android:textSize="12sp" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center_horizontal"
+                    android:paddingStart="24dp"
+                    android:paddingEnd="24dp"
+                    android:paddingTop="12dp"
+                    android:paddingBottom="24dp">
+
+                    <TextView
+                        android:id="@+id/ekyc_instruction_title"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Chụp ảnh Căn cước công dân"
+                        android:textColor="@color/ink"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/ekyc_instruction_subtitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Đặt mặt trước CCCD ngay ngắn trong khung hình"
+                        android:textColor="@color/ink_muted"
+                        android:textSize="13sp" />
+
+                    <!-- Viewport Container with Image Preview -->
+                    <FrameLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="220dp"
+                        android:layout_marginTop="16dp"
+                        android:background="@drawable/glass_panel_card">
+
+                        <!-- Real Captured Preview Image -->
+                        <ImageView
+                            android:id="@+id/iv_captured_preview"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:scaleType="centerCrop"
+                            android:visibility="gone"
+                            android:contentDescription="Ảnh đã chụp" />
+
+                        <!-- CCCD Viewport Frame Overlay -->
+                        <FrameLayout
+                            android:id="@+id/frame_cccd"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:layout_margin="16dp"
+                            android:background="@drawable/input_glass_field">
+
+                            <ImageView
+                                android:id="@+id/card_watermark"
+                                android:layout_width="64dp"
+                                android:layout_height="64dp"
+                                android:layout_gravity="center"
+                                android:src="@drawable/ic_shield"
+                                app:tint="@color/glass_nav"
+                                android:alpha="0.4"
+                                android:contentDescription="Khung chụp thẻ" />
+
+                            <TextView
+                                android:id="@+id/frame_label"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_gravity="bottom|center_horizontal"
+                                android:layout_marginBottom="12dp"
+                                android:text="Mặt trước CCCD"
+                                android:textColor="@color/ink_muted"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+                        </FrameLayout>
+
+                        <!-- Face Oval Viewport Frame Overlay -->
+                        <FrameLayout
+                            android:id="@+id/frame_face"
+                            android:layout_width="160dp"
+                            android:layout_height="190dp"
+                            android:layout_gravity="center"
+                            android:visibility="gone"
+                            android:background="@drawable/circle_action_button">
+
+                            <ImageView
+                                android:layout_width="64dp"
+                                android:layout_height="64dp"
+                                android:layout_gravity="center"
+                                android:src="@drawable/ic_ai_spark"
+                                app:tint="@color/navy"
+                                android:contentDescription="Khung khuôn mặt" />
+                        </FrameLayout>
+
+                        <!-- Captured Checkmark Badge -->
+                        <TextView
+                            android:id="@+id/badge_captured"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="top|end"
+                            android:layout_margin="12dp"
+                            android:background="@drawable/badge_status_success"
+                            android:paddingStart="10dp"
+                            android:paddingEnd="10dp"
+                            android:paddingTop="4dp"
+                            android:paddingBottom="4dp"
+                            android:text="✓ Đã chụp"
+                            android:textColor="@color/success"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:visibility="gone" />
+                    </FrameLayout>
+
+                    <!-- Retake Action (Visible after photo is snapped) -->
+                    <LinearLayout
+                        android:id="@+id/layout_retake_action"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:orientation="horizontal"
+                        android:gravity="center"
+                        android:visibility="gone">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_retake"
+                            android:layout_width="wrap_content"
+                            android:layout_height="40dp"
+                            android:text="Chụp lại ảnh này"
+                            android:textColor="@color/danger"
+                            android:textSize="13sp"
+                            android:background="@drawable/glass_pill_button"
+                            app:backgroundTint="@null" />
+                    </LinearLayout>
+
+                    <!-- Navigation Chips (3 Photos Switcher) -->
+                    <LinearLayout
+                        android:id="@+id/layout_step_chips"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/chip_front"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/navy_button_pill"
+                            android:paddingStart="14dp"
+                            android:paddingEnd="14dp"
+                            android:paddingTop="6dp"
+                            android:paddingBottom="6dp"
+                            android:text="Mặt trước"
+                            android:textColor="@color/white"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/chip_back"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:background="@drawable/glass_panel_soft"
+                            android:paddingStart="14dp"
+                            android:paddingEnd="14dp"
+                            android:paddingTop="6dp"
+                            android:paddingBottom="6dp"
+                            android:text="Mặt sau"
+                            android:textColor="@color/ink"
+                            android:textSize="12sp" />
+
+                        <TextView
+                            android:id="@+id/chip_selfie"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:background="@drawable/glass_panel_soft"
+                            android:paddingStart="14dp"
+                            android:paddingEnd="14dp"
+                            android:paddingTop="6dp"
+                            android:paddingBottom="6dp"
+                            android:text="Selfie"
+                            android:textColor="@color/ink"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <!-- Shutter Button & Camera Trigger -->
+                    <FrameLayout
+                        android:id="@+id/btn_shutter"
+                        android:layout_width="68dp"
+                        android:layout_height="68dp"
+                        android:layout_marginTop="16dp"
+                        android:background="@drawable/circle_action_button">
+
+                        <View
+                            android:layout_width="52dp"
+                            android:layout_height="52dp"
+                            android:layout_gravity="center"
+                            android:background="@drawable/navy_button_pill" />
+                    </FrameLayout>
+
+                    <TextView
+                        android:id="@+id/shutter_hint"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Mở Camera chụp ảnh thật"
+                        android:textColor="@color/ink_muted"
+                        android:textSize="12sp" />
+
+                    <!-- Submit Button (Enabled when 3 photos are ready) -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_submit_ekyc"
+                        android:layout_width="match_parent"
+                        android:layout_height="52dp"
+                        android:layout_marginTop="20dp"
+                        android:text="Nộp hồ sơ thẩm định (3/3)"
+                        android:textColor="@color/white"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:visibility="gone"
+                        android:background="@drawable/navy_button_pill"
+                        app:backgroundTint="@null" />
+                </LinearLayout>
+            </ScrollView>
         </LinearLayout>
 
-        <!-- Backend notice -->
-        <TextView
+        <!-- 3. STATUS & PROGRESS VIEW (View 3: Upload progress / Current Review Status) -->
+        <ScrollView
+            android:id="@+id/layout_status"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:background="@drawable/glass_panel_soft"
-            android:padding="12dp"
-            android:text="Lưu ý hệ thống: Dịch vụ tải ảnh S3 và AI Face Match đang cấu hình (SETUP_REQUIRED). Ảnh chụp sẽ được giả lập lưu tạm an toàn."
-            android:textColor="@color/ink_muted"
-            android:textSize="12sp"
-            android:lineSpacingExtra="2dp" />
-    </LinearLayout>
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:visibility="gone"
+            android:scrollbars="none">
 
-    <!-- Bottom Shutter & Controls -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:gravity="center"
-        android:paddingBottom="30dp"
-        android:paddingTop="12dp">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="24dp"
+                android:paddingEnd="24dp"
+                android:paddingTop="24dp"
+                android:paddingBottom="32dp"
+                android:gravity="center_horizontal">
 
-        <!-- Shutter Button -->
-        <FrameLayout
-            android:id="@+id/btn_shutter"
-            android:layout_width="68dp"
-            android:layout_height="68dp"
-            android:background="@drawable/circle_action_button">
+                <FrameLayout
+                    android:id="@+id/status_icon_container"
+                    android:layout_width="72dp"
+                    android:layout_height="72dp"
+                    android:background="@drawable/circle_action_button">
 
-            <View
-                android:layout_width="52dp"
-                android:layout_height="52dp"
-                android:layout_gravity="center"
-                android:background="@drawable/navy_button_pill" />
-        </FrameLayout>
+                    <ProgressBar
+                        android:id="@+id/status_progress_bar"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:layout_gravity="center"
+                        android:indeterminateTint="@color/navy" />
 
-        <TextView
-            android:id="@+id/shutter_hint"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Chạm để chụp ảnh"
-            android:textColor="@color/ink_muted"
-            android:textSize="12sp" />
-    </LinearLayout>
+                    <ImageView
+                        android:id="@+id/status_icon_image"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_check"
+                        app:tint="@color/success"
+                        android:visibility="gone"
+                        android:contentDescription="Trạng thái hồ sơ" />
+                </FrameLayout>
+
+                <TextView
+                    android:id="@+id/status_headline"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:text="Đang xử lý hồ sơ..."
+                    android:textColor="@color/ink"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:gravity="center" />
+
+                <TextView
+                    android:id="@+id/status_detail"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Vui lòng chờ trong giây lát..."
+                    android:textColor="@color/ink_muted"
+                    android:textSize="14sp"
+                    android:gravity="center"
+                    android:lineSpacingExtra="2dp" />
+
+                <!-- Officer Reason Box (If RESUBMIT_REQUIRED or REJECTED) -->
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/card_officer_reason"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:visibility="gone"
+                    app:cardBackgroundColor="@color/danger_bg"
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="0dp"
+                    app:strokeColor="@color/danger"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="16dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Ý kiến từ Cán bộ thẩm định:"
+                            android:textColor="@color/danger"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tv_officer_reason"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:textColor="@color/ink"
+                            android:textSize="14sp" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- Action Button in Status View -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_status_action"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="32dp"
+                    android:text="Đóng"
+                    android:textColor="@color/white"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:background="@drawable/navy_button_pill"
+                    app:backgroundTint="@null" />
+            </LinearLayout>
+        </ScrollView>
+    </FrameLayout>
 </LinearLayout>

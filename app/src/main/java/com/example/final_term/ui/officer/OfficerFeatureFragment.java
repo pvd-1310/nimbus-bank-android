@@ -1,13 +1,18 @@
 package com.example.final_term.ui.officer;
 
 import android.app.AlertDialog;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.RadioButton;
 import android.widget.RadioGroup;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -27,8 +32,13 @@ import com.example.final_term.databinding.FragmentOfficerFeatureBinding;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public final class OfficerFeatureFragment extends Fragment {
     private FragmentOfficerFeatureBinding binding;
+    private final List<JSONObject> currentEkycItems = new ArrayList<>();
+    private int currentEkycFilter = 0; // 0: All, 1: Pending/Reviewing, 2: Reviewed
 
     @Nullable
     @Override
@@ -80,81 +90,411 @@ public final class OfficerFeatureFragment extends Fragment {
     private void renderEkycQueue(BackendApiClient api) {
         binding.actionButton.setVisibility(View.GONE);
         binding.filterScroll.setVisibility(View.VISIBLE);
+        binding.chipAll.setText("Tất cả");
         binding.chipFilter1.setText("Chờ duyệt");
         binding.chipFilter2.setText("Đã duyệt");
 
-        api.get("/v1/officer/ekyc").addOnCompleteListener(task -> {
+        binding.chipAll.setOnClickListener(v -> {
+            currentEkycFilter = 0;
+            updateFilterChips();
+            filterAndDisplayEkyc(api);
+        });
+
+        binding.chipFilter1.setOnClickListener(v -> {
+            currentEkycFilter = 1;
+            updateFilterChips();
+            filterAndDisplayEkyc(api);
+        });
+
+        binding.chipFilter2.setOnClickListener(v -> {
+            currentEkycFilter = 2;
+            updateFilterChips();
+            filterAndDisplayEkyc(api);
+        });
+
+        loadEkycData(api);
+    }
+
+    private void updateFilterChips() {
+        highlightChip(binding.chipAll, currentEkycFilter == 0);
+        highlightChip(binding.chipFilter1, currentEkycFilter == 1);
+        highlightChip(binding.chipFilter2, currentEkycFilter == 2);
+    }
+
+    private void highlightChip(TextView chip, boolean active) {
+        chip.setBackgroundResource(active ? R.drawable.navy_button_pill : R.drawable.glass_panel_soft);
+        chip.setTextColor(ContextCompat.getColor(requireContext(), active ? R.color.white : R.color.ink));
+    }
+
+    private void loadEkycData(BackendApiClient api) {
+        binding.itemsContainer.removeAllViews();
+        TextView loading = new TextView(requireContext());
+        loading.setText("Đang tải danh sách hồ sơ eKYC...");
+        loading.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
+        loading.setPadding(20, 40, 20, 20);
+        binding.itemsContainer.addView(loading);
+
+        api.get("/officer/ekyc").addOnCompleteListener(task -> {
             if (!isAdded()) return;
             requireActivity().runOnUiThread(() -> {
-                boolean hasItems = false;
+                currentEkycItems.clear();
                 if (task.isSuccessful() && task.getResult() != null && task.getResult().statusCode == 200) {
                     try {
                         JSONObject json = new JSONObject(task.getResult().body);
                         JSONArray items = json.optJSONArray("items");
-                        if (items != null && items.length() > 0) {
-                            hasItems = true;
+                        if (items != null) {
                             for (int i = 0; i < items.length(); i++) {
-                                JSONObject item = items.getJSONObject(i);
-                                addEkycRow(
-                                        item.optString("id", "EKYC-" + i),
-                                        item.optString("fullName", "Khách hàng " + (i + 1)),
-                                        item.optString("idNumber", "07920300" + (1000 + i)),
-                                        item.optString("status", "PENDING"),
-                                        item.optString("createdAt", "Hôm nay, 09:30")
-                                );
+                                currentEkycItems.add(items.getJSONObject(i));
                             }
                         }
                     } catch (Exception ignored) {}
                 }
-
-                if (!hasItems) {
-                    addEkycRow("EKYC-9021", "Nguyễn Văn An", "079203001842", "PENDING", "Hôm nay, 08:45");
-                    addEkycRow("EKYC-9022", "Trần Thị Mai", "001201004921", "PENDING", "Hôm nay, 09:15");
-                    addEkycRow("EKYC-9018", "Lê Quốc Bảo", "072200008432", "VERIFIED", "Hôm qua, 16:30");
-                }
+                updateFilterChips();
+                filterAndDisplayEkyc(api);
             });
         });
     }
 
-    private void addEkycRow(String id, String name, String cccd, String status, String time) {
+    private void filterAndDisplayEkyc(BackendApiClient api) {
+        binding.itemsContainer.removeAllViews();
+
+        List<JSONObject> filtered = new ArrayList<>();
+        for (JSONObject item : currentEkycItems) {
+            String status = item.optString("reviewStatus", "DRAFT");
+            if (currentEkycFilter == 1) {
+                if ("REVIEWING".equals(status)) filtered.add(item);
+            } else if (currentEkycFilter == 2) {
+                if (!"REVIEWING".equals(status)) filtered.add(item);
+            } else {
+                filtered.add(item);
+            }
+        }
+
+        if (filtered.isEmpty()) {
+            TextView empty = new TextView(requireContext());
+            empty.setText(currentEkycFilter == 1
+                    ? "Hiện không có hồ sơ nào đang chờ thẩm định."
+                    : "Không tìm thấy hồ sơ eKYC nào.");
+            empty.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
+            empty.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+            empty.setPadding(20, 60, 20, 20);
+            binding.itemsContainer.addView(empty);
+            return;
+        }
+
+        for (JSONObject item : filtered) {
+            addRealEkycRow(api, item);
+        }
+    }
+
+    private void addRealEkycRow(BackendApiClient api, JSONObject item) {
+        String id = item.optString("id", "N/A");
+        String customerUid = item.optString("customerUid", "N/A");
+        String status = item.optString("reviewStatus", "DRAFT");
+        String reason = item.optString("reason", "");
+        JSONArray storageRefs = item.optJSONArray("storageRefs");
+        int photosCount = storageRefs != null ? storageRefs.length() : 0;
+
         View row = LayoutInflater.from(requireContext()).inflate(R.layout.item_transaction_row, binding.itemsContainer, false);
         TextView title = row.findViewById(R.id.title_text);
         TextView subtitle = row.findViewById(R.id.subtitle_text);
         TextView amount = row.findViewById(R.id.amount_text);
 
-        title.setText(name);
-        subtitle.setText("CCCD: " + cccd + " · " + id + "\n" + time);
-        amount.setText(status.equals("PENDING") ? "Chờ duyệt" : "Đã duyệt");
-        amount.setTextColor(status.equals("PENDING")
-                ? ContextCompat.getColor(requireContext(), R.color.warning)
-                : ContextCompat.getColor(requireContext(), R.color.success));
+        title.setText("Hồ sơ: " + id);
 
-        row.setOnClickListener(v -> new AlertDialog.Builder(requireContext())
-                .setTitle("Hồ sơ eKYC: " + name)
-                .setMessage("Mã hồ sơ: " + id + "\nSố CCCD: " + cccd + "\nTrạng thái: " + status + "\n\nLưu ý: Bằng chứng ảnh CCCD và khuôn mặt được quản lý qua S3 backend (s3: SETUP_REQUIRED).")
-                .setPositiveButton("Phê duyệt", (d, w) -> {
-                    Toast.makeText(requireContext(), "Đã phê duyệt hồ sơ " + id, Toast.LENGTH_SHORT).show();
-                    amount.setText("Đã duyệt");
-                    amount.setTextColor(ContextCompat.getColor(requireContext(), R.color.success));
-                })
-                .setNegativeButton("Từ chối", (d, w) -> {
-                    Toast.makeText(requireContext(), "Đã từ chối hồ sơ " + id, Toast.LENGTH_SHORT).show();
-                    amount.setText("Từ chối");
-                    amount.setTextColor(ContextCompat.getColor(requireContext(), R.color.danger));
-                })
-                .setNeutralButton("Đóng", null)
-                .show());
+        StringBuilder sb = new StringBuilder();
+        sb.append("KH: ").append(customerUid);
+        if (photosCount > 0) {
+            sb.append(" · ").append(photosCount).append(" ảnh bằng chứng");
+        }
+        if (!reason.isEmpty()) {
+            sb.append("\nLý do: ").append(reason);
+        }
+        subtitle.setText(sb.toString());
 
+        switch (status) {
+            case "REVIEWING":
+                amount.setText("Chờ duyệt");
+                amount.setTextColor(ContextCompat.getColor(requireContext(), R.color.warning));
+                break;
+            case "VERIFIED":
+                amount.setText("Đã duyệt");
+                amount.setTextColor(ContextCompat.getColor(requireContext(), R.color.success));
+                break;
+            case "RESUBMIT_REQUIRED":
+                amount.setText("Chụp lại");
+                amount.setTextColor(ContextCompat.getColor(requireContext(), R.color.warning));
+                break;
+            case "REJECTED":
+                amount.setText("Từ chối");
+                amount.setTextColor(ContextCompat.getColor(requireContext(), R.color.danger));
+                break;
+            default:
+                amount.setText("Bản nháp");
+                amount.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
+                break;
+        }
+
+        row.setOnClickListener(v -> showEkycReviewDialog(api, item));
         binding.itemsContainer.addView(row);
+    }
+
+    private void showEkycReviewDialog(BackendApiClient api, JSONObject item) {
+        String id = item.optString("id");
+        String customerUid = item.optString("customerUid", "N/A");
+        String status = item.optString("reviewStatus", "DRAFT");
+        String existingReason = item.optString("reason", "");
+        JSONArray storageRefs = item.optJSONArray("storageRefs");
+        int count = storageRefs != null ? storageRefs.length() : 0;
+
+        ScrollView scroll = new ScrollView(requireContext());
+        LinearLayout layout = new LinearLayout(requireContext());
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(40, 24, 40, 24);
+        scroll.addView(layout);
+
+        // Header info
+        TextView info = new TextView(requireContext());
+        info.setText("Mã hồ sơ: " + id + "\nKhách hàng: " + customerUid + "\nTrạng thái: " + status + (existingReason.isEmpty() ? "" : "\nLý do trước: " + existingReason));
+        info.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
+        info.setTextSize(14f);
+        info.setLineSpacing(4, 1.2f);
+        layout.addView(info);
+
+        // Evidence section header
+        TextView evidenceTitle = new TextView(requireContext());
+        evidenceTitle.setText("\nBẰNG CHỨNG HÌNH ẢNH (" + count + " ảnh)");
+        evidenceTitle.setTextColor(ContextCompat.getColor(requireContext(), R.color.navy));
+        evidenceTitle.setTextSize(12f);
+        evidenceTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+        layout.addView(evidenceTitle);
+
+        String[] mediaNames = new String[]{"Mặt trước CCCD", "Mặt sau CCCD", "Chân dung Selfie"};
+        for (int i = 0; i < count; i++) {
+            final int photoIndex = i;
+            String label = photoIndex < mediaNames.length ? mediaNames[photoIndex] : ("Ảnh " + (photoIndex + 1));
+
+            com.google.android.material.button.MaterialButton btnViewPhoto =
+                    new com.google.android.material.button.MaterialButton(requireContext());
+            btnViewPhoto.setText("Xem ảnh: " + label);
+            btnViewPhoto.setTextSize(12f);
+            btnViewPhoto.setBackgroundColor(ContextCompat.getColor(requireContext(), R.color.glass_card));
+            btnViewPhoto.setTextColor(ContextCompat.getColor(requireContext(), R.color.navy));
+            btnViewPhoto.setStrokeColor(ContextCompat.getColorStateList(requireContext(), R.color.glass_border));
+            btnViewPhoto.setStrokeWidth(1);
+            btnViewPhoto.setCornerRadius(20);
+
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp.setMargins(0, 10, 0, 0);
+            btnViewPhoto.setLayoutParams(lp);
+
+            btnViewPhoto.setOnClickListener(v -> inspectEvidencePhoto(api, id, photoIndex, label));
+            layout.addView(btnViewPhoto);
+        }
+
+        // Review form (only if REVIEWING)
+        RadioGroup rgStatus = null;
+        EditText reasonInput = null;
+        if ("REVIEWING".equals(status)) {
+            TextView reviewTitle = new TextView(requireContext());
+            reviewTitle.setText("\nQUYẾT ĐỊNH THẨM ĐỊNH");
+            reviewTitle.setTextColor(ContextCompat.getColor(requireContext(), R.color.navy));
+            reviewTitle.setTextSize(12f);
+            reviewTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+            layout.addView(reviewTitle);
+
+            rgStatus = new RadioGroup(requireContext());
+            RadioButton rbVerify = new RadioButton(requireContext());
+            rbVerify.setText("Phê duyệt (VERIFIED)");
+            rbVerify.setId(View.generateViewId());
+            rbVerify.setChecked(true);
+            rgStatus.addView(rbVerify);
+
+            RadioButton rbResubmit = new RadioButton(requireContext());
+            rbResubmit.setText("Yêu cầu chụp lại (RESUBMIT_REQUIRED)");
+            rbResubmit.setId(View.generateViewId());
+            rgStatus.addView(rbResubmit);
+
+            RadioButton rbReject = new RadioButton(requireContext());
+            rbReject.setText("Từ chối hồ sơ (REJECTED)");
+            rbReject.setId(View.generateViewId());
+            rgStatus.addView(rbReject);
+
+            layout.addView(rgStatus);
+
+            TextView reasonLabel = new TextView(requireContext());
+            reasonLabel.setText("Lý do thẩm định (Bắt buộc, từ 3 ký tự):");
+            reasonLabel.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
+            reasonLabel.setTextSize(13f);
+            reasonLabel.setPadding(0, 16, 0, 8);
+            layout.addView(reasonLabel);
+
+            reasonInput = new EditText(requireContext());
+            reasonInput.setHint("Nhập lý do phê duyệt / yêu cầu bổ sung...");
+            reasonInput.setBackgroundResource(R.drawable.input_glass_field);
+            reasonInput.setPadding(24, 16, 24, 16);
+            reasonInput.setTextSize(14f);
+            layout.addView(reasonInput);
+        }
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext())
+                .setTitle("Chi tiết thẩm định eKYC")
+                .setView(scroll)
+                .setNegativeButton("Đóng", null);
+
+        if ("REVIEWING".equals(status) && rgStatus != null && reasonInput != null) {
+            final RadioGroup finalRg = rgStatus;
+            final EditText finalReason = reasonInput;
+            builder.setPositiveButton("Xác nhận", null); // Set listener later to control dismiss
+        }
+
+        AlertDialog dialog = builder.create();
+        dialog.show();
+
+        if ("REVIEWING".equals(status) && rgStatus != null && reasonInput != null) {
+            final RadioGroup finalRg = rgStatus;
+            final EditText finalReason = reasonInput;
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                String reasonText = finalReason.getText().toString().trim();
+                if (reasonText.length() < 3) {
+                    Toast.makeText(requireContext(), "Vui lòng nhập lý do thẩm định ít nhất 3 ký tự", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                String decision = "VERIFIED";
+                int checkedId = finalRg.getCheckedRadioButtonId();
+                if (checkedId == finalRg.getChildAt(1).getId()) {
+                    decision = "RESUBMIT_REQUIRED";
+                } else if (checkedId == finalRg.getChildAt(2).getId()) {
+                    decision = "REJECTED";
+                }
+
+                submitOfficerReview(api, id, decision, reasonText, dialog);
+            });
+        }
+    }
+
+    private void inspectEvidencePhoto(BackendApiClient api, String requestId, int index, String label) {
+        Toast.makeText(requireContext(), "Đang lấy link tải ảnh " + label + "...", Toast.LENGTH_SHORT).show();
+
+        api.get("/officer/ekyc/" + requestId + "/evidence/" + index).addOnCompleteListener(urlTask -> {
+            if (!isAdded()) return;
+            requireActivity().runOnUiThread(() -> {
+                if (!urlTask.isSuccessful() || urlTask.getResult() == null) {
+                    Toast.makeText(requireContext(), "Lỗi kết nối máy chủ", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                int sc = urlTask.getResult().statusCode;
+                if (sc == 503) {
+                    new AlertDialog.Builder(requireContext())
+                            .setTitle("Thông báo S3")
+                            .setMessage("Dịch vụ S3 của ngân hàng chưa cấu hình bộ nhớ đám mây (SETUP_REQUIRED). Vui lòng kiểm tra biến môi trường S3 trên backend.")
+                            .setPositiveButton("Đã hiểu", null)
+                            .show();
+                    return;
+                }
+                if (sc != 200) {
+                    Toast.makeText(requireContext(), "Lỗi tải ảnh (" + sc + ")", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                try {
+                    JSONObject resp = new JSONObject(urlTask.getResult().body);
+                    String downloadUrl = resp.getString("url");
+
+                    // Download image bytes
+                    api.downloadBytes(downloadUrl).addOnCompleteListener(dlTask -> {
+                        if (!isAdded()) return;
+                        requireActivity().runOnUiThread(() -> {
+                            if (!dlTask.isSuccessful() || dlTask.getResult() == null) {
+                                Toast.makeText(requireContext(), "Không thể tải nội dung ảnh từ S3", Toast.LENGTH_SHORT).show();
+                                return;
+                            }
+                            byte[] bytes = dlTask.getResult();
+                            Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+                            if (bitmap == null) {
+                                Toast.makeText(requireContext(), "Ảnh không hợp lệ hoặc đã hỏng", Toast.LENGTH_SHORT).show();
+                                return;
+                            }
+
+                            // Show photo in dialog
+                            ImageView iv = new ImageView(requireContext());
+                            iv.setImageBitmap(bitmap);
+                            iv.setAdjustViewBounds(true);
+                            iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                            iv.setPadding(20, 20, 20, 20);
+
+                            AlertDialog photoDialog = new AlertDialog.Builder(requireContext())
+                                    .setTitle("Bằng chứng: " + label)
+                                    .setView(iv)
+                                    .setPositiveButton("Đóng", (d, w) -> {
+                                        iv.setImageBitmap(null);
+                                        bitmap.recycle();
+                                    })
+                                    .setOnDismissListener(d -> {
+                                        iv.setImageBitmap(null);
+                                        if (!bitmap.isRecycled()) {
+                                            bitmap.recycle();
+                                        }
+                                    })
+                                    .create();
+                            photoDialog.show();
+                        });
+                    });
+                } catch (Exception e) {
+                    Toast.makeText(requireContext(), "Lỗi xử lý URL ảnh", Toast.LENGTH_SHORT).show();
+                }
+            });
+        });
+    }
+
+    private void submitOfficerReview(BackendApiClient api, String requestId, String status, String reason, AlertDialog parentDialog) {
+        JSONObject body = new JSONObject();
+        try {
+            body.put("status", status);
+            body.put("reason", reason);
+        } catch (Exception ignored) {}
+
+        api.post("/officer/ekyc/" + requestId + "/review", body.toString()).addOnCompleteListener(reviewTask -> {
+            if (!isAdded()) return;
+            requireActivity().runOnUiThread(() -> {
+                if (reviewTask.isSuccessful() && reviewTask.getResult() != null && reviewTask.getResult().statusCode == 200) {
+                    Toast.makeText(requireContext(), "✓ Đã thẩm định hồ sơ " + requestId + " (" + status + ")", Toast.LENGTH_LONG).show();
+                    if (parentDialog != null && parentDialog.isShowing()) {
+                        parentDialog.dismiss();
+                    }
+                    loadEkycData(api);
+                } else {
+                    int sc = reviewTask.getResult() != null ? reviewTask.getResult().statusCode : -1;
+                    String errorBody = reviewTask.getResult() != null ? reviewTask.getResult().body : "";
+                    String msg = "HTTP " + sc;
+                    if (errorBody.contains("SELF_REVIEW_FORBIDDEN")) {
+                        msg = "Cán bộ không được tự thẩm định hồ sơ eKYC của chính mình (SELF_REVIEW_FORBIDDEN).";
+                    } else if (errorBody.contains("INVALID_STATE")) {
+                        msg = "Hồ sơ không ở trạng thái chờ thẩm định (REVIEWING).";
+                    } else if (!errorBody.isEmpty()) {
+                        msg = errorBody;
+                    }
+
+                    new AlertDialog.Builder(requireContext())
+                            .setTitle("Không thể hoàn tất thẩm định")
+                            .setMessage(msg)
+                            .setPositiveButton("Đóng", null)
+                            .show();
+                }
+            });
+        });
     }
 
     private void renderAuditLogs(BackendApiClient api) {
         binding.actionButton.setVisibility(View.GONE);
         binding.filterScroll.setVisibility(View.VISIBLE);
+        binding.chipAll.setText("Tất cả");
         binding.chipFilter1.setText("Giao dịch");
         binding.chipFilter2.setText("Cập nhật KH");
 
-        api.get("/v1/officer/audit").addOnCompleteListener(task -> {
+        api.get("/officer/audit").addOnCompleteListener(task -> {
             if (!isAdded()) return;
             requireActivity().runOnUiThread(() -> {
                 boolean hasItems = false;
@@ -286,7 +626,7 @@ public final class OfficerFeatureFragment extends Fragment {
                         req.put("annualRateBasisPoints", basisPoints);
                         req.put("effectiveFrom", System.currentTimeMillis() / 1000);
 
-                        api.post("/v1/officer/rate-policies", req.toString()).addOnCompleteListener(task -> {
+                        api.post("/officer/rate-policies", req.toString()).addOnCompleteListener(task -> {
                             if (!isAdded()) return;
                             requireActivity().runOnUiThread(() -> {
                                 if (task.isSuccessful() && task.getResult() != null && task.getResult().statusCode >= 200 && task.getResult().statusCode < 300) {

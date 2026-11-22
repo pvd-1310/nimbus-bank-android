@@ -504,7 +504,7 @@ public final class AccountListFragment extends Fragment {
                                 .put("requestId", UUID.randomUUID().toString())
                                 .put("fullName", name)
                                 .put("email", email);
-                        application.getAppContainer().getBackendApiClient().post("/v1/officer/customers", body.toString())
+                        application.getAppContainer().getBackendApiClient().post("/officer/customers", body.toString())
                                 .addOnSuccessListener(resp -> {
                                     Toast.makeText(requireContext(), resp.statusCode >= 200 && resp.statusCode < 300
                                             ? "Đã cấp mới hồ sơ khách hàng thành công." : "Backend: HTTP " + resp.statusCode, Toast.LENGTH_LONG).show();
@@ -555,7 +555,7 @@ public final class AccountListFragment extends Fragment {
                         JSONObject body = new JSONObject()
                                 .put("fullName", newName)
                                 .put("reason", reason);
-                        application.getAppContainer().getBackendApiClient().patch("/v1/officer/customers/" + customerId, body.toString())
+                        application.getAppContainer().getBackendApiClient().patch("/officer/customers/" + customerId, body.toString())
                                 .addOnSuccessListener(resp -> {
                                     Toast.makeText(requireContext(), resp.statusCode >= 200 && resp.statusCode < 300
                                             ? "Đã cập nhật tên khách hàng." : "Backend: HTTP " + resp.statusCode, Toast.LENGTH_LONG).show();

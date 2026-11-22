@@ -34,7 +34,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 public final class MoneyRequestFragment extends Fragment {
-    private static final String PATH = "/v1/money-requests";
+    private static final String PATH = "/money-requests";
     private static final String DEPOSIT = "DEPOSIT";
     private static final String WITHDRAWAL = "WITHDRAWAL";
     private final List<String> accountIds = new ArrayList<>();

@@ -169,7 +169,7 @@ it.skipIf(!enabled)(
       const response = await fetch(
         "http://" +
           process.env.FIREBASE_AUTH_EMULATOR_HOST +
-          "/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo",
+          "/identitytoolkit.googleapis.com/accounts:signInWithPassword?key=demo",
         {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -178,21 +178,21 @@ it.skipIf(!enabled)(
       );
       const login = (await response.json()) as { idToken: string };
       expect(response.ok).toBe(true);
-      const profile = await fetch("http://127.0.0.1:3197/v1/me", {
+      const profile = await fetch("http://127.0.0.1:3197/me", {
         headers: { Authorization: "Bearer " + login.idToken },
       });
       expect(profile.status).toBe(200);
       expect(((await profile.json()) as { fullName: string }).fullName).toBe(
         "Smoke user",
       );
-      const denied = await fetch("http://127.0.0.1:3197/v1/officer/audit", {
+      const denied = await fetch("http://127.0.0.1:3197/officer/audit", {
         headers: { Authorization: "Bearer " + login.idToken },
       });
       expect(denied.status).toBe(403);
       const write = await fetch(
         "http://" +
           process.env.FIRESTORE_EMULATOR_HOST +
-          "/v1/projects/" +
+          "/projects/" +
           projectId +
           "/databases/(default)/documents/accounts/illegal",
         {

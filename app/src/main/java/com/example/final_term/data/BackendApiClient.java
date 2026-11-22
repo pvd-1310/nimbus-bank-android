@@ -10,8 +10,10 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.Iterator;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import org.json.JSONObject;
 
 /** Authenticated production REST transport. Money is never mutated locally. */
 public final class BackendApiClient {
@@ -121,5 +123,78 @@ public final class BackendApiClient {
         }
         connection.disconnect();
         return new Response(status, body.toString());
+    }
+
+    public Task<Response> uploadToPresignedPost(@NonNull String uploadUrl, @NonNull JSONObject fields,
+                                                @NonNull String mime, @NonNull byte[] fileBytes) {
+        return Tasks.call(executor, () -> executeMultipartPost(uploadUrl, fields, mime, fileBytes));
+    }
+
+    private Response executeMultipartPost(String uploadUrl, JSONObject fields, String mime, byte[] fileBytes) throws Exception {
+        String boundary = "----NimbusBoundary" + System.currentTimeMillis();
+        String lineEnd = "\r\n";
+        String twoHyphens = "--";
+
+        HttpURLConnection connection = (HttpURLConnection) new URL(uploadUrl).openConnection();
+        connection.setRequestMethod("POST");
+        connection.setConnectTimeout(15000);
+        connection.setReadTimeout(15000);
+        connection.setDoOutput(true);
+        connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+
+        try (java.io.OutputStream output = connection.getOutputStream()) {
+            Iterator<String> keys = fields.keys();
+            while (keys.hasNext()) {
+                String key = keys.next();
+                String value = fields.optString(key);
+                output.write((twoHyphens + boundary + lineEnd).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                output.write(("Content-Disposition: form-data; name=\"" + key + "\"" + lineEnd + lineEnd).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                output.write((value + lineEnd).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            }
+
+            output.write((twoHyphens + boundary + lineEnd).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            output.write(("Content-Disposition: form-data; name=\"file\"; filename=\"evidence.jpg\"" + lineEnd).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            output.write(("Content-Type: " + mime + lineEnd + lineEnd).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            output.write(fileBytes);
+            output.write(lineEnd.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            output.write((twoHyphens + boundary + twoHyphens + lineEnd).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            output.flush();
+        }
+
+        int status = connection.getResponseCode();
+        InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
+        StringBuilder body = new StringBuilder();
+        if (stream != null) {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
+                String line;
+                while ((line = reader.readLine()) != null) body.append(line);
+            }
+        }
+        connection.disconnect();
+        return new Response(status, body.toString());
+    }
+
+    public Task<byte[]> downloadBytes(@NonNull String downloadUrl) {
+        return Tasks.call(executor, () -> {
+            HttpURLConnection connection = (HttpURLConnection) new URL(downloadUrl).openConnection();
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(10000);
+            connection.setReadTimeout(10000);
+            int status = connection.getResponseCode();
+            if (status >= 400) {
+                throw new java.io.IOException("HTTP " + status);
+            }
+            try (InputStream is = connection.getInputStream();
+                 java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream()) {
+                byte[] buffer = new byte[8192];
+                int n;
+                while ((n = is.read(buffer)) != -1) {
+                    baos.write(buffer, 0, n);
+                }
+                return baos.toByteArray();
+            } finally {
+                connection.disconnect();
+            }
+        });
     }
 }

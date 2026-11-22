@@ -175,7 +175,7 @@ public final class BranchLocatorFragment extends Fragment {
             body.put("longitude", location.getLongitude());
             if (branchId != null) body.put("branchId", branchId);
             FinalTermApplication app = (FinalTermApplication) requireActivity().getApplication();
-            app.getAppContainer().getBackendApiClient().post("/v1/branches/routes", body.toString())
+            app.getAppContainer().getBackendApiClient().post("/branches/routes", body.toString())
                     .addOnSuccessListener(response -> {
                         if (!isCurrentRoute(requestId)) return;
                         if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -272,7 +272,7 @@ public final class BranchLocatorFragment extends Fragment {
     private void loadBranches() {
         FragmentBranchLocatorBinding currentBinding = binding;
         FinalTermApplication app = (FinalTermApplication) requireActivity().getApplication();
-        app.getAppContainer().getBackendApiClient().get("/v1/branches?limit=100")
+        app.getAppContainer().getBackendApiClient().get("/branches?limit=100")
                 .addOnSuccessListener(response -> {
                     if (binding != currentBinding) return;
                     if (response.statusCode < 200 || response.statusCode >= 300) {

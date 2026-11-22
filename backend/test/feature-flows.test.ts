@@ -82,30 +82,30 @@ it("keeps scoped checking details and missing-account behavior", async () => {
   expect(
     (
       await request(app)
-        .get("/v1/accounts/checking/details")
+        .get("/accounts/checking/details")
         .set("Authorization", auth)
     ).body.details.dailyLimitMinor,
   ).toBe(500);
   expect(
     (
       await request(app)
-        .get("/v1/accounts/foreign/details")
+        .get("/accounts/foreign/details")
         .set("Authorization", auth)
     ).status,
   ).toBe(403);
   expect(
-    (await request(app).get("/v1/accounts/missing").set("Authorization", auth))
+    (await request(app).get("/accounts/missing").set("Authorization", auth))
       .status,
   ).toBe(404);
 });
 it("preserves savings and mortgage calculation responses", async () => {
   const savings = await request(app)
-    .get("/v1/accounts/savings/savings-estimate?days=365")
+    .get("/accounts/savings/savings-estimate?days=365")
     .set("Authorization", auth);
   expect(savings.status).toBe(200);
   expect(savings.body.profitMinor).toBe(18250);
   const mortgage = await request(app)
-    .get("/v1/accounts/mortgage/mortgage-schedule")
+    .get("/accounts/mortgage/mortgage-schedule")
     .set("Authorization", auth);
   expect(mortgage.status).toBe(200);
   expect(mortgage.body.items).toHaveLength(12);
@@ -120,25 +120,25 @@ it("keeps profile updates, notification acknowledgement and request-only deposit
   expect(
     (
       await request(app)
-        .patch("/v1/me")
+        .patch("/me")
         .set("Authorization", auth)
         .send({ preferences: { language: "vi" } })
     ).status,
   ).toBe(200);
   expect(
-    (await request(app).get("/v1/me").set("Authorization", auth)).body
+    (await request(app).get("/me").set("Authorization", auth)).body
       .preferences.language,
   ).toBe("vi");
   expect(
     (
       await request(app)
-        .post("/v1/notifications/n/read")
+        .post("/notifications/n/read")
         .set("Authorization", auth)
     ).status,
   ).toBe(200);
   expect((await store.run((t) => t.get("notifications/n")))!.read).toBe(true);
   const response = await request(app)
-    .post("/v1/money-requests")
+    .post("/money-requests")
     .set("Authorization", auth)
     .send({
       requestId: "deposit",
@@ -160,23 +160,23 @@ it("keeps order invoice, idempotency and branch routes mounted", async () => {
     customerDetails: "Demo",
   };
   const first = await request(app)
-    .post("/v1/orders")
+    .post("/orders")
     .set("Authorization", auth)
     .send(body);
   expect(first.status).toBe(200);
   expect(first.body.amountMinor).toBe(40);
   const retry = await request(app)
-    .post("/v1/orders")
+    .post("/orders")
     .set("Authorization", auth)
     .send(body);
   expect(retry.body.orderId).toBe(first.body.orderId);
   expect(await store.run((t) => t.list("bills"))).toHaveLength(1);
   expect(
-    (await request(app).get("/v1/branches").set("Authorization", auth)).body
+    (await request(app).get("/branches").set("Authorization", auth)).body
       .items,
   ).toHaveLength(1);
   expect(
-    (await request(app).get("/v1/officer/audit").set("Authorization", auth))
+    (await request(app).get("/officer/audit").set("Authorization", auth))
       .status,
   ).toBe(403);
 });

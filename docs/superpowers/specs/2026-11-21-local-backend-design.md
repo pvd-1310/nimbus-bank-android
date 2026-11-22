@@ -52,7 +52,7 @@ Seed at least one account of each type, versioned savings rates, mortgage terms,
 
 ## API groups
 
-Use `/v1` JSON endpoints with stable error codes, request IDs, bounded input sizes, and cursor pagination. Publish an OpenAPI contract alongside implementation. Return provider capability status so UI can describe disabled features accurately.
+Use JSON endpoints without a version prefix, with stable error codes, request IDs, bounded input sizes, and cursor pagination. Publish an OpenAPI contract alongside implementation. Return provider capability status so UI can describe disabled features accurately.
 
 | Group | Operations |
 | --- | --- |

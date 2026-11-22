@@ -29,7 +29,7 @@ export function createApp(d: AppDependencies) {
   app.get("/openapi.json", (_req, res) => res.json(openapi));
   registerStripeWebhook(app, d);
   app.use(express.json({ limit: "64kb" }));
-  app.use("/v1", authenticateRequests(d));
+  app.use(authenticateRequests(d));
   const route = createRouteRegistrar(app);
   for (const register of [
     registerCapabilitiesRoutes,

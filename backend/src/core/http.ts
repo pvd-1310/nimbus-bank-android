@@ -46,7 +46,7 @@ export function authenticateRequests(d: AppDependencies) {
 }
 export function createRouteRegistrar(app: Express): Route {
   return (method, path, handler) => {
-    app[method]("/v1" + path, async (req, res) => {
+    app[method](path, async (req, res) => {
       res.json(await handler(res.locals.actor, req));
     });
   };

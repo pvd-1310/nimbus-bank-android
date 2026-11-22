@@ -60,7 +60,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
             binding.lookupResultText.setText("Đang kiểm tra hóa đơn từ cổng thanh toán…");
 
             FinalTermApplication app = (FinalTermApplication) requireActivity().getApplication();
-            app.getAppContainer().getBackendApiClient().get("/v1/capabilities")
+            app.getAppContainer().getBackendApiClient().get("/capabilities")
                     .addOnSuccessListener(resp -> {
                         if (binding == null) return;
                         binding.lookupResultText.setText("Không tìm thấy kỳ hóa đơn chưa thanh toán cho mã: " + code + "\n(Cổng thanh toán: đối tác đang đồng bộ)");

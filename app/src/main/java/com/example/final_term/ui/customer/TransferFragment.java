@@ -269,7 +269,7 @@ public final class TransferFragment extends Fragment {
                     .put("amountMinor", Long.parseLong(amount))
                     .put("currency", "VND");
             setBusy(true);
-            api.post("/v1/transfers/intents", body.toString())
+            api.post("/transfers/intents", body.toString())
                     .addOnSuccessListener(response -> {
                         if (binding != currentView) return;
                         if (!ok(response)) {
@@ -298,7 +298,7 @@ public final class TransferFragment extends Fragment {
 
     private void requestOtp() {
         FragmentTransferBinding currentView = binding;
-        api.post("/v1/intents/" + intentId + "/otp", "{}")
+        api.post("/intents/" + intentId + "/otp", "{}")
                 .addOnSuccessListener(response -> {
                     if (binding != currentView) return;
                     if (!ok(response)) {
@@ -428,7 +428,7 @@ public final class TransferFragment extends Fragment {
     }
 
     private void sendOtpProof(JSONObject body, FragmentTransferBinding currentView) {
-        api.post("/v1/intents/" + intentId + "/verify-otp", body.toString())
+        api.post("/intents/" + intentId + "/verify-otp", body.toString())
                 .addOnCompleteListener(task -> {
                     if (binding != currentView) return;
                     if (!task.isSuccessful()) {
@@ -452,7 +452,7 @@ public final class TransferFragment extends Fragment {
         FragmentTransferBinding currentView = binding;
         setBusy(true);
         status("Đang hoàn tất giao dịch…");
-        api.post("/v1/transfers/" + intentId + "/commit", "{}")
+        api.post("/transfers/" + intentId + "/commit", "{}")
                 .addOnCompleteListener(task -> {
                     if (binding != currentView) return;
                     setBusy(false);

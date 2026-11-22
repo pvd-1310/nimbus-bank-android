@@ -3,7 +3,7 @@ import type { AppDependencies } from "../../core/http.js";
 import { check, Fault } from "../../shared/errors.js";
 export function registerStripeWebhook(app: Express, d: AppDependencies) {
   app.post(
-    "/v1/webhooks/stripe",
+    "/webhooks/stripe",
     express.raw({ type: "application/json", limit: "1mb" }),
     async (req, res) => {
       check(d.payments.provider, "SETUP_REQUIRED", 503);

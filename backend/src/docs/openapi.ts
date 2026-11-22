@@ -195,7 +195,7 @@ const endpoints: [string, string, string, unknown?][] = [
     "/officer/ekyc/{id}/review",
     "Audited manual review",
     object({
-      status: { enum: ["APPROVED", "REJECTED", "RESUBMIT_REQUIRED"] },
+      status: { enum: ["VERIFIED", "REJECTED", "RESUBMIT_REQUIRED"] },
       reason: text,
     }),
   ],
@@ -279,7 +279,7 @@ export const openapi = {
       "Authenticated banking API. Provider capabilities are explicit; chatbot and unavailable external providers remain deferred.",
   },
   servers: [
-    { url: process.env.PUBLIC_API_URL ?? "https://api.example.com/v1" },
+    { url: process.env.PUBLIC_API_URL ?? "https://api.example.com" },
   ],
   security: [{ firebaseToken: [] }],
   components: {
