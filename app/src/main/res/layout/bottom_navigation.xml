@@ -1,24 +1,160 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent" android:layout_height="72dp" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:layout_marginBottom="12dp"
-    android:background="@drawable/bottom_nav_background" android:elevation="12dp" android:gravity="center_vertical" android:orientation="horizontal" android:paddingStart="6dp" android:paddingEnd="6dp">
-    <LinearLayout android:id="@+id/nav_home" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:gravity="center" android:orientation="vertical" android:padding="4dp">
-        <ImageView android:layout_width="22dp" android:layout_height="22dp" android:contentDescription="Trang chủ" android:src="@drawable/ic_nav_home" />
-        <TextView android:id="@+id/nav_home_label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Trang chủ" android:textColor="@color/white" android:textSize="10sp" />
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="72dp"
+    android:layout_marginStart="16dp"
+    android:layout_marginEnd="16dp"
+    android:layout_marginBottom="12dp"
+    android:background="@drawable/bottom_nav_background"
+    android:elevation="14dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="6dp"
+    android:paddingEnd="6dp">
+
+    <!-- 1. Home / Dashboard -->
+    <LinearLayout
+        android:id="@+id/nav_home"
+        android:layout_width="0dp"
+        android:layout_height="56dp"
+        android:layout_weight="1"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="4dp">
+
+        <ImageView
+            android:id="@+id/nav_home_icon"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:contentDescription="Trang chủ"
+            android:src="@drawable/ic_nav_home"
+            app:tint="@color/white" />
+
+        <TextView
+            android:id="@+id/nav_home_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="@string/nav_home"
+            android:textColor="@color/white"
+            android:textSize="10sp" />
     </LinearLayout>
-    <LinearLayout android:id="@+id/nav_wallet" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:gravity="center" android:orientation="vertical" android:padding="4dp">
-        <ImageView android:layout_width="22dp" android:layout_height="22dp" android:contentDescription="Ví" android:src="@drawable/ic_nav_wallet" />
-        <TextView android:id="@+id/nav_wallet_label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Ví" android:textColor="#B3FFFFFF" android:textSize="10sp" />
+
+    <!-- 2. Wallet / Customers -->
+    <LinearLayout
+        android:id="@+id/nav_wallet"
+        android:layout_width="0dp"
+        android:layout_height="56dp"
+        android:layout_weight="1"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="4dp">
+
+        <ImageView
+            android:id="@+id/nav_wallet_icon"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:contentDescription="Ví"
+            android:src="@drawable/ic_nav_wallet"
+            app:tint="@color/white" />
+
+        <TextView
+            android:id="@+id/nav_wallet_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="@string/nav_wallet"
+            android:textColor="#B3FFFFFF"
+            android:textSize="10sp" />
     </LinearLayout>
-    <FrameLayout android:id="@+id/nav_quick" android:layout_width="64dp" android:layout_height="72dp" android:layout_gravity="center_vertical">
-        <ImageButton android:id="@+id/nav_quick_button" android:layout_width="56dp" android:layout_height="56dp" android:layout_gravity="center" android:background="@drawable/nav_center_button" android:contentDescription="Thao tác nhanh" android:padding="14dp" android:src="@drawable/ic_nav_add" />
+
+    <!-- 3. Floating Center (+) Button -->
+    <FrameLayout
+        android:id="@+id/nav_quick"
+        android:layout_width="64dp"
+        android:layout_height="72dp"
+        android:layout_gravity="center_vertical">
+
+        <ImageButton
+            android:id="@+id/nav_quick_button"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_gravity="center"
+            android:background="@drawable/nav_center_button"
+            android:contentDescription="Thao tác nhanh"
+            android:elevation="6dp"
+            android:padding="15dp"
+            android:src="@drawable/ic_nav_add"
+            app:tint="@color/white" />
     </FrameLayout>
-    <LinearLayout android:id="@+id/nav_accounts" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:gravity="center" android:orientation="vertical" android:padding="4dp">
-        <ImageView android:layout_width="22dp" android:layout_height="22dp" android:contentDescription="Tài khoản" android:src="@drawable/ic_nav_accounts" />
-        <TextView android:id="@+id/nav_accounts_label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Tài khoản" android:textColor="#B3FFFFFF" android:textSize="10sp" />
+
+    <!-- 4. Accounts / Approvals -->
+    <LinearLayout
+        android:id="@+id/nav_accounts"
+        android:layout_width="0dp"
+        android:layout_height="56dp"
+        android:layout_weight="1"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="4dp">
+
+        <ImageView
+            android:id="@+id/nav_accounts_icon"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:contentDescription="Tài khoản"
+            android:src="@drawable/ic_nav_accounts"
+            app:tint="@color/white" />
+
+        <TextView
+            android:id="@+id/nav_accounts_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="@string/nav_accounts"
+            android:textColor="#B3FFFFFF"
+            android:textSize="10sp" />
     </LinearLayout>
-    <LinearLayout android:id="@+id/nav_profile" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:gravity="center" android:orientation="vertical" android:padding="4dp">
-        <ImageView android:layout_width="22dp" android:layout_height="22dp" android:contentDescription="Cá nhân" android:src="@drawable/ic_nav_person" />
-        <TextView android:id="@+id/nav_profile_label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Cá nhân" android:textColor="#B3FFFFFF" android:textSize="10sp" />
+
+    <!-- 5. Profile / Staff -->
+    <LinearLayout
+        android:id="@+id/nav_profile"
+        android:layout_width="0dp"
+        android:layout_height="56dp"
+        android:layout_weight="1"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="4dp">
+
+        <ImageView
+            android:id="@+id/nav_profile_icon"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:contentDescription="Cá nhân"
+            android:src="@drawable/ic_nav_person"
+            app:tint="@color/white" />
+
+        <TextView
+            android:id="@+id/nav_profile_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="@string/nav_profile"
+            android:textColor="#B3FFFFFF"
+            android:textSize="10sp" />
     </LinearLayout>
+
 </LinearLayout>

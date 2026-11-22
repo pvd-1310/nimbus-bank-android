@@ -148,7 +148,19 @@ const endpoints: [string, string, string, unknown?][] = [
   ],
   ["get", "/orders", "Owned orders"],
   ["get", "/branches", "Active branch directory"],
-  ["post", "/branches/routes", "Unavailable until Routes configured"],
+  [
+    "post",
+    "/branches/routes",
+    "Walking route to a selected active branch or the nearest branch by walking distance",
+    object(
+      {
+        latitude: { type: "number", minimum: -90, maximum: 90 },
+        longitude: { type: "number", minimum: -180, maximum: 180 },
+        branchId: { type: "string", minLength: 1, maxLength: 1500 },
+      },
+      ["latitude", "longitude"],
+    ),
+  ],
   ["get", "/officer/customers", "Permission CUSTOMER_ADMIN required"],
   [
     "post",
@@ -266,7 +278,9 @@ export const openapi = {
     description:
       "Authenticated banking API. Provider capabilities are explicit; chatbot and unavailable external providers remain deferred.",
   },
-  servers: [{ url: process.env.PUBLIC_API_URL ?? "https://api.example.com/v1" }],
+  servers: [
+    { url: process.env.PUBLIC_API_URL ?? "https://api.example.com/v1" },
+  ],
   security: [{ firebaseToken: [] }],
   components: {
     securitySchemes: {

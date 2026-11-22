@@ -47,12 +47,53 @@ public final class BackendApiClient {
         });
     }
 
+    public Task<Response> patch(@NonNull String path, @NonNull String jsonBody) {
+        if (auth == null || auth.getCurrentUser() == null)
+            return Tasks.forException(new IllegalStateException("BACKEND_AUTH_REQUIRED"));
+        return auth.getCurrentUser().getIdToken(false).continueWithTask(tokenTask -> {
+            if (!tokenTask.isSuccessful() || tokenTask.getResult() == null)
+                throw tokenTask.getException() == null
+                        ? new IllegalStateException("BACKEND_TOKEN_UNAVAILABLE") : tokenTask.getException();
+            return Tasks.call(executor, () -> executePatch(path, tokenTask.getResult().getToken(), jsonBody));
+        });
+    }
+
     private Response executeGet(String path, String token) throws Exception {
         return execute(path, token, "GET", null);
     }
 
     private Response executePost(String path, String token, String jsonBody) throws Exception {
         return execute(path, token, "POST", jsonBody);
+    }
+
+    private Response executePatch(String path, String token, String jsonBody) throws Exception {
+        try {
+            return execute(path, token, "PATCH", jsonBody);
+        } catch (java.net.ProtocolException e) {
+            HttpURLConnection connection = (HttpURLConnection) new URL(BuildConfig.BACKEND_BASE_URL + path).openConnection();
+            connection.setRequestMethod("POST");
+            connection.setRequestProperty("X-HTTP-Method-Override", "PATCH");
+            connection.setConnectTimeout(5000);
+            connection.setReadTimeout(5000);
+            connection.setRequestProperty("Accept", "application/json");
+            connection.setRequestProperty("Authorization", "Bearer " + token);
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "application/json");
+            try (java.io.OutputStream output = connection.getOutputStream()) {
+                output.write(jsonBody.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            }
+            int status = connection.getResponseCode();
+            InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
+            StringBuilder body = new StringBuilder();
+            if (stream != null) {
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) body.append(line);
+                }
+            }
+            connection.disconnect();
+            return new Response(status, body.toString());
+        }
     }
 
     private Response execute(String path, String token, String method, String jsonBody) throws Exception {

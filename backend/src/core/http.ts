@@ -53,13 +53,19 @@ export function createRouteRegistrar(app: Express): Route {
 }
 export function errorHandler(
   err: unknown,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction,
 ) {
   const known = err instanceof Fault,
     malformed =
       err instanceof ZodError || (err instanceof SyntaxError && "body" in err);
+  const requestId = res.locals.requestId;
+  const errorCode = known ? err.code : malformed ? "INVALID_REQUEST" : "INTERNAL_ERROR";
+  console.error("API request failed", {
+    requestId, method: req.method, path: req.path, errorCode,
+    errorName: err instanceof Error ? err.name : "UNKNOWN",
+  });
   res.status(known ? err.status : malformed ? 400 : 500).json({
     error: known ? err.code : malformed ? "INVALID_REQUEST" : "INTERNAL_ERROR",
     requestId: res.locals.requestId,

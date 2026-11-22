@@ -75,7 +75,8 @@ public class BaseFlowInstrumentedTest {
                 bar.findViewById(R.id.nav_accounts).performClick();
                 int reviewDestination = controller.getCurrentDestination().getId();
                 assertTrue(reviewDestination == R.id.transactionHistory
-                        || reviewDestination == R.id.officerEkyc);
+                        || reviewDestination == R.id.officerEkyc
+                        || reviewDestination == R.id.accountList);
 
                 bar.findViewById(R.id.nav_wallet).performClick();
                 assertEquals(R.id.accountList, controller.getCurrentDestination().getId());

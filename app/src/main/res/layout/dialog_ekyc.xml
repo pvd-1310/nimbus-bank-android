@@ -1,0 +1,260 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/background_gradient">
+
+    <!-- Top Navigation -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="20dp"
+        android:paddingBottom="10dp">
+
+        <ImageButton
+            android:id="@+id/btn_back"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/circle_action_button"
+            android:contentDescription="Đóng"
+            android:padding="10dp"
+            android:src="@drawable/ic_close"
+            app:tint="@color/navy" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="Định danh eKYC"
+            android:textColor="@color/ink"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <ImageButton
+            android:id="@+id/btn_help"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/circle_action_button"
+            android:contentDescription="Trợ giúp"
+            android:padding="10dp"
+            android:src="@drawable/ic_shield"
+            app:tint="@color/navy" />
+    </LinearLayout>
+
+    <!-- Two-step Pill Stepper -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:layout_marginTop="6dp">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/glass_panel_soft"
+            android:padding="4dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/step1_indicator"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/navy_button_pill"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:text="1. Chụp CCCD"
+                android:textColor="@color/white"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/step2_indicator"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:text="2. Khuôn mặt"
+                android:textColor="@color/ink_faint"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Content Card -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingTop="16dp">
+
+        <TextView
+            android:id="@+id/ekyc_instruction_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Chụp ảnh Căn cước công dân"
+            android:textColor="@color/ink"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/ekyc_instruction_subtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Đặt thẻ CCCD ngay ngắn trong khung hình"
+            android:textColor="@color/ink_muted"
+            android:textSize="13sp" />
+
+        <!-- Viewport Container -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="220dp"
+            android:layout_marginTop="20dp"
+            android:background="@drawable/glass_panel_card">
+
+            <!-- CCCD Viewport Frame -->
+            <FrameLayout
+                android:id="@+id/frame_cccd"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_margin="16dp"
+                android:background="@drawable/input_glass_field">
+
+                <ImageView
+                    android:id="@+id/card_watermark"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_shield"
+                    app:tint="@color/glass_nav"
+                    android:alpha="0.4"
+                    android:contentDescription="Khung chụp thẻ" />
+
+                <TextView
+                    android:id="@+id/frame_label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="bottom|center_horizontal"
+                    android:layout_marginBottom="12dp"
+                    android:text="Mặt trước CCCD"
+                    android:textColor="@color/ink_muted"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </FrameLayout>
+
+            <!-- Face Oval Viewport Frame (Hidden initially) -->
+            <FrameLayout
+                android:id="@+id/frame_face"
+                android:layout_width="160dp"
+                android:layout_height="190dp"
+                android:layout_gravity="center"
+                android:visibility="gone"
+                android:background="@drawable/circle_action_button">
+
+                <ImageView
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_ai_spark"
+                    app:tint="@color/navy"
+                    android:contentDescription="Khung khuôn mặt" />
+            </FrameLayout>
+        </FrameLayout>
+
+        <!-- Toggle side chips (Mặt trước / Mặt sau) -->
+        <LinearLayout
+            android:id="@+id/layout_cccd_sides"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/chip_front"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/navy_button_pill"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:text="Mặt trước"
+                android:textColor="@color/white"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/chip_back"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/glass_panel_soft"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:text="Mặt sau"
+                android:textColor="@color/ink"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- Backend notice -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/glass_panel_soft"
+            android:padding="12dp"
+            android:text="Lưu ý hệ thống: Dịch vụ tải ảnh S3 và AI Face Match đang cấu hình (SETUP_REQUIRED). Ảnh chụp sẽ được giả lập lưu tạm an toàn."
+            android:textColor="@color/ink_muted"
+            android:textSize="12sp"
+            android:lineSpacingExtra="2dp" />
+    </LinearLayout>
+
+    <!-- Bottom Shutter & Controls -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:paddingBottom="30dp"
+        android:paddingTop="12dp">
+
+        <!-- Shutter Button -->
+        <FrameLayout
+            android:id="@+id/btn_shutter"
+            android:layout_width="68dp"
+            android:layout_height="68dp"
+            android:background="@drawable/circle_action_button">
+
+            <View
+                android:layout_width="52dp"
+                android:layout_height="52dp"
+                android:layout_gravity="center"
+                android:background="@drawable/navy_button_pill" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/shutter_hint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Chạm để chụp ảnh"
+            android:textColor="@color/ink_muted"
+            android:textSize="12sp" />
+    </LinearLayout>
+</LinearLayout>

@@ -1,12 +1,13 @@
 <resources>
     <string name="app_name">Nimbus Bank</string>
     <string name="login_title">Đăng nhập</string>
-    <string name="login_subtitle">Truy cập ngân hàng số của bạn</string>
+    <string name="login_subtitle">Ngân hàng số tĩnh lặng &amp; tin cậy</string>
     <string name="email_label">Email</string>
     <string name="email_hint">name@example.com</string>
     <string name="password_label">Mật khẩu</string>
     <string name="password_hint">Nhập mật khẩu</string>
     <string name="sign_in">Đăng nhập</string>
+    <string name="biometric_login">Đăng nhập sinh trắc học</string>
     <string name="production_configuration_required">Ứng dụng chưa được cấu hình production. Vui lòng liên hệ quản trị hệ thống.</string>
     <string name="error_email_required">Vui lòng nhập email.</string>
     <string name="error_password_required">Vui lòng nhập mật khẩu.</string>
@@ -15,8 +16,8 @@
     <string name="error_profile_denied">Tài khoản chưa được kích hoạt hoặc không có role hợp lệ.</string>
     <string name="customer_home_title">Trang chủ</string>
     <string name="officer_home_title">Bảng điều hành</string>
-    <string name="role_customer">Customer</string>
-    <string name="role_officer">Bank Officer</string>
+    <string name="role_customer">Khách hàng cá nhân</string>
+    <string name="role_officer">Cán bộ ngân hàng</string>
     <string name="sign_out">Đăng xuất</string>
     <string name="data_not_loaded">Chưa tải dữ liệu tài khoản</string>
     <string name="data_not_loaded_detail">Không thể tải dữ liệu từ hệ thống ngân hàng production.</string>
@@ -24,4 +25,94 @@
     <string name="customer_actions">Dịch vụ khách hàng</string>
     <string name="officer_actions">Tác vụ nghiệp vụ</string>
     <string name="coming_soon">Đang chuẩn bị</string>
+
+    <!-- Navigation Labels -->
+    <string name="nav_home">Trang chủ</string>
+    <string name="nav_wallet">Ví</string>
+    <string name="nav_accounts">Tài khoản</string>
+    <string name="nav_profile">Cá nhân</string>
+    <string name="nav_officer_dashboard">Tổng quan</string>
+    <string name="nav_officer_customers">Khách hàng</string>
+    <string name="nav_officer_approval">Duyệt</string>
+    <string name="nav_officer_staff">Nhân sự</string>
+
+    <!-- Home Strings -->
+    <string name="welcome_back">Chào mừng trở lại 👋</string>
+    <string name="available_balance">Số dư khả dụng</string>
+    <string name="transaction_limit_pill">ⓘ Hạn mức giao dịch · còn 3.600.000 ₫</string>
+    <string name="action_transfer">Chuyển tiền</string>
+    <string name="action_deposit">Nạp tiền</string>
+    <string name="action_payment">Thanh toán</string>
+    <string name="action_qr">Quét QR</string>
+    <string name="monthly_limit">Hạn mức giao dịch</string>
+    <string name="monthly_limit_val">6.400.000 / 10.000.000 ₫</string>
+    <string name="recent_transactions">Giao dịch gần đây</string>
+    <string name="view_all">Xem tất cả</string>
+    <string name="income_activity">Hoạt động thu nhập</string>
+
+    <!-- Wallet & Accounts -->
+    <string name="wallet_title">Ví &amp; Hạn mức</string>
+    <string name="cards_title">Tài khoản &amp; Thẻ</string>
+    <string name="account_details_btn">Chi tiết tài khoản</string>
+    <string name="lock_card">Khóa thẻ</string>
+    <string name="nfc_toggle">NFC Chạm</string>
+    <string name="card_settings">Cài đặt thẻ</string>
+    <string name="spending_stats">Thống kê chi tiêu</string>
+    <string name="upcoming_payments">Thanh toán sắp tới</string>
+    <string name="bill_electricity">Hóa đơn tiền điện</string>
+    <string name="bill_water">Hóa đơn tiền nước</string>
+    <string name="bill_internet">Hóa đơn Internet</string>
+
+    <!-- Transfers -->
+    <string name="transfer_title">Chuyển tiền</string>
+    <string name="transfer_internal">Cùng ngân hàng</string>
+    <string name="transfer_external">Ngân hàng khác</string>
+    <string name="source_account">Nguồn tiền</string>
+    <string name="destination_account">Tài khoản nhận</string>
+    <string name="destination_hint">Số tài khoản / Số điện thoại</string>
+    <string name="amount_label">Số tiền (VND)</string>
+    <string name="transfer_note">Nội dung chuyển khoản</string>
+    <string name="transfer_confirm_title">Xác nhận chuyển tiền</string>
+    <string name="fee_free">Phí dịch vụ: 0 ₫ (Miễn phí)</string>
+    <string name="otp_title">Xác thực giao dịch</string>
+    <string name="otp_subtitle">Nhập mã OTP 6 số đã gửi đến số điện thoại của bạn</string>
+    <string name="otp_resend">Gửi lại mã sau</string>
+    <string name="transfer_success_title">Chuyển tiền thành công</string>
+    <string name="back_to_home">Về trang chủ</string>
+    <string name="share_receipt">Chia sẻ biên lai</string>
+
+    <!-- Money Requests -->
+    <string name="money_request_title">Nạp / Rút tiền</string>
+    <string name="tab_deposit">Nạp tiền</string>
+    <string name="tab_withdrawal">Rút tiền</string>
+    <string name="money_request_notice">Yêu cầu nạp/rút tiền có trạng thái riêng. Số dư chỉ thay đổi khi backend ngân hàng xác nhận xử lý.</string>
+
+    <!-- Quick Actions Bottom Sheet -->
+    <string name="quick_actions_title">Thao tác nhanh</string>
+    <string name="quick_actions_subtitle">Chọn tiện ích giao dịch bạn cần thực hiện</string>
+    <string name="quick_action_transfer">Chuyển tiền</string>
+    <string name="quick_action_deposit_withdraw">Nạp / Rút tiền</string>
+    <string name="quick_action_bill">Hóa đơn</string>
+    <string name="quick_action_topup">Nạp ĐT</string>
+    <string name="quick_action_booking">Đặt vé</string>
+    <string name="quick_action_branch">Chi nhánh</string>
+    <string name="quick_action_ai">Trợ lý AI</string>
+    <string name="quick_action_history">Lịch sử</string>
+
+    <!-- Branch Locator -->
+    <string name="branch_locator_title">Chi nhánh &amp; ATM</string>
+    <string name="search_branch_hint">Tìm chi nhánh Nimbus Bank gần bạn…</string>
+    <string name="walking_route_btn">Chỉ đường đi bộ</string>
+
+    <!-- eKYC -->
+    <string name="ekyc_title">Định danh eKYC</string>
+    <string name="ekyc_cccd_step">Chụp ảnh CCCD / Hộ chiếu</string>
+    <string name="ekyc_face_step">Xác thực khuôn mặt</string>
+
+    <!-- Officer Strings -->
+    <string name="officer_pending_tasks">Tác vụ cần xử lý hôm nay</string>
+    <string name="officer_metric_customers">Khách hàng</string>
+    <string name="officer_metric_ekyc">Hồ sơ eKYC</string>
+    <string name="officer_metric_audit">Giao dịch cần kiểm tra</string>
+    <string name="officer_metric_rates">Chính sách lãi suất</string>
 </resources>

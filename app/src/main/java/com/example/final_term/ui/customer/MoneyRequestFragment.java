@@ -12,6 +12,7 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.LiveData;
 
+import com.example.final_term.R;
 import com.example.final_term.auth.AuthState;
 import com.example.final_term.auth.UserRole;
 import com.example.final_term.core.AppContainer;
@@ -68,9 +69,37 @@ public final class MoneyRequestFragment extends Fragment {
         binding.titleText.setText(operationLabel(operation));
         binding.operationInput.setAdapter(adapter(List.of("Nạp tiền", "Rút tiền")));
         binding.operationInput.setSelection(WITHDRAWAL.equals(operation) ? 1 : 0);
+        updateTabStyles(WITHDRAWAL.equals(operation) ? 1 : 0);
+
+        binding.backButton.setOnClickListener(v -> androidx.navigation.Navigation.findNavController(v).navigateUp());
+        binding.helpButton.setOnClickListener(v -> {
+            new MaterialAlertDialogBuilder(requireContext())
+                    .setTitle("Quy trình Nạp / Rút tiền")
+                    .setMessage("Yêu cầu nạp hoặc rút tiền của bạn sẽ được gửi tới backend ngân hàng để kiểm tra tính hợp lệ.\n\nSố dư tài khoản chỉ thay đổi khi backend chính thức duyệt và ghi nhận giao dịch.")
+                    .setPositiveButton("Đã hiểu", null)
+                    .show();
+        });
+
+        binding.tabDeposit.setOnClickListener(v -> {
+            binding.operationInput.setSelection(0);
+            updateTabStyles(0);
+        });
+
+        binding.tabWithdrawal.setOnClickListener(v -> {
+            binding.operationInput.setSelection(1);
+            updateTabStyles(1);
+        });
+
+        binding.chipReq500k.setOnClickListener(v -> appendRequestAmount(500000));
+        binding.chipReq1m.setOnClickListener(v -> appendRequestAmount(1000000));
+        binding.chipReq5m.setOnClickListener(v -> appendRequestAmount(5000000));
+
         binding.operationInput.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(AdapterView<?> parent, View selected, int position, long id) {
-                if (binding != null) binding.titleText.setText(operationLabel(position == 1 ? WITHDRAWAL : DEPOSIT));
+                if (binding != null) {
+                    binding.titleText.setText(operationLabel(position == 1 ? WITHDRAWAL : DEPOSIT));
+                    updateTabStyles(position);
+                }
             }
             @Override public void onNothingSelected(AdapterView<?> parent) { }
         });
@@ -253,6 +282,28 @@ public final class MoneyRequestFragment extends Fragment {
 
     private static String operationLabel(String type) {
         return WITHDRAWAL.equals(type) ? "Rút tiền" : "Nạp tiền";
+    }
+
+    private void updateTabStyles(int position) {
+        if (binding == null) return;
+        boolean isDeposit = position == 0;
+        binding.tabDeposit.setBackgroundResource(isDeposit ? R.drawable.navy_button_pill : 0);
+        binding.tabDeposit.setTextColor(requireContext().getColor(isDeposit ? R.color.white : R.color.ink_muted));
+        binding.tabDeposit.setTypeface(null, isDeposit ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+
+        binding.tabWithdrawal.setBackgroundResource(!isDeposit ? R.drawable.navy_button_pill : 0);
+        binding.tabWithdrawal.setTextColor(requireContext().getColor(!isDeposit ? R.color.white : R.color.ink_muted));
+        binding.tabWithdrawal.setTypeface(null, !isDeposit ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+    }
+
+    private void appendRequestAmount(long delta) {
+        if (binding == null) return;
+        String cur = binding.amountInput.getText().toString().trim();
+        long currentVal = 0;
+        try {
+            if (!cur.isEmpty()) currentVal = Long.parseLong(cur);
+        } catch (Exception ignored) { }
+        binding.amountInput.setText(String.valueOf(currentVal + delta));
     }
 
     @Override public void onSaveInstanceState(@NonNull Bundle state) {

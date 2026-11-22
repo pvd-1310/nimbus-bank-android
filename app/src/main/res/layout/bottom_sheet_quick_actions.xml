@@ -1,0 +1,329 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/glass_panel_card"
+    android:backgroundTint="@color/glass_sheet"
+    android:elevation="16dp"
+    android:orientation="vertical"
+    android:paddingStart="16dp"
+    android:paddingTop="12dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="28dp">
+
+    <!-- Drag Handle -->
+    <View
+        android:layout_width="48dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="14dp"
+        android:background="@drawable/glass_pill_button"
+        android:backgroundTint="@color/bg_slate" />
+
+    <!-- Sheet Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/quick_actions_title"
+                android:textColor="@color/ink"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="@string/quick_actions_subtitle"
+                android:textColor="@color/ink_muted"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/close_sheet_btn"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="@drawable/circle_action_button"
+            android:contentDescription="Đóng"
+            android:padding="8dp"
+            android:src="@drawable/ic_close" />
+    </LinearLayout>
+
+    <!-- Grid of 8 Quick Actions: Row 1 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:orientation="horizontal">
+
+        <!-- 1. Chuyển tiền -->
+        <LinearLayout
+            android:id="@+id/qa_transfer"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageButton
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/circle_action_button"
+                android:contentDescription="@string/quick_action_transfer"
+                android:elevation="3dp"
+                android:padding="16dp"
+                android:src="@drawable/ic_nav_send"
+                app:tint="@color/navy" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/quick_action_transfer"
+                android:textColor="@color/ink"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- 2. Nạp / Rút tiền -->
+        <LinearLayout
+            android:id="@+id/qa_deposit_withdraw"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageButton
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/circle_action_button"
+                android:contentDescription="@string/quick_action_deposit_withdraw"
+                android:elevation="3dp"
+                android:padding="16dp"
+                android:src="@drawable/ic_nav_wallet"
+                app:tint="@color/navy" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:gravity="center"
+                android:text="@string/quick_action_deposit_withdraw"
+                android:textColor="@color/ink"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- 3. Thanh toán hóa đơn -->
+        <LinearLayout
+            android:id="@+id/qa_bills"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageButton
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/circle_action_button"
+                android:contentDescription="@string/quick_action_bill"
+                android:elevation="3dp"
+                android:padding="16dp"
+                android:src="@drawable/ic_receipt"
+                app:tint="@color/navy" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/quick_action_bill"
+                android:textColor="@color/ink"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- 4. Nạp ĐT -->
+        <LinearLayout
+            android:id="@+id/qa_topup"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageButton
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/circle_action_button"
+                android:contentDescription="@string/quick_action_topup"
+                android:elevation="3dp"
+                android:padding="16dp"
+                android:src="@drawable/ic_phone_topup"
+                app:tint="@color/navy" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/quick_action_topup"
+                android:textColor="@color/ink"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Grid of 8 Quick Actions: Row 2 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:orientation="horizontal">
+
+        <!-- 5. Vé & Đặt phòng -->
+        <LinearLayout
+            android:id="@+id/qa_booking"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageButton
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/circle_action_button"
+                android:contentDescription="@string/quick_action_booking"
+                android:elevation="3dp"
+                android:padding="16dp"
+                android:src="@drawable/ic_flight"
+                app:tint="@color/navy" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/quick_action_booking"
+                android:textColor="@color/ink"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- 6. Chi nhánh -->
+        <LinearLayout
+            android:id="@+id/qa_branch"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageButton
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/circle_action_button"
+                android:contentDescription="@string/quick_action_branch"
+                android:elevation="3dp"
+                android:padding="16dp"
+                android:src="@drawable/ic_branch"
+                app:tint="@color/navy" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/quick_action_branch"
+                android:textColor="@color/ink"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- 7. Trợ lý AI -->
+        <LinearLayout
+            android:id="@+id/qa_ai"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageButton
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/circle_action_button"
+                android:contentDescription="@string/quick_action_ai"
+                android:elevation="3dp"
+                android:padding="16dp"
+                android:src="@drawable/ic_ai_spark"
+                app:tint="@color/navy" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/quick_action_ai"
+                android:textColor="@color/ink"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- 8. Lịch sử -->
+        <LinearLayout
+            android:id="@+id/qa_history"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageButton
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/circle_action_button"
+                android:contentDescription="@string/quick_action_history"
+                android:elevation="3dp"
+                android:padding="16dp"
+                android:src="@drawable/ic_receipt"
+                app:tint="@color/navy" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/quick_action_history"
+                android:textColor="@color/ink"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+</LinearLayout>

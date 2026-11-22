@@ -1,22 +1,284 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent" android:layout_height="match_parent" android:fillViewport="true">
-<LinearLayout
-    android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical"
-    android:background="@drawable/background_gradient" android:padding="20dp">
-    <TextView android:id="@+id/title_text" android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:textColor="@color/ink" android:textSize="24sp" android:textStyle="bold" />
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
-        android:text="Đây là yêu cầu giao dịch; việc thay đổi số dư cần backend xác nhận." android:textColor="@color/ink_muted" />
-    <Spinner android:id="@+id/operation_input" android:layout_width="match_parent" android:layout_height="48dp" android:contentDescription="Loại yêu cầu" />
-    <Spinner android:id="@+id/account_input" android:layout_width="match_parent" android:layout_height="48dp" android:contentDescription="Tài khoản" />
-    <EditText android:id="@+id/amount_input" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp"
-        android:hint="Số tiền VND (số nguyên)" android:inputType="number" android:maxLength="16" />
-    <TextView android:id="@+id/status_text" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:textColor="@color/ink_muted" />
-    <com.google.android.material.button.MaterialButton android:id="@+id/submit_button" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="Gửi yêu cầu" />
-    <com.google.android.material.button.MaterialButton android:id="@+id/history_button"
-        style="@style/Widget.Material3.Button.OutlinedButton"
-        android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:text="Yêu cầu đã gửi" />
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/background_gradient"
+    android:orientation="vertical">
+
+    <!-- Top Bar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp">
+
+        <ImageButton
+            android:id="@+id/back_button"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/circle_action_button"
+            android:contentDescription="Quay lại"
+            android:padding="10dp"
+            android:src="@drawable/ic_arrow_back" />
+
+        <TextView
+            android:id="@+id/title_text"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="@string/money_request_title"
+            android:textColor="@color/ink"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <ImageButton
+            android:id="@+id/help_button"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/circle_action_button"
+            android:contentDescription="Trợ giúp"
+            android:padding="10dp"
+            android:src="@drawable/ic_shield" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        android:paddingStart="20dp"
+        android:paddingTop="12dp"
+        android:paddingEnd="20dp"
+        android:paddingBottom="96dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Segmented Control: Nạp tiền / Rút tiền -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:background="@drawable/glass_pill_button"
+                android:orientation="horizontal"
+                android:padding="3dp">
+
+                <TextView
+                    android:id="@+id/tab_deposit"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/navy_button_pill"
+                    android:gravity="center"
+                    android:text="@string/tab_deposit"
+                    android:textColor="@color/white"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tab_withdrawal"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:gravity="center"
+                    android:text="@string/tab_withdrawal"
+                    android:textColor="@color/ink_muted"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <!-- Operation Spinner (preserved for contract compatibility) -->
+            <Spinner
+                android:id="@+id/operation_input"
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:contentDescription="Loại yêu cầu"
+                android:visibility="gone" />
+
+            <!-- Account Selection Card -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:background="@drawable/glass_panel_card"
+                android:elevation="4dp"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:id="@+id/account_label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Tài khoản giao dịch"
+                    android:textColor="@color/ink_muted"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <Spinner
+                    android:id="@+id/account_input"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/glass_pill_button"
+                    android:contentDescription="Tài khoản"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp" />
+            </LinearLayout>
+
+            <!-- Amount Card with Quick Chips -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/glass_panel_card"
+                android:elevation="4dp"
+                android:orientation="vertical"
+                android:padding="18dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/amount_label"
+                    android:textColor="@color/ink_muted"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <EditText
+                    android:id="@+id/amount_input"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:layout_marginTop="6dp"
+                    android:autofillHints=""
+                    android:background="@drawable/input_glass_field"
+                    android:fontFamily="sans-serif-light"
+                    android:hint="500.000"
+                    android:inputType="number"
+                    android:maxLength="16"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:textColor="@color/ink"
+                    android:textColorHint="@color/ink_faint"
+                    android:textSize="26sp" />
+
+                <!-- Chips -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/chip_req_500k"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_marginEnd="6dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/glass_pill_button"
+                        android:gravity="center"
+                        android:text="+500.000"
+                        android:textColor="@color/ink"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/chip_req_1m"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_marginStart="3dp"
+                        android:layout_marginEnd="3dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/glass_pill_button"
+                        android:gravity="center"
+                        android:text="+1.000.000"
+                        android:textColor="@color/ink"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/chip_req_5m"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_marginStart="6dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/glass_pill_button"
+                        android:gravity="center"
+                        android:text="+5.000.000"
+                        android:textColor="@color/ink"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Important Compliance Notice Card -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/glass_panel_soft"
+                android:orientation="horizontal"
+                android:padding="14dp">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:contentDescription="Lưu ý"
+                    android:src="@drawable/ic_shield"
+                    app:tint="@color/slate_blue" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:text="@string/money_request_notice"
+                    android:textColor="@color/ink_muted"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <!-- Status Message -->
+            <TextView
+                android:id="@+id/status_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:gravity="center"
+                android:textColor="@color/ink_muted"
+                android:textSize="13sp" />
+
+            <!-- Submit Button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/submit_button"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layout_marginTop="14dp"
+                android:backgroundTint="@color/navy"
+                android:text="Gửi yêu cầu"
+                android:textColor="@color/white"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                app:cornerRadius="20dp" />
+
+            <!-- History Button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/history_button"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="8dp"
+                android:backgroundTint="@color/glass_pill"
+                android:text="Yêu cầu đã gửi"
+                android:textColor="@color/navy"
+                android:textSize="14sp"
+                app:cornerRadius="18dp"
+                app:strokeColor="@color/glass_border"
+                app:strokeWidth="1dp" />
+
+        </LinearLayout>
+    </ScrollView>
 </LinearLayout>
-</ScrollView>

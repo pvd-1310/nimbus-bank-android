@@ -1,31 +1,183 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="match_parent" android:layout_height="match_parent"
-    android:fillViewport="true" android:background="@drawable/background_gradient">
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/background_gradient"
+    android:fillViewport="true">
+
     <LinearLayout
-        android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:orientation="vertical" android:paddingStart="20dp" android:paddingEnd="20dp"
-        android:paddingTop="28dp" android:paddingBottom="32dp">
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
-            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Nimbus Bank" android:textColor="@color/ink" android:textSize="16sp" android:textStyle="bold" />
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingStart="24dp"
+        android:paddingTop="36dp"
+        android:paddingEnd="24dp"
+        android:paddingBottom="36dp">
+
+        <!-- Logo Emblem -->
+        <FrameLayout
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/circle_action_button"
+            android:elevation="6dp">
+
+            <ImageView
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_gravity="center"
+                android:contentDescription="Nimbus Bank"
+                android:src="@drawable/ic_shield"
+                app:tint="@color/navy" />
+        </FrameLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:fontFamily="sans-serif-medium"
+            android:letterSpacing="0.08"
+            android:text="NIMBUS BANK"
+            android:textColor="@color/navy"
+            android:textSize="18sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="@string/login_title"
+            android:textColor="@color/ink"
+            android:textSize="28sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/login_subtitle"
+            android:textColor="@color/ink_muted"
+            android:textSize="14sp" />
+
+        <!-- Glass Card Form -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:background="@drawable/glass_panel_card"
+            android:elevation="8dp"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/email_label"
+                app:boxCornerRadiusBottomEnd="16dp"
+                app:boxCornerRadiusBottomStart="16dp"
+                app:boxCornerRadiusTopEnd="16dp"
+                app:boxCornerRadiusTopStart="16dp"
+                app:boxStrokeColor="@color/navy"
+                app:placeholderText="@string/email_hint">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/email_input"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:importantForAutofill="yes"
+                    android:inputType="textEmailAddress"
+                    android:textColor="@color/ink"
+                    android:textSize="15sp" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:hint="@string/password_label"
+                app:boxCornerRadiusBottomEnd="16dp"
+                app:boxCornerRadiusBottomStart="16dp"
+                app:boxCornerRadiusTopEnd="16dp"
+                app:boxCornerRadiusTopStart="16dp"
+                app:boxStrokeColor="@color/navy"
+                app:endIconMode="password_toggle"
+                app:placeholderText="@string/password_hint">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/password_input"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:importantForAutofill="yes"
+                    android:inputType="textPassword"
+                    android:textColor="@color/ink"
+                    android:textSize="15sp" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- Error Banner -->
+            <TextView
+                android:id="@+id/error_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/badge_status_danger"
+                android:padding="10dp"
+                android:textColor="@color/danger"
+                android:textSize="13sp"
+                android:visibility="gone"
+                tools:text="Email hoặc mật khẩu không chính xác." />
+
+            <ProgressBar
+                android:id="@+id/progress"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="14dp"
+                android:indeterminateTint="@color/navy"
+                android:visibility="gone" />
+
+            <!-- Primary Sign In Button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/sign_in_button"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layout_marginTop="18dp"
+                android:backgroundTint="@color/navy"
+                android:text="@string/sign_in"
+                android:textColor="@color/white"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                app:cornerRadius="20dp" />
+
+            <!-- Biometric Login Button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/biometric_button"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="10dp"
+                android:backgroundTint="@color/glass_pill"
+                android:text="@string/biometric_login"
+                android:textColor="@color/navy"
+                android:textSize="14sp"
+                app:cornerRadius="18dp"
+                app:strokeColor="@color/glass_border"
+                app:strokeWidth="1dp" />
+
         </LinearLayout>
-        <Space android:layout_width="match_parent" android:layout_height="48dp" />
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/login_title" android:textColor="@color/ink" android:textSize="32sp" />
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="@string/login_subtitle" android:textColor="@color/ink_muted" android:textSize="16sp" />
-        <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="28dp" app:cardBackgroundColor="@color/glass" app:cardCornerRadius="26dp" app:strokeColor="@color/glass_border" app:strokeWidth="1dp">
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
-                <com.google.android.material.textfield.TextInputLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="@string/email_label" app:placeholderText="@string/email_hint" style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
-                    <com.google.android.material.textfield.TextInputEditText android:id="@+id/email_input" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textEmailAddress" android:minHeight="56dp" android:importantForAutofill="yes" />
-                </com.google.android.material.textfield.TextInputLayout>
-                <com.google.android.material.textfield.TextInputLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:hint="@string/password_label" app:placeholderText="@string/password_hint" app:endIconMode="password_toggle" style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
-                    <com.google.android.material.textfield.TextInputEditText android:id="@+id/password_input" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textPassword" android:minHeight="56dp" android:importantForAutofill="yes" />
-                </com.google.android.material.textfield.TextInputLayout>
-                <TextView android:id="@+id/error_text" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textColor="@color/danger" android:textSize="13sp" android:visibility="gone" />
-                <ProgressBar android:id="@+id/progress" android:layout_width="28dp" android:layout_height="28dp" android:layout_gravity="center_horizontal" android:layout_marginTop="14dp" android:visibility="gone" />
-                <com.google.android.material.button.MaterialButton android:id="@+id/sign_in_button" android:layout_width="match_parent" android:layout_height="56dp" android:layout_marginTop="18dp" android:background="@drawable/primary_button" android:text="@string/sign_in" android:textColor="@color/white" android:textSize="15sp" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="28dp" android:gravity="center" android:text="Đăng nhập bằng Email/Password. Bố cục giữ theo mockup số điện thoại/CCCD của UI tham chiếu." android:textColor="@color/ink_muted" android:textSize="12sp" />
+
+        <!-- Security footer -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:gravity="center"
+            android:text="Bảo mật đa tầng theo tiêu chuẩn ngân hàng số Nimbus"
+            android:textColor="@color/ink_muted"
+            android:textSize="12sp" />
+
     </LinearLayout>
 </ScrollView>

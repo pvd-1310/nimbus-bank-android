@@ -109,11 +109,15 @@ Tất cả endpoint dưới `/v1` yêu cầu bearer token, ngoại trừ webhook
 | Hóa đơn/thanh toán | GET `/bills`, POST `/payments/intents`, POST `/payments`, GET `/payments/:id` |
 | Webhook | POST `/webhooks/stripe` (raw JSON + Stripe signature) |
 | Dịch vụ demo | GET `/catalog`, POST/GET `/orders` |
-| Chi nhánh | GET `/branches`; POST `/branches/routes` hiện trả `SETUP_REQUIRED` |
+| Chi nhánh | GET `/branches`; POST `/branches/routes` trả tuyến đi bộ cùng khoảng cách và thời gian |
 | Thông báo | GET `/notifications`, POST `/notifications/:id/read` |
 | Officer | GET `/officer/customers`, `/officer/ekyc`, `/officer/audit` |
 | Officer quản trị | POST `/officer/customers`, PATCH `/officer/customers/:id`, POST `/officer/rate-policies` |
 | Officer eKYC | POST `/officer/ekyc/:id/review`, GET `/officer/ekyc/:id/evidence/:index` |
+
+Gửi `latitude` và `longitude` tới `POST /v1/branches/routes` để tìm chi nhánh gần nhất theo đường đi bộ. Gửi thêm `branchId` (trường `id` từ `GET /v1/branches`) để chỉ đường tới một chi nhánh cụ thể.
+
+Cấu hình `GOOGLE_ROUTES_API_KEY` trong `backend/.env` bằng khóa máy chủ được phép gọi Routes API trên dự án Google Cloud đã bật Routes API và billing. Android `local.properties` dùng `MAPS_API_KEY` giới hạn cho Maps SDK for Android và package `com.example.final_term` cùng SHA-1. Không commit API keys.
 
 Ví dụ tạo intent chuyển nội bộ:
 

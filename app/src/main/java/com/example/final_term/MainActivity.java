@@ -87,7 +87,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void syncBottomNavigation(int destination) {
         if (binding == null || navController == null) return;
-        boolean show = destination != R.id.login;
+        boolean show = destination != R.id.login && destination != R.id.branchLocator;
         android.view.View bottomNavigation = binding.mainBottomNavigation.getRoot();
         bottomNavigation.setVisibility(show ? android.view.View.VISIBLE : android.view.View.GONE);
         bottomNavigation.bringToFront();
