@@ -31,3 +31,11 @@ ui-debug.log
 
 *.pdf
 *.xlsx
+
+# Face weights and locally mounted model bundles
+private-face-model/
+*.onnx
+
+# Generated Python bytecode
+__pycache__/
+*.pyc

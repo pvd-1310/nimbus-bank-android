@@ -1,4 +1,4 @@
-import { GetObjectCommand, HeadObjectCommand, S3ServiceException, type S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, ListObjectVersionsCommand, GetObjectCommand, HeadObjectCommand, S3ServiceException, type S3Client } from "@aws-sdk/client-s3";
 import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { check, Fault } from "../../shared/errors.js";
@@ -48,12 +48,41 @@ export class S3Evidence implements EvidenceProvider {
     }
   }
 
+  async read({ key, versionId, bytes, mime }: Parameters<NonNullable<EvidenceProvider["read"]>>[0]) {
+    check(versionId && versionId !== "null" && bytes > 0 && bytes <= 5_000_000, "INVALID_EVIDENCE");
+    const data = await this.client.send(new GetObjectCommand({
+      Bucket: this.bucket, Key: key, VersionId: versionId,
+    }), { abortSignal: AbortSignal.timeout(8000) });
+    check(data.ContentLength === bytes && data.ContentType === mime && data.VersionId === versionId, "INVALID_EVIDENCE");
+    const body = await data.Body?.transformToByteArray();
+    check(body?.length === bytes, "INVALID_EVIDENCE");
+    return Buffer.from(body);
+  }
+
+  async removeVersions(key: string) {
+    // Re-list after each batch so interrupted cleanup is safe to repeat.
+    while (true) {
+      const page = await this.client.send(new ListObjectVersionsCommand({
+        Bucket: this.bucket, Prefix: key, MaxKeys: 1000,
+      }));
+      const objects = [...(page.Versions ?? []), ...(page.DeleteMarkers ?? [])].filter((obj) => obj.Key === key);
+      if (!objects.length) return;
+      for (const obj of objects) {
+        check(obj.VersionId, "INVALID_OBJECT_VERSION");
+        await this.client.send(new DeleteObjectCommand({
+          Bucket: this.bucket, Key: key, VersionId: obj.VersionId,
+        }));
+      }
+    }
+  }
+
   download({ key, versionId }: Parameters<EvidenceProvider["download"]>[0]) {
     check(versionId && versionId !== "null", "INVALID_EVIDENCE");
     return getSignedUrl(this.client, new GetObjectCommand({
       Bucket: this.bucket,
       Key: key,
       VersionId: versionId,
+      ResponseCacheControl: "private, no-store",
     }), { expiresIn: 120 });
   }
 }

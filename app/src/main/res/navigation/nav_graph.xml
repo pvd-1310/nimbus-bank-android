@@ -36,7 +36,7 @@
     <fragment android:id="@+id/moneyRequest" android:name="com.example.final_term.ui.customer.MoneyRequestFragment" android:label="Yêu cầu nạp/rút" />
     <fragment android:id="@+id/transfer" android:name="com.example.final_term.ui.customer.TransferFragment" android:label="Chuyển tiền" />
     <fragment android:id="@+id/branchLocator" android:name="com.example.final_term.ui.customer.BranchLocatorFragment" android:label="Chi nhánh" />
-    <fragment android:id="@+id/officerEkyc" android:name="com.example.final_term.ui.officer.OfficerFeatureFragment" android:label="Duyệt eKYC" />
+    <fragment android:id="@+id/officerEkyc" android:name="com.example.final_term.ui.officer.OfficerFeatureFragment" android:label="Hồ sơ eKYC" />
     <fragment android:id="@+id/officerAudit" android:name="com.example.final_term.ui.officer.OfficerFeatureFragment" android:label="Kiểm tra giao dịch" />
     <fragment android:id="@+id/officerRates" android:name="com.example.final_term.ui.officer.OfficerFeatureFragment" android:label="Chính sách lãi suất" />
 </navigation>

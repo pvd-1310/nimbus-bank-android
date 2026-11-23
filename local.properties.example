@@ -1,6 +1,12 @@
 # Optional for simulator debug builds. Without this line, the app uses the
 # Docker backend published on the host at http://10.0.2.2:3001.
+# For a physical debug device connected by ADB, run adb reverse tcp:3001 tcp:3001
+# Android Emulator reaches the host machine at 10.0.2.2.
 # backendBaseUrl=http://10.0.2.2:3001
+# A physical device can use 127.0.0.1 only with `adb reverse tcp:3001 tcp:3001`.
 
 # Required for release builds: replace with the public HTTPS API URL.
 # backendBaseUrl=https://api.example.com
+
+# Required for Stripe test payments in the Android debug app. Never put sk_test here.
+# STRIPE_PUBLISHABLE_KEY=pk_test_your-stripe-publishable-key

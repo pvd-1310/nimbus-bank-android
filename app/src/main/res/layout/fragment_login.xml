@@ -152,6 +152,31 @@
                 android:textStyle="bold"
                 app:cornerRadius="20dp" />
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/face_login_button"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="Đăng nhập bằng ảnh khuôn mặt (demo)" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="4dp"
+                android:gravity="center"
+                android:text="Nhận diện ảnh tĩnh và OTP là tính năng demo. Đăng nhập bằng email/mật khẩu luôn là phương thức dự phòng."
+                android:textColor="@color/ink_muted"
+                android:textSize="11sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/reset_password_button"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Đặt hoặc quên mật khẩu" />
+
             <!-- Biometric Login Button -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/biometric_button"

@@ -9,6 +9,14 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'OFFICER'
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true;
     }
+    function isActiveCustomer() {
+      return signedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'CUSTOMER'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true
+        && (!('status' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data)
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'ACTIVE');
+    }
+    function canReadBankingData() { return isActiveCustomer() || isActiveOfficer(); }
 
     match /users/{uid} {
       allow read: if isSelf(uid) || isActiveOfficer();
@@ -26,17 +34,17 @@ service cloud.firestore {
     }
 
     match /accounts/{accountId} {
-      allow read: if signedIn() && (resource.data.ownerUid == request.auth.uid || isActiveOfficer());
+      allow read: if canReadBankingData() && (resource.data.ownerUid == request.auth.uid || isActiveOfficer());
       allow write: if false;
     }
 
     match /transactions/{transactionId} {
-      allow read: if signedIn() && (resource.data.ownerUid == request.auth.uid || isActiveOfficer());
+      allow read: if canReadBankingData() && (resource.data.ownerUid == request.auth.uid || isActiveOfficer());
       allow write: if false;
     }
 
     match /notifications/{notificationId} {
-      allow read: if signedIn() && (resource.data.ownerUid == request.auth.uid || isActiveOfficer());
+      allow read: if canReadBankingData() && (resource.data.ownerUid == request.auth.uid || isActiveOfficer());
       allow write: if false;
     }
 

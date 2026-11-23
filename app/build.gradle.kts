@@ -17,8 +17,8 @@ android {
 
     defaultConfig {
         applicationId = "com.example.final_term"
-        minSdk = 37
-        targetSdk = 37
+        minSdk = 26
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
         val localProperties = Properties().apply {
@@ -29,6 +29,11 @@ android {
         }
         val configuredBackendUrl = providers.gradleProperty("backendBaseUrl").orNull
             ?: localProperties.getProperty("backendBaseUrl")
+        val stripePublishableKey = providers.gradleProperty("stripePublishableKey").orNull
+            ?: localProperties.getProperty("STRIPE_PUBLISHABLE_KEY", "")
+        check(stripePublishableKey.isEmpty() || stripePublishableKey.startsWith("pk_test_")) {
+            "Debug Stripe checkout requires a test publishable key (pk_test_...)"
+        }
         val simulatorBackendUrl = configuredBackendUrl ?: "http://10.0.2.2:3001"
         val releaseRequested = gradle.startParameter.taskNames.any {
             it.contains("release", ignoreCase = true)
@@ -40,10 +45,12 @@ android {
             )
         }
         check(simulatorBackendUrl.startsWith("https://")
-                || simulatorBackendUrl.startsWith("http://10.0.2.2:")) {
-            "Backend URL must use HTTPS, or http://10.0.2.2:<port> for the Android Simulator"
+                || (!releaseRequested && (simulatorBackendUrl.startsWith("http://10.0.2.2:")
+                    || simulatorBackendUrl.startsWith("http://127.0.0.1:")))) {
+            "Backend URL must use HTTPS; debug builds also support emulator or ADB reverse loopback"
         }
         buildConfigField("String", "BACKEND_BASE_URL", "\"$simulatorBackendUrl\"")
+        buildConfigField("String", "STRIPE_PUBLISHABLE_KEY", "\"$stripePublishableKey\"")
 
         manifestPlaceholders["MAPS_API_KEY"] = localProperties.getProperty("MAPS_API_KEY", "")
 
@@ -83,6 +90,7 @@ dependencies {
     implementation(libs.play.services.maps)
     implementation(libs.play.services.location)
     implementation(libs.okhttp)
+    implementation(libs.stripe.android)
     testImplementation(libs.junit)
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.ext.junit)

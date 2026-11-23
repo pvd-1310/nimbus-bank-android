@@ -269,7 +269,7 @@ public final class CustomerHomeFragment extends Fragment {
                     getLayoutInflater(), binding.recentTransactionsContent, false);
 
             boolean isIncoming = tx.isIncoming();
-            rowBinding.titleText.setText(tx.type != null ? tx.type : (isIncoming ? "Nhận tiền" : "Chuyển tiền"));
+            rowBinding.titleText.setText(tx.isBillPayment() ? "Thanh toán hóa đơn" : tx.type);
             rowBinding.subtitleText.setText("SETTLED".equals(tx.status) ? "Thành công" : tx.status);
 
             String amountFormatted = ReadSummaryFormatter.formatCurrency(tx.amountMinor, tx.currency);

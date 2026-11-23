@@ -1,10 +1,20 @@
 package com.example.final_term.ui.profile;
 
+import android.Manifest;
 import android.app.AlertDialog;
+import android.content.Context;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.ArrayAdapter;
+import android.widget.CheckBox;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.Spinner;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -21,9 +31,12 @@ import com.example.final_term.databinding.FragmentProfileBinding;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.util.Arrays;
+
 public final class ProfileFragment extends Fragment {
     private FragmentProfileBinding binding;
     private BackendApiClient apiClient;
+    private JSONObject currentProfile = new JSONObject();
 
     @Nullable
     @Override
@@ -39,20 +52,6 @@ public final class ProfileFragment extends Fragment {
         FinalTermApplication app = (FinalTermApplication) requireActivity().getApplication();
         apiClient = app.getAppContainer().getBackendApiClient();
 
-        app.getAppContainer().getAuthRepository().observeAuthState()
-                .observe(getViewLifecycleOwner(), this::render);
-
-        getParentFragmentManager().setFragmentResultListener("ekyc_status_changed", getViewLifecycleOwner(),
-                (requestKey, result) -> fetchEkycStatus());
-
-        binding.logoutButton.setOnClickListener(v -> app.getAppContainer().getAuthRepository().signOut());
-
-        binding.qrButton.setOnClickListener(v -> new AlertDialog.Builder(requireContext())
-                .setTitle("Mã QR nhận tiền")
-                .setMessage("Mã QR cá nhân liên kết tài khoản thanh toán chính của bạn để nhận chuyển khoản nhanh.")
-                .setPositiveButton("Đóng", null)
-                .show());
-
         View.OnClickListener openEkycListener = v -> {
             com.example.final_term.ui.ekyc.EkycDialogFragment dialog = new com.example.final_term.ui.ekyc.EkycDialogFragment();
             dialog.show(getParentFragmentManager(), "ekyc_dialog");
@@ -60,6 +59,39 @@ public final class ProfileFragment extends Fragment {
 
         binding.itemPersonalInfo.setOnClickListener(openEkycListener);
         binding.ekycBadge.setOnClickListener(openEkycListener);
+
+        app.getAppContainer().getAuthRepository().observeAuthState()
+                .observe(getViewLifecycleOwner(), authState -> {
+                    render(authState);
+                    if (authState != null && authState.getUser() != null) {
+                        boolean customer = authState.getUser().getRole()
+                                == com.example.final_term.auth.UserRole.CUSTOMER;
+                        binding.editContactButton.setVisibility(customer ? View.VISIBLE : View.GONE);
+                        binding.ekycBadge.setVisibility(customer ? View.VISIBLE : View.GONE);
+                        binding.itemRevokeFace.setVisibility(customer ? View.VISIBLE : View.GONE);
+                        if (customer) fetchEkycStatus();
+                        binding.itemPersonalInfo.setOnClickListener(customer ? openEkycListener : null);
+                        binding.ekycBadge.setOnClickListener(customer ? openEkycListener : null);
+                        loadProfile();
+                    }
+                });
+
+        getParentFragmentManager().setFragmentResultListener("ekyc_status_changed", getViewLifecycleOwner(),
+                (requestKey, result) -> fetchEkycStatus());
+
+        binding.logoutButton.setOnClickListener(v -> app.getAppContainer().getAuthRepository().signOut());
+        binding.editContactButton.setOnClickListener(v -> showContactEditor());
+
+        binding.qrButton.setOnClickListener(v -> new AlertDialog.Builder(requireContext())
+                .setTitle("Mã QR nhận tiền")
+                .setMessage("Mã QR cá nhân liên kết tài khoản thanh toán chính của bạn để nhận chuyển khoản nhanh.")
+                .setPositiveButton("Đóng", null)
+                .show());
+
+
+
+        binding.itemCameraSecurity.setOnClickListener(v -> showCameraAndBiometricDialog());
+        binding.itemRevokeFace.setOnClickListener(v -> confirmRevokeFaceTemplate());
 
         binding.itemCards.setOnClickListener(v -> new AlertDialog.Builder(requireContext())
                 .setTitle("Hạn mức & Bảo mật")
@@ -75,7 +107,205 @@ public final class ProfileFragment extends Fragment {
                 .setPositiveButton("Đóng", null)
                 .show());
 
-        fetchEkycStatus();
+        fetchCameraAndCapabilitiesStatus();
+    }
+
+    private void fetchCameraAndCapabilitiesStatus() {
+        if (!isAdded() || binding == null) return;
+        boolean cameraPermission = ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA)
+                == PackageManager.PERMISSION_GRANTED;
+
+        if (apiClient == null) {
+            binding.cameraStatusText.setText("Camera: " + (cameraPermission ? "Đã cấp quyền" : "Chưa cấp quyền"));
+            return;
+        }
+
+        apiClient.get("/capabilities").addOnCompleteListener(task -> {
+            if (!isAdded() || binding == null) return;
+            String faceCap = "CHƯA KẾT NỐI";
+            if (task.isSuccessful() && task.getResult() != null && task.getResult().statusCode == 200) {
+                try {
+                    JSONObject cap = new JSONObject(task.getResult().body);
+                    faceCap = cap.optString("face", "SETUP_REQUIRED");
+                } catch (Exception ignored) { }
+            }
+            binding.cameraStatusText.setText("Camera: " + (cameraPermission ? "Đã cấp quyền" : "Chưa cấp quyền") +
+                    " · Face AI: " + faceCap + " (Demo ảnh tĩnh)");
+        });
+    }
+
+    private void showCameraAndBiometricDialog() {
+        boolean cameraPermission = ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA)
+                == PackageManager.PERMISSION_GRANTED;
+
+        new AlertDialog.Builder(requireContext())
+                .setTitle("Trạng thái Camera & Sinh trắc học")
+                .setMessage("• Quyền truy cập Camera: " + (cameraPermission ? "Đã cấp quyền" : "Chưa cấp quyền (Cần cho eKYC & Face)") +
+                        "\n• Phương thức khuôn mặt: Nhận diện ảnh tĩnh (Tính năng demo đồ án)" +
+                        "\n• Mã OTP giao dịch: Hiển thị trực tiếp trong app (Tính năng demo đồ án)" +
+                        "\n\nLưu ý: Phương thức đăng nhập bằng Email và Mật khẩu luôn là phương thức dự phòng chính thức và an toàn.")
+                .setPositiveButton("Đóng", null)
+                .show();
+    }
+
+    private void confirmRevokeFaceTemplate() {
+        new AlertDialog.Builder(requireContext())
+                .setTitle("Thu hồi dữ liệu mẫu khuôn mặt")
+                .setMessage("Thao tác này sẽ tắt đăng nhập khuôn mặt, đặt eKYC về trạng thái cần đăng ký lại và đưa ảnh eKYC đã tải lên vào hàng chờ xóa. Tài khoản của bạn vẫn hoạt động; bạn cần hoàn tất eKYC mới để bật lại đăng nhập khuôn mặt. Tiếp tục thu hồi?")
+                .setNegativeButton("Hủy", null)
+                .setPositiveButton("Thu hồi ngay", (d, which) -> {
+                    if (apiClient == null) return;
+                    Toast.makeText(requireContext(), "Đang gửi yêu cầu thu hồi…", Toast.LENGTH_SHORT).show();
+                    apiClient.post("/me/face/revoke", "{}").addOnCompleteListener(task -> {
+                        if (!isAdded() || binding == null) return;
+                        if (task.isSuccessful() && task.getResult() != null && task.getResult().statusCode == 200) {
+                            String message = "Đã gửi yêu cầu thu hồi.";
+                            try {
+                                JSONObject result = new JSONObject(task.getResult().body);
+                                if ("RESUBMIT_REQUIRED".equals(result.optString("ekycStatus"))) {
+                                    message = "Đã thu hồi mẫu khuôn mặt và đặt lại eKYC.";
+                                    JSONObject cleanup = result.optJSONObject("evidenceCleanup");
+                                    if (cleanup != null && "PENDING".equals(cleanup.optString("status"))) {
+                                        message += " Ảnh đã được đưa vào hàng chờ xóa.";
+                                    } else if (cleanup != null && "NOT_REQUIRED".equals(cleanup.optString("status"))) {
+                                        message += " Không có ảnh eKYC nào cần xóa.";
+                                    }
+                                } else {
+                                    message = "Backend chưa đặt lại trạng thái eKYC. Hãy khởi động lại backend đã cập nhật rồi thử lại.";
+                                }
+                            } catch (Exception ignored) { }
+                            Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show();
+                            fetchEkycStatus();
+                            fetchCameraAndCapabilitiesStatus();
+                        } else {
+                            int code = task.getResult() == null ? -1 : task.getResult().statusCode;
+                            Toast.makeText(requireContext(), "Không thể thu hồi mẫu khuôn mặt (HTTP " + code + ").", Toast.LENGTH_LONG).show();
+                        }
+                    });
+                })
+                .show();
+    }
+
+    private void loadProfile() {
+        if (apiClient == null) return;
+        apiClient.get("/me").addOnCompleteListener(task -> {
+            if (!isAdded() || binding == null) return;
+            if (task.isSuccessful() && task.getResult() != null && task.getResult().statusCode == 200) {
+                try {
+                    currentProfile = new JSONObject(task.getResult().body);
+                } catch (Exception ignored) { }
+            }
+        });
+    }
+
+    private void showContactEditor() {
+        LinearLayout form = new LinearLayout(requireContext());
+        form.setOrientation(LinearLayout.VERTICAL);
+        int pad = (int) (18 * getResources().getDisplayMetrics().density);
+        form.setPadding(pad, pad, pad, 0);
+
+        EditText contactEmail = new EditText(requireContext());
+        contactEmail.setSingleLine(true);
+        contactEmail.setHint("Email liên hệ");
+        contactEmail.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
+        contactEmail.setText(currentProfile.optString("contactEmail", ""));
+        form.addView(contactEmail);
+
+        EditText contactPhone = new EditText(requireContext());
+        contactPhone.setSingleLine(true);
+        contactPhone.setHint("Số điện thoại liên hệ (+84...)");
+        contactPhone.setInputType(android.text.InputType.TYPE_CLASS_PHONE);
+        contactPhone.setText(currentProfile.optString("contactPhone", ""));
+        form.addView(contactPhone);
+
+        JSONObject preferences = currentProfile.optJSONObject("preferences");
+        CheckBox notifications = new CheckBox(requireContext());
+        notifications.setText("Nhận thông báo trong ứng dụng");
+        notifications.setChecked(preferences == null || preferences.optBoolean("notificationsEnabled", true));
+        form.addView(notifications);
+
+        Spinner language = new Spinner(requireContext());
+        ArrayAdapter<String> languages = new ArrayAdapter<>(requireContext(),
+                android.R.layout.simple_spinner_item, Arrays.asList("vi", "en"));
+        languages.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        language.setAdapter(languages);
+        language.setSelection("en".equals(preferences == null ? "vi" : preferences.optString("language", "vi")) ? 1 : 0);
+        form.addView(language);
+
+        form.setFocusableInTouchMode(true);
+        AlertDialog dialog = new AlertDialog.Builder(requireContext())
+                .setTitle("Cập nhật thông tin liên hệ")
+                .setView(form)
+                .setNegativeButton("Hủy", null)
+                .setPositiveButton("Lưu", null)
+                .create();
+        dialog.setCanceledOnTouchOutside(false);
+
+        View.OnTouchListener hideKeyboardListener = (v, event) -> {
+            if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                View focus = dialog.getCurrentFocus();
+                if (focus != null) {
+                    InputMethodManager imm = (InputMethodManager) requireContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+                    if (imm != null) imm.hideSoftInputFromWindow(focus.getWindowToken(), 0);
+                    focus.clearFocus();
+                }
+            }
+            return false;
+        };
+        form.setOnTouchListener(hideKeyboardListener);
+
+        dialog.setOnShowListener(ignored -> {
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().getDecorView().setOnTouchListener(hideKeyboardListener);
+            }
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                View currentFocus = dialog.getCurrentFocus();
+                if (currentFocus != null) {
+                    InputMethodManager imm = (InputMethodManager) requireContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+                    if (imm != null) imm.hideSoftInputFromWindow(currentFocus.getWindowToken(), 0);
+                    currentFocus.clearFocus();
+                }
+            String email = contactEmail.getText().toString().trim();
+            String phone = contactPhone.getText().toString().trim();
+            if (!email.isEmpty() && !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                contactEmail.setError("Email không hợp lệ");
+                return;
+            }
+            if (!phone.isEmpty() && !phone.matches("\\+[1-9][0-9]{7,14}")) {
+                contactPhone.setError("Dùng định dạng quốc tế, ví dụ +84901234567");
+                return;
+            }
+            try {
+                JSONObject updatedPreferences = new JSONObject(preferences == null ? "{}" : preferences.toString());
+                updatedPreferences.put("language", language.getSelectedItem().toString());
+                updatedPreferences.put("notificationsEnabled", notifications.isChecked());
+                JSONObject body = new JSONObject().put("preferences", updatedPreferences);
+                if (!email.isEmpty()) body.put("contactEmail", email);
+                if (!phone.isEmpty()) body.put("contactPhone", phone);
+                apiClient.patch("/me", body.toString()).addOnCompleteListener(task -> {
+                    if (!isAdded() || binding == null) return;
+                    if (task.isSuccessful() && task.getResult() != null
+                            && task.getResult().statusCode >= 200 && task.getResult().statusCode < 300) {
+                        Toast.makeText(requireContext(), "Đã cập nhật thông tin liên hệ.", Toast.LENGTH_SHORT).show();
+                        dialog.dismiss();
+                        loadProfile();
+                    } else {
+                        int status = task.getResult() == null ? -1 : task.getResult().statusCode;
+                        String error = "";
+                        try { error = new JSONObject(task.getResult().body).optString("error", ""); }
+                        catch (Exception parseError) { }
+                        Toast.makeText(requireContext(), "CONTACT_PHONE_EXISTS".equals(error)
+                                ? "Số điện thoại liên hệ đã được sử dụng."
+                                : "Không thể cập nhật hồ sơ (HTTP " + status + ").", Toast.LENGTH_LONG).show();
+                    }
+                });
+            } catch (Exception e) {
+                Toast.makeText(requireContext(), "Không thể tạo yêu cầu cập nhật.", Toast.LENGTH_SHORT).show();
+            }
+            });
+        });
+        dialog.show();
     }
 
     private void fetchEkycStatus() {
@@ -91,31 +321,33 @@ public final class ProfileFragment extends Fragment {
                         if (items != null && items.length() > 0) {
                             JSONObject latest = items.getJSONObject(0);
                             String status = latest.optString("reviewStatus", "DRAFT");
-                            applyEkycStatus(status);
+                            applyEkycStatus(status, "DEMO_SELFIE_ONLY".equals(latest.optString("mode")));
                             return;
                         }
+                        applyEkycStatus("NONE", "DEMO_SELFIE_ONLY".equals(json.optString("captureMode")));
+                        return;
                     } catch (Exception ignored) {}
                 }
-                applyEkycStatus("NONE");
+                applyEkycStatus("NONE", false);
             });
         });
     }
 
-    private void applyEkycStatus(String status) {
+    private void applyEkycStatus(String status, boolean demo) {
         if (binding == null) return;
         switch (status) {
             case "VERIFIED":
-                binding.ekycBadge.setText("✓ eKYC Đã xác thực");
+                binding.ekycBadge.setText(demo ? "✓ Khuôn mặt demo đã đăng ký" : "✓ eKYC Đã xác thực");
                 binding.ekycBadge.setBackgroundResource(R.drawable.badge_status_success);
                 binding.ekycBadge.setTextColor(ContextCompat.getColor(requireContext(), R.color.success));
                 break;
             case "REVIEWING":
-                binding.ekycBadge.setText("⏳ eKYC Đang thẩm định");
+                binding.ekycBadge.setText(demo ? "⏳ Đang kiểm tra selfie" : "⏳ eKYC Đang xử lý");
                 binding.ekycBadge.setBackgroundResource(R.drawable.badge_status_warning);
                 binding.ekycBadge.setTextColor(ContextCompat.getColor(requireContext(), R.color.warning));
                 break;
             case "RESUBMIT_REQUIRED":
-                binding.ekycBadge.setText("⚠️ eKYC Cần chụp lại");
+                binding.ekycBadge.setText(demo ? "⚠️ Cần chụp lại selfie" : "⚠️ eKYC Cần chụp lại");
                 binding.ekycBadge.setBackgroundResource(R.drawable.badge_status_warning);
                 binding.ekycBadge.setTextColor(ContextCompat.getColor(requireContext(), R.color.warning));
                 break;
@@ -125,12 +357,12 @@ public final class ProfileFragment extends Fragment {
                 binding.ekycBadge.setTextColor(ContextCompat.getColor(requireContext(), R.color.danger));
                 break;
             case "DRAFT":
-                binding.ekycBadge.setText("Chưa hoàn tất eKYC");
+                binding.ekycBadge.setText(demo ? "Chưa hoàn tất selfie demo" : "Chưa hoàn tất eKYC");
                 binding.ekycBadge.setBackgroundResource(R.drawable.glass_panel_soft);
                 binding.ekycBadge.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
                 break;
             default:
-                binding.ekycBadge.setText("Chưa định danh eKYC");
+                binding.ekycBadge.setText(demo ? "Chưa đăng ký selfie demo" : "Chưa định danh eKYC");
                 binding.ekycBadge.setBackgroundResource(R.drawable.glass_panel_soft);
                 binding.ekycBadge.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
                 break;

@@ -19,38 +19,21 @@ const transferRequest = z.union([
       currency: x.currency,
     })),
   z
-    .object({ ...common, sourceAccountId: id, destinationAccountId: id })
-    .strict(),
+    .object({ ...common, sourceAccountId: id, destinationPhone: z.string().regex(/^(?:0[0-9]{9}|\+84[0-9]{9})$/) })
+    .strict()
+    .transform((x) => ({ ...x, destinationAccountId: x.destinationPhone }))
+    .or(z.object({ ...common, sourceAccountId: id, destinationAccountId: id }).strict())
 ]);
 export function registerTransfersRoutes(route: Route, d: AppDependencies) {
   route("post", "/transfers/intents", (a, r) =>
     d.bank.transfers.intent(a, transferRequest.parse(r.body)),
   );
-  route("get", "/intents/:id", async (a, r) =>
-    d.bank.store.run(async (t) => {
-      const i = await d.bank.transfers.getIntent(t, a, String(r.params.id));
-      return {
-        id: r.params.id,
-        intentId: i.intentId ?? r.params.id,
-        sourceId: i.sourceId,
-        target: i.target,
-        status: i.status,
-        expiresAt: i.expiresAt,
-      };
-    }),
-  );
-  route("post", "/intents/:id/otp", (a, r) =>
-    d.bank.transfers.challenge(a, String(r.params.id)),
-  );
+  route("get", "/intents/:id", (a, r) => d.bank.security.describe(a, String(r.params.id)));
+  route("post", "/intents/:id/cancel", (a, r) => d.bank.security.cancel(a, String(r.params.id)));
+  route("post", "/intents/:id/otp", (a, r) => d.bank.security.challenge(a, String(r.params.id)));
   route("post", "/intents/:id/verify-otp", (a, r) => {
-    const body = z.union([
-      z.object({ code: z.string().min(1).max(20) }).strict(),
-      z.object({ phoneIdToken: z.string().min(1).max(8192) }).strict(),
-    ]).parse(r.body);
-    const intentId = String(r.params.id);
-    return "phoneIdToken" in body
-      ? d.bank.transfers.verifyDemoPhone(a, intentId, body.phoneIdToken)
-      : d.bank.transfers.verify(a, intentId, body.code);
+    const body = z.object({ challengeId: z.uuid(), code: z.string().regex(/^\d{6}$/) }).strict().parse(r.body);
+    return d.bank.security.verify(a, String(r.params.id), body.challengeId, body.code);
   });
   route("post", "/transfers/:id/commit", (a, r) =>
     d.bank.transfers.commit(a, String(r.params.id)),

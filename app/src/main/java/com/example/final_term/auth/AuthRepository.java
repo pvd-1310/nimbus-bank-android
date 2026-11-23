@@ -7,5 +7,6 @@ import com.google.android.gms.tasks.Task;
 public interface AuthRepository {
     LiveData<AuthState> observeAuthState();
     Task<AppUser> signIn(String email, String password);
+    Task<Void> sendPasswordResetEmail(String email);
     void signOut();
 }

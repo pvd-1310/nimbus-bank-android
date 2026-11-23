@@ -4,11 +4,11 @@ import { ZodError } from "zod";
 import type { Actor } from "../modules/auth/auth.types.js";
 import type { Evidence } from "../modules/ekyc/ekyc.service.js";
 import type { Payments } from "../modules/payments/payment.service.js";
-import { check, Fault } from "../shared/errors.js";
+import { Fault } from "../shared/errors.js";
 import type { Banking } from "./banking.js";
 import type { Doc } from "./store.js";
 export interface AppDependencies {
-  otpCapability?: string;
+  createFaceToken?: (uid: string) => Promise<string>;
   bank: Banking;
   evidence: Evidence;
   payments: Payments;
@@ -34,13 +34,37 @@ export function requestMetadata(
 export function authenticateRequests(d: AppDependencies) {
   return async (req: Request, res: Response, next: NextFunction) => {
     const token = req.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
-    check(token, "UNAUTHENTICATED", 401);
-    try {
-      res.locals.actor = await d.authenticate(token);
-    } catch {
+    if (!token) {
+      console.warn("API authentication failed", {
+        requestId: res.locals.requestId,
+        method: req.method,
+        path: req.path,
+        reason: "MISSING_BEARER_TOKEN",
+      });
       throw new Fault("UNAUTHENTICATED", 401);
     }
-    await d.bank.store.run((t) => d.bank.authorize(t, res.locals.actor));
+    try {
+      res.locals.actor = await d.authenticate(token);
+    } catch (error) {
+      const authErrorCode =
+        typeof error === "object" && error !== null && "code" in error &&
+        typeof error.code === "string"
+          ? error.code
+          : "UNKNOWN_AUTH_ERROR";
+      console.warn("API authentication failed", {
+        requestId: res.locals.requestId,
+        method: req.method,
+        path: req.path,
+        reason: authErrorCode,
+      });
+      throw new Fault("UNAUTHENTICATED", 401);
+    }
+    const onboardingPath = res.locals.actor.role === "CUSTOMER" && (
+      req.path === "/me" || req.path === "/ekyc" ||
+      /^\/ekyc\/[^/]+\/(uploads|submit|evidence\/[012])$/.test(req.path) ||
+      /^\/uploads\/[^/]+\/confirm$/.test(req.path)
+    );
+    await d.bank.store.run((t) => d.bank.authorize(t, res.locals.actor, undefined, onboardingPath));
     next();
   };
 }
@@ -57,17 +81,25 @@ export function errorHandler(
   res: Response,
   _next: NextFunction,
 ) {
-  const known = err instanceof Fault,
+  if (typeof err === "object" && err !== null && "type" in err) {
+    if (err.type === "entity.too.large") err = new Fault("INVALID_BYTES", 413);
+    else if (err.type === "encoding.unsupported") err = new Fault("INVALID_IMAGE", 415);
+  }
+  const fault = err instanceof Fault ? err : undefined,
     malformed =
       err instanceof ZodError || (err instanceof SyntaxError && "body" in err);
   const requestId = res.locals.requestId;
-  const errorCode = known ? err.code : malformed ? "INVALID_REQUEST" : "INTERNAL_ERROR";
+  const errorCode = fault ? fault.code : malformed ? "INVALID_REQUEST" : "INTERNAL_ERROR";
+  const stackFrames = err instanceof Error
+    ? err.stack?.split("\n").slice(1, 9).map((frame) => frame.trim())
+    : undefined;
   console.error("API request failed", {
     requestId, method: req.method, path: req.path, errorCode,
     errorName: err instanceof Error ? err.name : "UNKNOWN",
+    ...(stackFrames?.length ? { stackFrames } : {}),
   });
-  res.status(known ? err.status : malformed ? 400 : 500).json({
-    error: known ? err.code : malformed ? "INVALID_REQUEST" : "INTERNAL_ERROR",
+  res.status(fault ? fault.status : malformed ? 400 : 500).json({
+    error: fault ? fault.code : malformed ? "INVALID_REQUEST" : "INTERNAL_ERROR",
     requestId: res.locals.requestId,
   });
 }

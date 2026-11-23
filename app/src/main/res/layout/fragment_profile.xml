@@ -170,6 +170,15 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/edit_contact_button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="Thông tin liên hệ và tùy chọn"
+                android:visibility="gone"
+                app:cornerRadius="16dp" />
+
             <!-- Group 1: Thông tin tài khoản -->
             <TextView
                 android:layout_width="wrap_content"
@@ -233,6 +242,116 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="CCCD gắn chip &amp; xác thực khuôn mặt"
+                                android:textColor="@color/ink_muted"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+
+                        <ImageView
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:src="@drawable/ic_chevron_right"
+                            app:tint="@color/ink_faint" />
+                    </LinearLayout>
+
+                    <!-- Divider -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="@color/glass_border"
+                        android:layout_marginStart="56dp" />
+
+                    <!-- Item Camera & Face Biometrics Status -->
+                    <LinearLayout
+                        android:id="@+id/item_camera_security"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:padding="12dp">
+
+                        <ImageView
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:background="@drawable/circle_action_button"
+                            android:padding="8dp"
+                            android:src="@drawable/ic_eye"
+                            app:tint="@color/navy" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="12dp"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Trạng thái Camera &amp; Khuôn mặt"
+                                android:textColor="@color/ink"
+                                android:textSize="14sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/camera_status_text"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Đang kiểm tra quyền camera &amp; dịch vụ…"
+                                android:textColor="@color/ink_muted"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+
+                        <ImageView
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:src="@drawable/ic_chevron_right"
+                            app:tint="@color/ink_faint" />
+                    </LinearLayout>
+
+                    <!-- Divider -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="@color/glass_border"
+                        android:layout_marginStart="56dp" />
+
+                    <!-- Item Revoke Face Template -->
+                    <LinearLayout
+                        android:id="@+id/item_revoke_face"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:padding="12dp">
+
+                        <ImageView
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:background="@drawable/circle_action_button"
+                            android:padding="8dp"
+                            android:src="@drawable/ic_lock"
+                            app:tint="@color/danger" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="12dp"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Thu hồi template khuôn mặt"
+                                android:textColor="@color/danger"
+                                android:textSize="14sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/revoke_face_subtitle"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Quyền thu hồi dữ liệu khuôn mặt trên hệ thống (POST /me/face/revoke)"
                                 android:textColor="@color/ink_muted"
                                 android:textSize="12sp" />
                         </LinearLayout>

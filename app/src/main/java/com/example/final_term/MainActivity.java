@@ -1,13 +1,8 @@
 package com.example.final_term;
 
-import android.content.pm.PackageManager;
-import android.net.Uri;
 import android.os.Bundle;
 
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.content.ContextCompat;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
@@ -24,13 +19,10 @@ import com.example.final_term.navigation.RootViewModel;
 import com.example.final_term.databinding.ActivityMainBinding;
 
 public class MainActivity extends AppCompatActivity {
-    private static final String LOCAL_NETWORK_PERMISSION = "android.permission.ACCESS_LOCAL_NETWORK";
     private ActivityMainBinding binding;
     private NavController navController;
     private RootViewModel rootViewModel;
     private AuthState latestAuthState;
-    private final ActivityResultLauncher<String> localNetworkPermission =
-            registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> { });
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -56,12 +48,6 @@ public class MainActivity extends AppCompatActivity {
 
         FinalTermApplication application = (FinalTermApplication) getApplication();
         application.getAppContainer().getAuthRepository().observeAuthState().observe(this, this::routeFor);
-        if (savedInstanceState == null && BuildConfig.DEBUG
-                && "10.0.2.2".equals(Uri.parse(BuildConfig.BACKEND_BASE_URL).getHost())
-                && ContextCompat.checkSelfPermission(this, LOCAL_NETWORK_PERMISSION)
-                        != PackageManager.PERMISSION_GRANTED) {
-            localNetworkPermission.launch(LOCAL_NETWORK_PERMISSION);
-        }
     }
 
     private void routeFor(AuthState state) {
@@ -71,6 +57,8 @@ public class MainActivity extends AppCompatActivity {
                 ? R.id.login : navController.getCurrentDestination().getId();
         if (route == RootViewModel.RootRoute.CUSTOMER_HOME && current != R.id.customerHome) {
             navController.navigate(R.id.customerHome);
+        } else if (route == RootViewModel.RootRoute.ONBOARDING && current != R.id.profile) {
+            navController.navigate(R.id.profile);
         } else if (route == RootViewModel.RootRoute.OFFICER_HOME && current != R.id.officerHome) {
             navController.navigate(R.id.officerHome);
         } else if (route == RootViewModel.RootRoute.LOGIN && current != R.id.login) {
@@ -87,7 +75,9 @@ public class MainActivity extends AppCompatActivity {
 
     private void syncBottomNavigation(int destination) {
         if (binding == null || navController == null) return;
-        boolean show = destination != R.id.login && destination != R.id.branchLocator;
+        boolean onboarding = latestAuthState != null && latestAuthState.getUser() != null
+                && latestAuthState.getUser().isOnboarding();
+        boolean show = destination != R.id.login && destination != R.id.branchLocator && !onboarding;
         android.view.View bottomNavigation = binding.mainBottomNavigation.getRoot();
         bottomNavigation.setVisibility(show ? android.view.View.VISIBLE : android.view.View.GONE);
         bottomNavigation.bringToFront();

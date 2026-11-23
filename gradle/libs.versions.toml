@@ -13,6 +13,7 @@ firebaseBom = "33.15.0"
 playServicesMaps = "19.2.0"
 playServicesLocation = "21.3.0"
 okhttp = "4.12.0"
+stripeAndroid = "23.26.0"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -31,6 +32,7 @@ firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore
 play-services-maps = { group = "com.google.android.gms", name = "play-services-maps", version.ref = "playServicesMaps" }
 play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+stripe-android = { group = "com.stripe", name = "stripe-android", version.ref = "stripeAndroid" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

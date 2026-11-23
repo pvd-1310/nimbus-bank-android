@@ -6,17 +6,20 @@ import { ProfileService } from "../modules/profile/profile.service.js";
 import { RateService } from "../modules/rates/rates.service.js";
 import { RequestService } from "../modules/requests/requests.service.js";
 import { TransactionService } from "../modules/transactions/transactions.service.js";
-import { TransferService, type DemoPhoneOtp } from "../modules/transfers/transfers.service.js";
+import { TransferService } from "../modules/transfers/transfers.service.js";
 import { check, key } from "../shared/errors.js";
 import { queryOptions } from "../shared/pagination.js";
 import type { Doc, Store, Tx } from "./store.js";
+import { IntentSecurity } from "../modules/security/intent.js";
+import type { FaceService } from "../modules/security/face.js";
 interface Options {
   otpSecret: string;
   now?: () => number;
-  deliver: (uid: string, code: string, intentId: string) => Promise<void>;
-  demoPhone?: DemoPhoneOtp;
+  face?: FaceService;
+  faceThresholds?: Record<string, number>;
 }
 export class Banking {
+  readonly security: IntentSecurity;
   readonly now: () => number;
   readonly accounts: AccountService;
   readonly profiles: ProfileService;
@@ -29,6 +32,7 @@ export class Banking {
     readonly store: Store,
     readonly options: Options,
   ) {
+    this.security = new IntentSecurity(this);
     this.now = options.now ?? Date.now;
     this.accounts = new AccountService(this);
     this.profiles = new ProfileService(this);
@@ -38,14 +42,14 @@ export class Banking {
     this.rates = new RateService(this);
     this.notifications = new NotificationService(this);
   }
-  async authorize(t: Tx, a: Actor, permission?: string) {
+  async authorize(t: Tx, a: Actor, permission?: string, allowOnboarding = false) {
     key(a.uid);
     const u = await t.get("users/" + a.uid);
-    const active =
-      u &&
-      (u.status !== undefined
-        ? ["ACTIVE", "ONBOARDING"].includes(u.status) && u.active !== false
-        : u.active === true);
+    const active = u && (u.status === "ACTIVE"
+      ? u.active !== false
+      : u.status === "ONBOARDING"
+        ? allowOnboarding && a.role === "CUSTOMER"
+        : u.status === undefined && u.active === true);
     check(active && u!.role === a.role, "FORBIDDEN", 403);
     if (permission) {
       check(

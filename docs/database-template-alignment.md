@@ -29,7 +29,7 @@ The executable data dictionary is `backend/src/database/template-schema.ts` (`te
 | chatHistory | messageId, ownerUid, role, redactedText, actionId, createdAt | Reserved only; chatbot implementation deferred |
 | auditLogs | eventId, actorUid, action, resourceId, requestId, timestamp, beforeAfterSummary | New mutations add safe summaries; historical events remain immutable |
 
-The additional collections `moneyRequests`, `dailyUsage`, `policyHeads`, `billPaymentLocks`, `webhookEvents`, `outbox`, `uploadTickets`, `catalog`, `provisionRequests`, and `customerChanges` support implementation details and are not substitutes for the template collections.
+The additional collections `moneyRequests`, `dailyUsage`, `policyHeads`, `billPaymentLocks`, `webhookEvents`, `outbox`, `uploadTickets`, `catalog`, `provisionRequests`, `customerChanges`, `customerNumberReservations`, and `contactPhoneReservations` support implementation details and are not substitutes for the template collections.
 
 ## Migration procedure
 

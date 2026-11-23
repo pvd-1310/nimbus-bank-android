@@ -132,7 +132,7 @@
                         android:paddingEnd="14dp"
                         android:paddingTop="6dp"
                         android:paddingBottom="6dp"
-                        android:text="Chờ duyệt"
+                        android:text="Đang xử lý"
                         android:textColor="@color/ink"
                         android:textSize="12sp" />
 
@@ -146,7 +146,7 @@
                         android:paddingEnd="14dp"
                         android:paddingTop="6dp"
                         android:paddingBottom="6dp"
-                        android:text="Đã duyệt"
+                        android:text="Đã xác thực"
                         android:textColor="@color/ink"
                         android:textSize="12sp" />
                 </LinearLayout>
@@ -209,7 +209,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
-                        android:text="Mọi thao tác thay đổi lãi suất, duyệt eKYC hoặc tra soát audit log đều được ghi nhận vĩnh viễn theo quyền hạn của tài khoản Officer."
+                        android:text="Thay đổi lãi suất và kết quả kiểm tra eKYC được ghi nhận trong audit log theo quyền của tài khoản Officer."
                         android:textColor="@color/ink_muted"
                         android:textSize="13sp"
                         android:lineSpacingExtra="2dp" />

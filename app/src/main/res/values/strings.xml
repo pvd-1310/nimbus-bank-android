@@ -69,13 +69,13 @@
     <string name="transfer_external">Ngân hàng khác</string>
     <string name="source_account">Nguồn tiền</string>
     <string name="destination_account">Tài khoản nhận</string>
-    <string name="destination_hint">Số tài khoản / Số điện thoại</string>
+    <string name="destination_hint">Số điện thoại nhận (10 chữ số)</string>
     <string name="amount_label">Số tiền (VND)</string>
     <string name="transfer_note">Nội dung chuyển khoản</string>
     <string name="transfer_confirm_title">Xác nhận chuyển tiền</string>
     <string name="fee_free">Phí dịch vụ: 0 ₫ (Miễn phí)</string>
     <string name="otp_title">Xác thực giao dịch</string>
-    <string name="otp_subtitle">Nhập mã OTP 6 số đã gửi đến số điện thoại của bạn</string>
+    <string name="otp_subtitle">Mã xác nhận demo — mã hiển thị trong ứng dụng, không gửi qua email/SMS</string>
     <string name="otp_resend">Gửi lại mã sau</string>
     <string name="transfer_success_title">Chuyển tiền thành công</string>
     <string name="back_to_home">Về trang chủ</string>

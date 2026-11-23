@@ -49,7 +49,7 @@ const endpoints: [string, string, string, unknown?][] = [
     object(
       {
         contactEmail: { type: "string", format: "email" },
-        contactPhone: text,
+        contactPhone: { type: "string", pattern: "^\\+[1-9][0-9]{7,14}$" },
         preferences: object(
           {
             language: { enum: ["vi", "en"] },
@@ -78,13 +78,17 @@ const endpoints: [string, string, string, unknown?][] = [
     "Validate and freeze internal transfer",
     transfer,
   ],
-  ["get", "/intents/{id}", "Intent status"],
-  ["post", "/intents/{id}/otp", "Deliver local demo OTP"],
+  ["get", "/intents/{id}", "Read intent, face, challenge and settlement status without returning the code"],
+  ["post", "/intents/{id}/cancel", "Cancel an uncommitted intent and invalidate its challenge"],
+  ["post", "/intents/{id}/face", "Verify a fresh camera image against the actor's approved face template"],
+  ["post", "/auth/face-login", "Identify an eligible customer and return a Firebase custom token"],
+  ["post", "/me/face/revoke", "Revoke the face template, reset the latest eKYC request for resubmission, and queue all owned evidence uploads for purge"],
+  ["post", "/intents/{id}/otp", "Create or replace a demo challenge and return the plaintext once"],
   [
     "post",
     "/intents/{id}/verify-otp",
     "Verify transaction-bound OTP",
-    object({ code: text }),
+    object({ challengeId: { type: "string", format: "uuid" }, code: { type: "string", pattern: "^[0-9]{6}$" } }),
   ],
   ["post", "/transfers/{id}/commit", "Atomic balanced internal transfer"],
   [
@@ -109,7 +113,7 @@ const endpoints: [string, string, string, unknown?][] = [
     "Create or resume a consented draft",
     object({ consented: { type: "boolean", const: true } }),
   ],
-  ["get", "/ekyc", "Owned eKYC requests, newest first"],
+  ["get", "/ekyc", "Owned requests with mode; active drafts follow current captureMode, submitted requests retain their mode"],
   [
     "post",
     "/ekyc/{id}/uploads",
@@ -128,7 +132,8 @@ const endpoints: [string, string, string, unknown?][] = [
     "/uploads/{id}/confirm",
     "Validate immutable uploaded object version",
   ],
-  ["post", "/ekyc/{id}/submit", "Submit validated front/back images and optional selfie"],
+  ["post", "/ekyc/{id}/submit", "FULL_ID screens confirmed CCCD front/back and selfie; DEMO_SELFIE_ONLY screens confirmed selfie only without identity verification. VERIFIED activates customer; REVIEWING can be retried after provider failure"],
+  ["get", "/ekyc/{id}/evidence/{index}", "Temporary download of owner evidence"],
   ["get", "/bills", "Owned invoices"],
   [
     "post",
@@ -136,7 +141,7 @@ const endpoints: [string, string, string, unknown?][] = [
     "Freeze server-priced invoice for OTP",
     payment,
   ],
-  ["post", "/payments", "Create/retry test PaymentIntent after OTP", payment],
+  ["post", "/payments", "Create/retry test PaymentIntent after OTP and policy-required face proof", payment],
   ["get", "/payments/{id}", "Owned payment status"],
   ["get", "/catalog", "Explicitly simulated service catalog"],
   [
@@ -174,13 +179,23 @@ const endpoints: [string, string, string, unknown?][] = [
       requestId: id,
       email: { type: "string", format: "email" },
       fullName: text,
+      phoneNumber: { type: "string", pattern: "^(0[0-9]{9}|\\+84[0-9]{9})$" },
+      customerNo: text,
+      address: text,
     }),
   ],
+  ["get", "/officer/customers/{id}/changes", "Permission CUSTOMER_ADMIN required; paginated before/after history"],
   [
     "patch",
     "/officer/customers/{id}",
-    "Controlled name change with reason",
-    object({ fullName: text, reason: text }),
+    "Controlled contact/profile change with before/after and reason",
+    object({
+      fullName: text,
+      contactEmail: { type: "string", format: "email" },
+      contactPhone: { type: "string", pattern: "^\\+[1-9][0-9]{7,14}$" },
+      address: text,
+      reason: text,
+    }, ["reason"]),
   ],
   ["get", "/officer/ekyc", "Permission EKYC_REVIEW required"],
   ["get", "/officer/audit", "Permission AUDIT_READ required"],
@@ -192,15 +207,6 @@ const endpoints: [string, string, string, unknown?][] = [
       productId: id,
       annualRateBasisPoints: { type: "integer", minimum: 0, maximum: 10000 },
       effectiveFrom: integer,
-    }),
-  ],
-  [
-    "post",
-    "/officer/ekyc/{id}/review",
-    "Audited manual review",
-    object({
-      status: { enum: ["VERIFIED", "REJECTED", "RESUBMIT_REQUIRED"] },
-      reason: text,
     }),
   ],
   [
@@ -255,6 +261,56 @@ for (const [method, path, summary, body] of endpoints) {
       "503": { description: "Provider requires setup" },
     },
   };
+}
+const jsonResult = (schema: unknown, description: string) => ({
+  description, content: { "application/json": { schema } },
+});
+paths["/intents/{id}/otp"].post.responses["200"] = jsonResult(object({
+  method: { const: "DEMO_DISPLAY_CODE" }, challengeId: { type: "string", format: "uuid" },
+  code: { type: "string", pattern: "^[0-9]{6}$" }, expiresAt: integer,
+  status: { const: "AWAITING_CODE" },
+}), "Plaintext is returned only when the challenge is created");
+paths["/intents/{id}/verify-otp"].post.responses["200"] = jsonResult(object({
+  authorized: { const: true }, status: { const: "VERIFIED" },
+}), "Authorization is available for a single commit");
+const intentStatus = {
+  id, intentId: id, kind: { enum: ["TRANSFER", "PAYMENT"] }, sourceId: text,
+  target: object({ kind: { enum: ["ACCOUNT", "BILL"] }, id }),
+  amountMinor: integer, feeMinor: integer, currency: text,
+  expiresAt: integer, faceRequired: { type: "boolean" },
+  faceStatus: { enum: ["REQUIRED", "VERIFIED"] },
+  challengeStatus: { enum: ["REQUIRED", "AWAITING_CODE", "VERIFIED", "EXPIRED", "LOCKED", "USED", "CANCELLED"] },
+  status: { enum: ["CREATED", "EXPIRED", "CANCELLED", "COMMIT_PENDING", "COMMITTED", "FAILED"] },
+  failureCode: text,
+};
+paths["/intents/{id}"].get.responses["200"] = jsonResult(
+  object(intentStatus, Object.keys(intentStatus).filter((field) => field !== "failureCode")),
+  "Authoritative status for timeout recovery",
+);
+for (const path of ["/auth/face-login", "/intents/{id}/face"]) {
+  const operation = paths[path].post;
+  operation.requestBody = {
+    required: true,
+    description: "Raw JPEG or PNG bytes, maximum 5,000,000 bytes",
+    content: {
+      "image/jpeg": { schema: { type: "string", format: "binary" } },
+      "image/png": { schema: { type: "string", format: "binary" } },
+    },
+  };
+  operation.responses["413"] = { description: "INVALID_BYTES" };
+  operation.responses["415"] = { description: "INVALID_MIME" };
+  operation.responses["422"] = { description: "INVALID_IMAGE, FACE_NOT_FOUND, MULTIPLE_FACES, FACE_BLURRY, FACE_EXPOSURE, FACE_TOO_SMALL, FACE_CROPPED or other quality errors" };
+  operation.responses["429"] = { description: "RATE_LIMITED or FACE_BUSY" };
+}
+paths["/auth/face-login"].post.security = [];
+paths["/auth/face-login"].post.responses["401"] = { description: "FACE_LOGIN_FAILED" };
+paths["/auth/face-login"].post.responses["200"] = jsonResult(object({ customToken: text }), "Pass to Firebase Auth signInWithCustomToken");
+paths["/intents/{id}/face"].post.responses["200"] = jsonResult(object({
+  status: { const: "VERIFIED" }, expiresAt: integer,
+}), "Face verification is held server-side for this intent");
+for (const path of ["/intents/{id}/otp", "/intents/{id}/verify-otp", "/transfers/{id}/commit", "/payments"]) {
+  paths[path].post.responses["410"] = { description: "EXPIRED or OTP_EXPIRED" };
+  paths[path].post.responses["429"] = { description: "RATE_LIMITED or OTP_LOCKED" };
 }
 paths["/webhooks/stripe"] = {
   post: {

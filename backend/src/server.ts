@@ -1,3 +1,4 @@
+import { Fault } from "./shared/errors.js";
 import { createApp } from "./app.js";
 import { runtime } from "./infrastructure/runtime.js";
 import { createCustomerProvisioner } from "./modules/officer/firebase-customer.adapter.js";
@@ -5,11 +6,11 @@ import { createFirebaseAuthenticator } from "./modules/auth/firebase-auth.adapte
 const r = runtime();
 const app = createApp({
   ...r,
-  otpCapability:
-    r.bank.options.demoPhone ? "FIREBASE_PHONE_DEMO" :
-    r.cfg.mode === "emulator" && r.cfg.host === "127.0.0.1"
-      ? "LOCAL_DEMO_INBOX"
-      : "SETUP_REQUIRED",
+  createFaceToken: async (uid) => {
+    const account = await r.auth.getUser(uid).catch(() => null);
+    if (!account || account.disabled || account.customClaims?.role !== "CUSTOMER") throw new Fault("FACE_LOGIN_FAILED", 401);
+    return r.auth.createCustomToken(uid);
+  },
   provision: createCustomerProvisioner(r.bank, r.auth),
   authenticate: createFirebaseAuthenticator(r.auth),
 });

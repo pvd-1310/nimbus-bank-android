@@ -20,6 +20,8 @@ firebase deploy --only firestore:rules,firestore:indexes
 
 The base app shows a recoverable setup-required state when Firebase configuration is absent or malformed. It does not fall back to mock login.
 
+When updating an existing project, deploy the current Firestore rules after reviewing them. The current rules keep ONBOARDING customers limited to their own profile/eKYC API flow and deny direct reads of accounts, transactions, and notifications until eKYC approval.
+
 Each `users/{uid}` profile should also contain a `fullName` string. The Android home greeting displays this value and falls back to the authenticated email only when the field is empty.
 
 ## Trusted seed/reset

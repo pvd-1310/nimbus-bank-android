@@ -16,6 +16,10 @@ export class StripeGateway {
     );
     return { id: p.id, clientSecret: p.client_secret };
   }
+  async retrieve(providerId: string) {
+    const p = await this.stripe.paymentIntents.retrieve(providerId);
+    return { id: p.id, clientSecret: p.client_secret };
+  }
   parse(body: Buffer, signature: string) {
     return this.stripe.webhooks.constructEvent(
       body,

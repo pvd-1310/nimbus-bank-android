@@ -1,14 +1,18 @@
 package com.example.final_term.ui.customer;
 
+import android.content.Context;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -54,6 +58,8 @@ public final class AccountListFragment extends Fragment {
     private String accountMessage;
     private int activeNavItem = R.id.nav_accounts;
     private boolean isCardLocked = false;
+    private String pendingProvisionKey;
+    private String pendingProvisionRequestId;
 
     @Nullable
     @Override
@@ -427,7 +433,7 @@ public final class AccountListFragment extends Fragment {
                 editBtn.setTextColor(ContextCompat.getColor(requireContext(), R.color.navy));
                 editBtn.setBackgroundResource(R.drawable.glass_pill_button);
                 editBtn.setCornerRadius(dp(14));
-                editBtn.setOnClickListener(v -> showEditCustomerNameDialog(acc.ownerUid.isEmpty() ? "demo_customer" : acc.ownerUid));
+                editBtn.setOnClickListener(v -> showEditCustomerDialog(acc.ownerUid.isEmpty() ? "demo_customer" : acc.ownerUid));
                 card.addView(editBtn);
 
                 binding.content.addView(card);
@@ -445,7 +451,7 @@ public final class AccountListFragment extends Fragment {
     // ==========================================
     private void renderOfficerAccounts() {
         TextView queueTitle = new TextView(requireContext());
-        queueTitle.setText("Hồ sơ cần duyệt & Tài khoản kiểm soát");
+        queueTitle.setText("Hồ sơ eKYC & Tài khoản kiểm soát");
         queueTitle.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
         queueTitle.setTextSize(16);
         queueTitle.setTypeface(null, android.graphics.Typeface.BOLD);
@@ -467,11 +473,20 @@ public final class AccountListFragment extends Fragment {
         }
     }
 
+    private void hideKeyboard(View view) {
+        if (view == null) return;
+        InputMethodManager imm = (InputMethodManager) view.getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (imm != null) {
+            imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
+        }
+    }
+
     // Dialog: Provision New Customer
     private void showProvisionCustomerDialog() {
         LinearLayout layout = new LinearLayout(requireContext());
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(dp(20), dp(10), dp(20), dp(10));
+        layout.setFocusableInTouchMode(true);
 
         final EditText nameInput = new EditText(requireContext());
         nameInput.setHint("Họ và tên khách hàng");
@@ -489,47 +504,176 @@ public final class AccountListFragment extends Fragment {
         emailInput.setLayoutParams(p);
         layout.addView(emailInput);
 
-        new MaterialAlertDialogBuilder(requireContext())
+        final EditText phoneInput = new EditText(requireContext());
+        phoneInput.setHint("Số điện thoại Việt Nam 10 chữ số (VD: 0901234567)");
+        phoneInput.setInputType(InputType.TYPE_CLASS_NUMBER);
+        phoneInput.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(10)});
+        phoneInput.setBackgroundResource(R.drawable.input_glass_field);
+        phoneInput.setPadding(dp(12), dp(12), dp(12), dp(12));
+        LinearLayout.LayoutParams phoneParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        phoneParams.topMargin = dp(10);
+        phoneInput.setLayoutParams(phoneParams);
+        layout.addView(phoneInput);
+
+        final EditText customerNoInput = new EditText(requireContext());
+        customerNoInput.setHint("Mã khách hàng (nếu đã được cấp)");
+        customerNoInput.setBackgroundResource(R.drawable.input_glass_field);
+        customerNoInput.setPadding(dp(12), dp(12), dp(12), dp(12));
+        LinearLayout.LayoutParams noParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        noParams.topMargin = dp(10);
+        customerNoInput.setLayoutParams(noParams);
+        layout.addView(customerNoInput);
+
+        final EditText addressInput = new EditText(requireContext());
+        addressInput.setHint("Địa chỉ (tùy chọn)");
+        addressInput.setBackgroundResource(R.drawable.input_glass_field);
+        addressInput.setPadding(dp(12), dp(12), dp(12), dp(12));
+        LinearLayout.LayoutParams addrParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        addrParams.topMargin = dp(10);
+        addressInput.setLayoutParams(addrParams);
+        layout.addView(addressInput);
+
+        ScrollView scrollView = new ScrollView(requireContext());
+        scrollView.setFillViewport(true);
+        scrollView.addView(layout);
+        scrollView.setFocusableInTouchMode(true);
+
+        androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
                 .setTitle("Cấp mới tài khoản khách hàng")
-                .setView(layout)
-                .setPositiveButton("Tạo hồ sơ", (dialog, which) -> {
-                    String name = nameInput.getText().toString().trim();
-                    String email = emailInput.getText().toString().trim();
-                    if (name.isEmpty() || email.isEmpty()) {
-                        Toast.makeText(requireContext(), "Vui lòng nhập đầy đủ họ tên và email.", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    try {
-                        JSONObject body = new JSONObject()
-                                .put("requestId", UUID.randomUUID().toString())
-                                .put("fullName", name)
-                                .put("email", email);
-                        application.getAppContainer().getBackendApiClient().post("/officer/customers", body.toString())
-                                .addOnSuccessListener(resp -> {
-                                    Toast.makeText(requireContext(), resp.statusCode >= 200 && resp.statusCode < 300
-                                            ? "Đã cấp mới hồ sơ khách hàng thành công." : "Backend: HTTP " + resp.statusCode, Toast.LENGTH_LONG).show();
-                                    load();
-                                })
-                                .addOnFailureListener(err -> Toast.makeText(requireContext(), "Chưa thể cấp mới: " + err.getMessage(), Toast.LENGTH_LONG).show());
-                    } catch (Exception e) {
-                        Toast.makeText(requireContext(), "Lỗi: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                    }
-                })
+                .setView(scrollView)
+                .setPositiveButton("Tạo hồ sơ", null)
                 .setNegativeButton("Hủy", null)
-                .show();
+                .create();
+
+        // Prevent accidental dismissal when tapping outside so entered data is not lost
+        dialog.setCanceledOnTouchOutside(false);
+
+        View.OnTouchListener hideKeyboardListener = (v, event) -> {
+            if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                View focus = dialog.getCurrentFocus();
+                if (focus != null) {
+                    hideKeyboard(focus);
+                    focus.clearFocus();
+                }
+            }
+            return false;
+        };
+
+        scrollView.setOnTouchListener(hideKeyboardListener);
+        layout.setOnTouchListener(hideKeyboardListener);
+
+        dialog.setOnShowListener(d -> {
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().getDecorView().setOnTouchListener(hideKeyboardListener);
+            }
+            dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener(btn -> {
+                hideKeyboard(dialog.getCurrentFocus());
+                String name = nameInput.getText().toString().trim();
+                String email = emailInput.getText().toString().trim();
+                String phoneNumber = phoneInput.getText().toString().trim();
+                String customerNo = customerNoInput.getText().toString().trim();
+                String address = addressInput.getText().toString().trim();
+                if (name.isEmpty() || email.isEmpty() || phoneNumber.isEmpty()) {
+                    Toast.makeText(requireContext(), "Vui lòng nhập họ tên, email và số điện thoại.", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                if (!phoneNumber.matches("0[0-9]{9}")) {
+                    phoneInput.setError("Nhập đúng 10 chữ số, bắt đầu bằng 0");
+                    Toast.makeText(requireContext(), "Số điện thoại Việt Nam phải có 10 chữ số, bắt đầu bằng 0.", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                dialog.dismiss();
+                try {
+                    String identityKey = name + "|" + email.toLowerCase(Locale.ROOT) + "|" + phoneNumber
+                            + "|" + customerNo + "|" + address;
+                    if (!identityKey.equals(pendingProvisionKey)) {
+                        pendingProvisionKey = identityKey;
+                        pendingProvisionRequestId = UUID.randomUUID().toString();
+                    }
+                    JSONObject body = new JSONObject()
+                            .put("requestId", pendingProvisionRequestId)
+                            .put("fullName", name)
+                            .put("email", email)
+                            .put("phoneNumber", phoneNumber);
+                    if (!customerNo.isEmpty()) body.put("customerNo", customerNo);
+                    if (!address.isEmpty()) body.put("address", address);
+                    application.getAppContainer().getBackendApiClient().post("/officer/customers", body.toString())
+                            .addOnSuccessListener(resp -> {
+                                if (resp.statusCode >= 200 && resp.statusCode < 300) {
+                                    pendingProvisionKey = null;
+                                    pendingProvisionRequestId = null;
+                                    String accountId = "";
+                                    try { accountId = new JSONObject(resp.body).optString("accountId", ""); }
+                                    catch (Exception ignored) { }
+                                    String createdMessage = "Đã tạo hồ sơ ONBOARDING" +
+                                            (accountId.isEmpty() ? "." : " và tài khoản checking " + accountId + ".")
+                                            + " Khách hàng cần đặt mật khẩu qua email trước khi đăng nhập.";
+                                    application.getAppContainer().getAuthRepository().sendPasswordResetEmail(email)
+                                            .addOnCompleteListener(reset -> {
+                                                if (!isAdded()) return;
+                                                String finalMessage = reset.isSuccessful() ? createdMessage
+                                                        : createdMessage + " Email chưa gửi được; khách hàng có thể dùng mục Đặt/quên mật khẩu ở màn đăng nhập.";
+                                                new MaterialAlertDialogBuilder(requireContext()).setTitle("Đã tiếp nhận khách hàng")
+                                                        .setMessage(finalMessage).setPositiveButton("Đóng", null).show();
+                                                load();
+                                            });
+                                } else {
+                                    String error = "";
+                                    try { error = new JSONObject(resp.body).optString("error", ""); }
+                                    catch (Exception ignored) { }
+                                    String message = "Không thể tạo hồ sơ (HTTP " + resp.statusCode + ").";
+                                    if ("CUSTOMER_NUMBER_EXISTS".equals(error)) message = "Mã khách hàng đã tồn tại.";
+                                    else if ("CONTACT_PHONE_EXISTS".equals(error)) message = "Số điện thoại liên hệ đã được sử dụng.";
+                                    else if ("PROVISION_IDENTITY_FAILED".equals(error)) message = "Email hoặc số điện thoại đã được đăng ký, hoặc Firebase Auth chưa sẵn sàng.";
+                                    else if ("IDEMPOTENCY_CONFLICT".equals(error)) message = "Yêu cầu tạo hồ sơ không khớp lần gửi trước; hãy kiểm tra dữ liệu đã nhập.";
+                                    Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show();
+                                }
+                            })
+                            .addOnFailureListener(err -> Toast.makeText(requireContext(), "Chưa thể cấp mới: " + err.getMessage(), Toast.LENGTH_LONG).show());
+                } catch (Exception e) {
+                    Toast.makeText(requireContext(), "Lỗi: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                }
+            });
+        });
+
+        dialog.show();
     }
 
-    // Dialog: Edit Customer Name with Mandatory Reason
-    private void showEditCustomerNameDialog(String customerId) {
+    // Edit only customer fields accepted by the backend; identity and role fields remain protected.
+    private void showEditCustomerDialog(String customerId) {
         LinearLayout layout = new LinearLayout(requireContext());
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(dp(20), dp(10), dp(20), dp(10));
+        layout.setFocusableInTouchMode(true);
 
         final EditText nameInput = new EditText(requireContext());
-        nameInput.setHint("Họ và tên mới");
+        nameInput.setHint("Họ tên mới (để trống nếu không đổi)");
         nameInput.setBackgroundResource(R.drawable.input_glass_field);
         nameInput.setPadding(dp(12), dp(12), dp(12), dp(12));
         layout.addView(nameInput);
+
+        final EditText emailInput = new EditText(requireContext());
+        emailInput.setHint("Email liên hệ mới (tùy chọn)");
+        emailInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
+        emailInput.setBackgroundResource(R.drawable.input_glass_field);
+        emailInput.setPadding(dp(12), dp(12), dp(12), dp(12));
+        layout.addView(emailInput);
+
+        final EditText phoneInput = new EditText(requireContext());
+        phoneInput.setHint("Số điện thoại liên hệ mới, dạng +84... (tùy chọn)");
+        phoneInput.setInputType(InputType.TYPE_CLASS_PHONE);
+        phoneInput.setBackgroundResource(R.drawable.input_glass_field);
+        phoneInput.setPadding(dp(12), dp(12), dp(12), dp(12));
+        layout.addView(phoneInput);
+
+        final EditText addressInput = new EditText(requireContext());
+        addressInput.setHint("Địa chỉ mới (tùy chọn)");
+        addressInput.setBackgroundResource(R.drawable.input_glass_field);
+        addressInput.setPadding(dp(12), dp(12), dp(12), dp(12));
+        layout.addView(addressInput);
 
         final EditText reasonInput = new EditText(requireContext());
         reasonInput.setHint("Lý do điều chỉnh (bắt buộc)");
@@ -540,34 +684,125 @@ public final class AccountListFragment extends Fragment {
         reasonInput.setLayoutParams(p);
         layout.addView(reasonInput);
 
-        new MaterialAlertDialogBuilder(requireContext())
-                .setTitle("Cập nhật tên khách hàng")
+        ScrollView scrollView = new ScrollView(requireContext());
+        scrollView.setFillViewport(true);
+        scrollView.addView(layout);
+        scrollView.setFocusableInTouchMode(true);
+
+        androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
+                .setTitle("Cập nhật hồ sơ khách hàng")
                 .setMessage("Thao tác này được ghi vào audit log của hệ thống ngân hàng.")
-                .setView(layout)
-                .setPositiveButton("Xác nhận", (dialog, which) -> {
-                    String newName = nameInput.getText().toString().trim();
-                    String reason = reasonInput.getText().toString().trim();
-                    if (newName.isEmpty() || reason.isEmpty()) {
-                        Toast.makeText(requireContext(), "Vui lòng nhập tên mới và lý do điều chỉnh.", Toast.LENGTH_SHORT).show();
+                .setView(scrollView)
+                .setPositiveButton("Xác nhận", null)
+                .setNegativeButton("Hủy", null)
+                .create();
+
+        dialog.setCanceledOnTouchOutside(false);
+
+        View.OnTouchListener hideKeyboardListener = (v, event) -> {
+            if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                View focus = dialog.getCurrentFocus();
+                if (focus != null) {
+                    hideKeyboard(focus);
+                    focus.clearFocus();
+                }
+            }
+            return false;
+        };
+
+        scrollView.setOnTouchListener(hideKeyboardListener);
+        layout.setOnTouchListener(hideKeyboardListener);
+
+        dialog.setOnShowListener(d -> {
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().getDecorView().setOnTouchListener(hideKeyboardListener);
+            }
+            dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener(btn -> {
+                hideKeyboard(dialog.getCurrentFocus());
+                String newName = nameInput.getText().toString().trim();
+                String newEmail = emailInput.getText().toString().trim();
+                String newPhone = phoneInput.getText().toString().trim();
+                String newAddress = addressInput.getText().toString().trim();
+                String reason = reasonInput.getText().toString().trim();
+                if (newName.isEmpty() && newEmail.isEmpty() && newPhone.isEmpty() && newAddress.isEmpty()) {
+                    Toast.makeText(requireContext(), "Nhập ít nhất một trường cần cập nhật.", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                if (reason.length() < 3) {
+                    Toast.makeText(requireContext(), "Lý do cần có ít nhất 3 ký tự.", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                if (!newEmail.isEmpty() && !android.util.Patterns.EMAIL_ADDRESS.matcher(newEmail).matches()) {
+                    emailInput.setError("Email không hợp lệ");
+                    return;
+                }
+                if (!newPhone.isEmpty() && !newPhone.matches("\\+[1-9][0-9]{7,14}")) {
+                    phoneInput.setError("Dùng định dạng quốc tế, ví dụ +84901234567");
+                    return;
+                }
+                dialog.dismiss();
+                try {
+                    JSONObject body = new JSONObject().put("reason", reason);
+                    if (!newName.isEmpty()) body.put("fullName", newName);
+                    if (!newEmail.isEmpty()) body.put("contactEmail", newEmail);
+                    if (!newPhone.isEmpty()) body.put("contactPhone", newPhone);
+                    if (!newAddress.isEmpty()) body.put("address", newAddress);
+                    application.getAppContainer().getBackendApiClient().patch("/officer/customers/" + customerId, body.toString())
+                            .addOnSuccessListener(resp -> {
+                                if (resp.statusCode >= 200 && resp.statusCode < 300) {
+                                    String summary = "Đã cập nhật hồ sơ.";
+                                    try {
+                                        JSONObject changes = new JSONObject(resp.body).optJSONObject("changes");
+                                        if (changes != null) summary += "\n\nTrước:\n" + changes.optJSONObject("before")
+                                                + "\n\nSau:\n" + changes.optJSONObject("after");
+                                    } catch (Exception ignored) { }
+                                    new MaterialAlertDialogBuilder(requireContext()).setTitle("Thành công")
+                                            .setMessage(summary).setPositiveButton("Đóng", null).show();
+                                    load();
+                                } else {
+                                    String error = "";
+                                    try { error = new JSONObject(resp.body).optString("error", ""); }
+                                    catch (Exception ignored) { }
+                                    Toast.makeText(requireContext(), "Cập nhật thất bại (" + (error.isEmpty() ? "HTTP " + resp.statusCode : error) + ").", Toast.LENGTH_LONG).show();
+                                }
+                            })
+                            .addOnFailureListener(err -> Toast.makeText(requireContext(), "Lỗi: " + err.getMessage(), Toast.LENGTH_LONG).show());
+                } catch (Exception e) {
+                    Toast.makeText(requireContext(), "Lỗi: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                }
+            });
+        });
+
+        dialog.show();
+    }
+
+    private void showCustomerChangeHistory(String customerId) {
+        application.getAppContainer().getBackendApiClient().get("/officer/customers/" + customerId + "/changes?limit=20")
+                .addOnCompleteListener(task -> {
+                    if (!isAdded()) return;
+                    if (!task.isSuccessful() || task.getResult() == null || task.getResult().statusCode != 200) {
+                        Toast.makeText(requireContext(), "Không tải được lịch sử thay đổi.", Toast.LENGTH_LONG).show();
                         return;
                     }
                     try {
-                        JSONObject body = new JSONObject()
-                                .put("fullName", newName)
-                                .put("reason", reason);
-                        application.getAppContainer().getBackendApiClient().patch("/officer/customers/" + customerId, body.toString())
-                                .addOnSuccessListener(resp -> {
-                                    Toast.makeText(requireContext(), resp.statusCode >= 200 && resp.statusCode < 300
-                                            ? "Đã cập nhật tên khách hàng." : "Backend: HTTP " + resp.statusCode, Toast.LENGTH_LONG).show();
-                                    load();
-                                })
-                                .addOnFailureListener(err -> Toast.makeText(requireContext(), "Lỗi cập nhật: " + err.getMessage(), Toast.LENGTH_LONG).show());
-                    } catch (Exception e) {
-                        Toast.makeText(requireContext(), "Lỗi: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                        JSONArray items = new JSONObject(task.getResult().body).optJSONArray("items");
+                        StringBuilder history = new StringBuilder();
+                        if (items != null) for (int i = 0; i < items.length(); i++) {
+                            JSONObject item = items.getJSONObject(i);
+                            if (history.length() > 0) history.append("\n\n────────\n\n");
+                            history.append("Thời điểm: ").append(item.optLong("createdAt"))
+                                    .append("\nNgười thực hiện: ").append(item.optString("actorUid"))
+                                    .append("\nLý do: ").append(item.optString("reason"))
+                                    .append("\nTrước: ").append(item.optJSONObject("before"))
+                                    .append("\nSau: ").append(item.optJSONObject("after"));
+                        }
+                        if (history.length() == 0) history.append("Chưa có thay đổi hồ sơ nào.");
+                        new MaterialAlertDialogBuilder(requireContext()).setTitle("Lịch sử hồ sơ khách hàng")
+                                .setMessage(history.toString()).setPositiveButton("Đóng", null).show();
+                    } catch (Exception ignored) {
+                        Toast.makeText(requireContext(), "Dữ liệu lịch sử không hợp lệ.", Toast.LENGTH_SHORT).show();
                     }
-                })
-                .setNegativeButton("Hủy", null)
-                .show();
+                });
     }
 
     private View createCircularAction(String label, int iconRes, View.OnClickListener listener) {

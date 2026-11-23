@@ -2,6 +2,7 @@ package com.example.final_term.data;
 
 import androidx.annotation.NonNull;
 import com.example.final_term.BuildConfig;
+import com.example.final_term.domain.DomainDtos.OtpVerification;
 import com.google.android.gms.tasks.Task;
 import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.auth.FirebaseAuth;
@@ -38,6 +39,8 @@ public final class BackendApiClient {
             .followRedirects(false)
             .retryOnConnectionFailure(false)
             .build();
+    private final OkHttpClient cameraHttp = http.newBuilder().callTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS).build();
     private final FirebaseAuth auth;
     private final ExecutorService executor = Executors.newFixedThreadPool(2);
 
@@ -53,6 +56,55 @@ public final class BackendApiClient {
 
     public Task<Response> patch(@NonNull String path, @NonNull String jsonBody) {
         return request("PATCH", path, jsonBody);
+    }
+
+    public Task<Response> verifyIntentOtp(OtpVerification verification) {
+        try {
+            JSONObject body = new JSONObject().put("challengeId", verification.challengeId)
+                    .put("code", verification.code);
+            return post("/intents/" + verification.intentId + "/verify-otp", body.toString());
+        } catch (org.json.JSONException e) {
+            return Tasks.forException(e);
+        }
+    }
+
+    public Task<Void> signInWithFace(byte[] jpeg) {
+        if (auth == null) return Tasks.forException(new IllegalStateException("FACE_SETUP_REQUIRED"));
+        return postJpeg("/auth/face-login", jpeg, null).continueWithTask(task -> {
+            if (!task.isSuccessful()) throw task.getException();
+            Response result = task.getResult();
+            JSONObject body = new JSONObject(result.body);
+            if (result.statusCode != 200)
+                throw new IllegalStateException(body.optString("error", "FACE_LOGIN_FAILED"));
+            return auth.signInWithCustomToken(body.getString("customToken")).continueWith(signedIn -> {
+                if (!signedIn.isSuccessful()) throw signedIn.getException();
+                return null;
+            });
+        });
+    }
+
+    public Task<Response> verifyIntentFace(String intentId, byte[] jpeg) {
+        FirebaseUser user = auth == null ? null : auth.getCurrentUser();
+        if (user == null) return Tasks.forException(new IllegalStateException("BACKEND_AUTH_REQUIRED"));
+        return user.getIdToken(false).continueWithTask(task -> {
+            if (!task.isSuccessful()) throw task.getException();
+            String token = task.getResult().getToken();
+            if (token == null) throw new IllegalStateException("BACKEND_AUTH_REQUIRED");
+            return postJpeg("/intents/" + intentId + "/face", jpeg, token);
+        });
+    }
+
+    private Task<Response> postJpeg(String path, byte[] jpeg, String token) {
+        return Tasks.call(executor, () -> {
+            Request.Builder request = new Request.Builder().url(BASE_URL + path)
+                    .header("Accept", "application/json")
+                    .post(RequestBody.create(jpeg, MediaType.get("image/jpeg")));
+            if (token != null) request.header("Authorization", "Bearer " + token);
+            try (okhttp3.Response response = cameraHttp.newCall(request.build()).execute()) {
+                ResponseBody body = response.body();
+                return new Response(response.code(), body == null ? "" : body.string());
+            }
+        });
     }
 
     private Task<Response> request(String method, String path, String jsonBody) {
@@ -72,7 +124,8 @@ public final class BackendApiClient {
                         .header("Authorization", "Bearer " + token)
                         .method(method, jsonBody == null ? null : RequestBody.create(jsonBody, JSON))
                         .build();
-                try (okhttp3.Response response = http.newCall(request).execute()) {
+                OkHttpClient client = path.startsWith("/ekyc/") && path.endsWith("/submit") ? cameraHttp : http;
+                try (okhttp3.Response response = client.newCall(request).execute()) {
                     ResponseBody body = response.body();
                     return new Response(response.code(), body == null ? "" : body.string());
                 }

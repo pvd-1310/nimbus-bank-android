@@ -1,4 +1,5 @@
 import type { Auth } from "firebase-admin/auth";
+import { randomBytes } from "node:crypto";
 import type { Banking } from "../../core/banking.js";
 import type { Actor } from "../auth/auth.types.js";
 import type { Doc } from "../../core/store.js";
@@ -15,8 +16,12 @@ export function createCustomerProvisioner(bank: Banking, auth: Auth) {
         throw e;
       }
     },
-    create: async (uid: string, email: string) => {
-      await auth.createUser({ uid, email });
+    create: async (
+      uid: string,
+      email: string,
+    ) => {
+      const oneTimePassword = randomBytes(32).toString("base64url");
+      await auth.createUser({ uid, email, password: oneTimePassword, emailVerified: false });
     },
     ensureClaims: async (uid: string) => {
       await auth.setCustomUserClaims(uid, {

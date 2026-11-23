@@ -1,9 +1,10 @@
 import { Banking } from "../../core/banking.js";
-import type { Doc } from "../../core/store.js";
+import type { Doc, Tx } from "../../core/store.js";
 import { digest } from "../../shared/crypto.js";
-import { check, key } from "../../shared/errors.js";
+import { check, key, minor } from "../../shared/errors.js";
 import { type Actor } from "../auth/auth.types.js";
 import type { StripeGateway } from "./stripe.provider.js";
+import { intentDigest } from "../security/intent.js";
 const compatiblePayment = (d: Doc | undefined): Doc | undefined =>
   d
     ? {
@@ -14,6 +15,24 @@ const compatiblePayment = (d: Doc | undefined): Doc | undefined =>
           : {}),
       }
     : undefined;
+
+async function recordBillPayment(t: Tx, id: string, payment: Doc, intent: Doc | undefined, committedAt: number) {
+  const path = "transactions/stripe_" + id;
+  if (await t.get(path)) return;
+  t.set(path, {
+    ownerUid: payment.ownerUid,
+    actorUid: payment.ownerUid,
+    requestId: intent?.requestId ?? id,
+    type: "BILL_PAYMENT",
+    paymentId: id,
+    billId: payment.billId,
+    amountMinor: payment.amountMinor,
+    currency: payment.currency,
+    status: "SETTLED",
+    committedAt,
+  });
+}
+
 export class Payments {
   constructor(
     private bank: Banking,
@@ -26,27 +45,78 @@ export class Payments {
       await this.bank.authorize(t, a);
       const bill = await t.get("bills/" + billId);
       check(bill?.ownerUid === a.uid, "FORBIDDEN", 403);
-      check(bill.status === "UNPAID", "INVALID_STATE");
-      check(bill.amountMinor < 100000000, "STEP_UP_UNAVAILABLE", 503);
-      const id = digest([a.uid, "PAYMENT", requestId]);
-      const hash = digest([billId, bill.amountMinor, bill.currency]);
-      const old = await t.get("transactionIntents/" + id);
-      if (old) {
-        check(old.digest === hash, "IDEMPOTENCY_CONFLICT", 409);
-        return { id, intentId: id, status: old.status };
+      minor(bill.amountMinor);
+      const lock = await t.get("billPaymentLocks/" + billId);
+      if (lock && lock.released !== true && bill.status === "UNPAID") {
+        key(lock.paymentId);
+        const payment = compatiblePayment(await t.get("payments/" + lock.paymentId));
+        const intent = await t.get("transactionIntents/" + lock.paymentId);
+        check(
+          payment?.ownerUid === a.uid && payment.billId === billId &&
+          ["CREATED", "PROCESSING"].includes(payment.status) &&
+          intent?.actorUid === a.uid && intent.kind === "PAYMENT" &&
+          (intent.billId ?? intent.target?.id) === billId &&
+          payment.amountMinor === intent.amountMinor && payment.currency === intent.currency &&
+          intent.status === "COMMIT_PENDING" &&
+          typeof intent.requestId === "string" &&
+          digest([a.uid, "PAYMENT", intent.requestId]) === lock.paymentId &&
+          payment.authorizationDigest === intent.digest &&
+          intent.digest === intentDigest(intent),
+          "PAYMENT_RECONCILIATION_REQUIRED",
+          409,
+        );
+        if (payment.amountMinor === 0 && payment.status === "CREATED" && !payment.providerId) {
+          // Stripe rejected the zero amount. The corrected amount needs its own OTP.
+          t.set("payments/" + lock.paymentId, { ...payment, status: "CANCELLED" });
+          t.set("transactionIntents/" + lock.paymentId, {
+            ...intent, status: "FAILED", failureCode: "INVALID_AMOUNT",
+          });
+          t.set("billPaymentLocks/" + billId, { ...lock, released: true });
+          this.bank.audit(t, a, "PAYMENT_INVALID_AMOUNT", lock.paymentId);
+        } else {
+          return {
+            id: lock.paymentId,
+            intentId: lock.paymentId,
+            requestId: intent.requestId,
+            status: "COMMIT_PENDING",
+          };
+        }
       }
-      t.set("transactionIntents/" + id, {
+      const originalId = digest([a.uid, "PAYMENT", requestId]);
+      const original = await t.get("transactionIntents/" + originalId);
+      const replacesInvalidAmount =
+        original?.actorUid === a.uid && original.kind === "PAYMENT" &&
+        (original.billId ?? original.target?.id) === billId &&
+        original.status === "FAILED" && original.failureCode === "INVALID_AMOUNT";
+      const paymentRequestId = replacesInvalidAmount
+        ? digest(["PAYMENT_INVALID_AMOUNT", originalId])
+        : requestId;
+      const id = replacesInvalidAmount ? digest([a.uid, "PAYMENT", paymentRequestId]) : originalId;
+      const hash = digest([billId, bill.amountMinor, bill.currency]);
+      const old = replacesInvalidAmount ? await t.get("transactionIntents/" + id) : original;
+      if (old) {
+        check((old.payloadDigest ?? old.digest) === hash, "IDEMPOTENCY_CONFLICT", 409);
+        return { id, intentId: id, requestId: paymentRequestId, status: old.status };
+      }
+      check(bill.status === "UNPAID", "INVALID_STATE");
+      const intent = {
+        id,
+        sourceId: "STRIPE",
+        feeMinor: 0,
+        securityVersion: 1,
+        faceRequired: this.bank.security.requiresFace(bill.currency, bill.amountMinor),
         actorUid: a.uid,
-        requestId,
+        requestId: paymentRequestId,
         kind: "PAYMENT",
         billId,
         amountMinor: bill.amountMinor,
         currency: bill.currency,
-        digest: hash,
+        payloadDigest: hash,
         expiresAt: this.bank.now() + 300000,
         status: "CREATED",
-      });
-      return { id, intentId: id, status: "CREATED" };
+      };
+      t.set("transactionIntents/" + id, { ...intent, digest: intentDigest(intent) });
+      return { id, intentId: id, requestId: paymentRequestId, status: intent.status, expiresAt: intent.expiresAt, faceRequired: intent.faceRequired };
     });
   }
   async create(a: Actor, billId: string, requestId: string) {
@@ -54,22 +124,19 @@ export class Payments {
     key(billId);
     key(requestId);
     const id = digest([a.uid, "PAYMENT", requestId]);
-    const record = await this.bank.store.run(async (t) => {
+    const record = await this.bank.store.run<Doc>(async (t) => {
       await this.bank.authorize(t, a);
       const existing = compatiblePayment(await t.get("payments/" + id));
       if (existing) {
+        check(existing.ownerUid === a.uid, "FORBIDDEN", 403);
         check(existing.billId === billId, "IDEMPOTENCY_CONFLICT", 409);
         return existing;
       }
       const i = await this.bank.transfers.getIntent(t, a, id),
-        c = await t.get("otpChallenges/" + id),
         bill = await t.get("bills/" + billId);
       check(i.kind === "PAYMENT" && i.billId === billId, "INVALID_INTENT");
-      check(this.bank.now() < i.expiresAt, "EXPIRED");
-      check(
-        c?.verified && !c.used && c.intentDigest === i.digest,
-        "OTP_REQUIRED",
-      );
+      minor(i.amountMinor);
+      await this.bank.security.consume(t, i);
       check(
         bill?.ownerUid === a.uid && bill.status === "UNPAID",
         "INVALID_STATE",
@@ -92,24 +159,31 @@ export class Payments {
         amountMinor: i.amountMinor,
         currency: i.currency,
         status: "CREATED",
+        authorizationDigest: i.digest,
         createdAt: this.bank.now(),
       };
       t.set("payments/" + id, p);
       t.set("billPaymentLocks/" + billId, { paymentId: id });
-      t.set("otpChallenges/" + id, {
-        ...c,
-        used: true,
-        usedAt: this.bank.now(),
-      });
-      t.set("transactionIntents/" + id, { ...i, status: "COMMITTED" });
+      t.set("transactionIntents/" + id, { ...i, status: "COMMIT_PENDING" });
       this.bank.audit(t, a, "PAYMENT_CREATE", id, requestId);
       return p;
     });
-    const result = await this.provider.create(
-      id,
-      record.amountMinor,
-      record.currency,
-    );
+    if (record.status === "SUCCEEDED" || record.status === "CANCELLED")
+      return { id, paymentId: id, gateway: "STRIPE", status: record.status };
+    minor(record.amountMinor);
+    check(record.authorizationDigest, "REAUTHORIZE_REQUIRED", 409);
+    check(record.providerId || this.bank.now() - record.createdAt < 23 * 3_600_000,
+      "PAYMENT_RECONCILIATION_REQUIRED", 409);
+    const operation = record.providerId ? "retrieve" : "create";
+    const result = await (record.providerId
+      ? this.provider.retrieve(record.providerId)
+      : this.provider.create(id, record.amountMinor, record.currency)
+    ).catch((error: unknown) => {
+      const code = typeof error === "object" && error !== null && "code" in error &&
+        typeof error.code === "string" ? error.code : undefined;
+      console.error("Stripe payment request failed", { paymentId: id, operation, code });
+      throw error;
+    });
     await this.bank.store.run(async (t) => {
       const p = compatiblePayment(await t.get("payments/" + id));
       check(p, "NOT_FOUND", 404);
@@ -124,6 +198,7 @@ export class Payments {
       id,
       paymentId: id,
       gateway: "STRIPE",
+      status: "COMMIT_PENDING",
       clientSecret: result.clientSecret,
     };
   }
@@ -142,9 +217,13 @@ export class Payments {
     check(o.livemode === false, "LIVE_MODE_FORBIDDEN");
     key(o.metadata?.paymentId);
     return this.bank.store.run(async (t) => {
-      if (await t.get("webhookEvents/" + event.id)) return { duplicate: true };
       const id = o.metadata.paymentId,
+        previousEvent = await t.get("webhookEvents/" + event.id),
         p = compatiblePayment(await t.get("payments/" + id));
+      const success = event.type === "payment_intent.succeeded";
+      if (previousEvent && (!success || previousEvent.paymentId !== id ||
+          previousEvent.type !== event.type || p?.status !== "SUCCEEDED"))
+        return { duplicate: true };
       check(p, "UNKNOWN_PAYMENT");
       check(!p.providerId || p.providerId === o.id, "PROVIDER_MISMATCH");
       check(
@@ -159,9 +238,19 @@ export class Payments {
           bill.currency === p.currency,
         "INVOICE_MISMATCH",
       );
-      const success = event.type === "payment_intent.succeeded";
+      const intent = await t.get("transactionIntents/" + id);
+      if (p.authorizationDigest)
+        check(intent && intent.digest === p.authorizationDigest && intent.digest === intentDigest(intent), "INVALID_INTENT");
+      if (success && p.status === "SUCCEEDED" && bill.status === "PAID" &&
+          bill.paymentId === id && p.providerId === o.id) {
+        await recordBillPayment(
+          t, id, p, intent, previousEvent?.receivedAt ?? p.updatedAt ?? this.bank.now(),
+        );
+      }
+      if (previousEvent) return { duplicate: true };
       const lock = await t.get("billPaymentLocks/" + p.billId);
       if (p.status !== "SUCCEEDED" && p.status !== "CANCELLED") {
+        const settledAt = this.bank.now();
         const status = success
           ? "SUCCEEDED"
           : event.type === "payment_intent.canceled"
@@ -171,11 +260,14 @@ export class Payments {
           ...p,
           providerId: o.id,
           status,
-          updatedAt: this.bank.now(),
+          updatedAt: settledAt,
         });
+        if (intent && (success || status === "CANCELLED"))
+          t.set("transactionIntents/" + id, { ...intent, status: success ? "COMMITTED" : "FAILED" });
         if (status === "CANCELLED" && lock?.paymentId === id)
           t.set("billPaymentLocks/" + p.billId, { ...lock, released: true });
         if (success) {
+          await recordBillPayment(t, id, p, intent, settledAt);
           t.set("bills/" + p.billId, {
             ...bill,
             status: "PAID",

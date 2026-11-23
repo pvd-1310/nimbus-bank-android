@@ -23,7 +23,7 @@ backend/
 │       ├── requests/          # Yêu cầu nạp/rút
 │       ├── transfers/         # Intent, OTP, commit và ledger
 │       ├── notifications/     # Thông báo và đánh dấu đã đọc
-│       ├── ekyc/              # Upload S3, submit, officer review
+│       ├── ekyc/              # Upload S3, automatic demo screening
 │       ├── payments/          # Stripe, payment state và webhook
 │       ├── orders/            # Catalog, đơn hàng và fulfillment
 │       ├── officer/           # Khách hàng, provisioning và audit views
@@ -87,7 +87,7 @@ Lệnh seed đầu tiên chỉ xem trước; `--apply` tạo dữ liệu nếu c
 
 API: `http://127.0.0.1:3000`; health: `GET /health`; hợp đồng API: `GET /openapi.json`. Đăng nhập bằng Firebase Auth emulator rồi gửi ID token qua `Authorization: Bearer ...`. Auth emulator REST: `POST http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo` với JSON `email`, `password`, `returnSecureToken: true`. Tiền tố `/v1` ở đây thuộc Firebase, không thuộc API Nimbus. Không in hoặc chia sẻ ID token.
 
-OTP demo được giao vào file riêng `.local/otp/<intentId>.json` (quyền 0600), hết hạn cùng intent sau 5 phút. File này phục vụ demo trên máy, không đại diện cho SMS/2FA thật. Adapter này chỉ hoạt động với emulator và listener loopback. Connected mode yêu cầu provider OTP riêng trước khi giao dịch được bật.
+OTP giao dịch dùng DEMO_DISPLAY_CODE. Backend chỉ trả mã khi tạo challenge và giữ HMAC để xác minh. Đây là mã hiển thị cùng app cho đồ án, không phải yếu tố xác thực độc lập.
 
 Android Emulator truy cập API máy qua `10.0.2.2:3000`. Khi tích hợp Android, cần cấu hình Auth/Firestore emulator riêng và cho phép HTTP local trong debug build; Android hiện tại chưa tự chuyển sang emulator/backend này. App release sau này cần HTTPS.
 
@@ -113,9 +113,13 @@ Tất cả endpoint nghiệp vụ yêu cầu bearer token, ngoại trừ webhook
 | Thông báo | GET `/notifications`, POST `/notifications/:id/read` |
 | Officer | GET `/officer/customers`, `/officer/ekyc`, `/officer/audit` |
 | Officer quản trị | POST `/officer/customers`, PATCH `/officer/customers/:id`, POST `/officer/rate-policies` |
-| Officer eKYC | POST `/officer/ekyc/:id/review`, GET `/officer/ekyc/:id/evidence/:index` |
+| Officer eKYC | GET `/officer/ekyc/:id/evidence/:index` for authorized inspection |
 
 Gửi `latitude` và `longitude` tới `POST /branches/routes` để tìm chi nhánh gần nhất theo đường đi bộ. Gửi thêm `branchId` (trường `id` từ `GET /branches`) để chỉ đường tới một chi nhánh cụ thể.
+
+`POST /officer/customers` nhận `requestId`, `email`, `fullName`, `phoneNumber` là số Việt Nam 10 chữ số bắt đầu bằng 0 (ví dụ 0901234567), hoặc dạng +84 tương đương cho API cũ. Backend chuẩn hóa thành +84 để lưu và kiểm tra trùng, cùng `customerNo`/`address` tùy chọn. Backend tạo Firebase Authentication user bằng email và mật khẩu ngẫu nhiên không lưu hoặc trả về cho Officer; Android yêu cầu Firebase Auth gửi email đặt mật khẩu. Số điện thoại liên hệ không được coi là số đã xác minh trong Firebase Auth; backend reserve số để từ chối trùng. Hồ sơ và tài khoản checking được tạo ở trạng thái onboarding; khách hàng chỉ được đọc/cập nhật `/me` và hoàn tất eKYC cho đến khi kiểm tra ảnh tự động trả VERIFIED. Khi mặt trước CCCD khớp selfie, backend kích hoạt hồ sơ khách hàng. Email trùng bị Firebase Auth từ chối; số điện thoại và mã khách hàng trùng bị từ chối trước khi tạo identity. Chỉ gọi API này qua HTTPS ngoài môi trường emulator/local.
+
+`PATCH /me` chỉ cho phép contactEmail, contactPhone theo định dạng E.164 và preferences.language/notificationsEnabled. Officer có thể chỉnh họ tên, email/điện thoại liên hệ và địa chỉ qua `PATCH /officer/customers/:id`; bắt buộc có lý do. Backend lưu before/after vào `customerChanges` và audit log; GET `/officer/customers/:id/changes` đọc lịch sử theo quyền CUSTOMER_ADMIN. Email đăng nhập, role, UID, customerNo và trạng thái eKYC không được sửa qua endpoint này.
 
 Cấu hình `GOOGLE_ROUTES_API_KEY` trong `backend/.env` bằng khóa máy chủ được phép gọi Routes API trên dự án Google Cloud đã bật Routes API và billing. Android `local.properties` dùng `MAPS_API_KEY` giới hạn cho Maps SDK for Android và package `com.example.final_term` cùng SHA-1. Không commit API keys.
 
@@ -125,7 +129,7 @@ Ví dụ tạo intent chuyển nội bộ:
 {"requestId":"transfer-demo-001","sourceAccountId":"local_demo_checking","destinationAccountId":"local_demo_recipient_checking","amountMinor":10000,"currency":"VND"}
 ```
 
-Gọi tạo OTP bằng intent ID, nhập mã qua `verify-otp` với `{"code":"..."}`, sau đó commit. Retry cùng intent trả receipt cũ. Cùng `requestId` nhưng thay số tiền bị từ chối. Tiền VND giữ nguyên đơn vị nguyên, không chia 100. Giao dịch từ 100 triệu VND trở lên bị chặn đến khi có provider step-up; ngưỡng hiện là chính sách demo cần đưa vào cấu hình quản trị trước production.
+Gọi POST `/intents/:id/otp` để nhận `challengeId`, `code`, `expiresAt` và trạng thái AWAITING_CODE. Gọi POST `/intents/:id/verify-otp` với `{challengeId,code}`, sau đó commit. Giữ nguyên requestId và intent ID khi retry. GET `/intents/:id` trả trạng thái giao dịch, OTP và face. Khi chỉnh sửa nội dung, POST `/intents/:id/cancel` trước khi tạo intent mới. Intent sống 5 phút, mã sống tối đa 2 phút. Mỗi intent có tối đa 5 lần nhập và mỗi lần tạo mã cách nhau ít nhất 30 giây.
 
 Yêu cầu nạp/rút dùng `requestId`, `accountId`, `amountMinor`, `currency`, `type` (`DEPOSIT`/`WITHDRAWAL`); trạng thái `REQUESTED` không thay số dư. Chuyển liên ngân hàng chưa có provider nên trả `SETUP_REQUIRED`.
 
@@ -139,28 +143,46 @@ Chỉ cần thực hiện khi muốn dùng Spark project hiện tại thay emula
 4. Trước seed, xem dry run. Chỉ đặt `CONFIRM_SEED_PROJECT` bằng project ID sau khi kiểm tra namespace và tài khoản đích. Không chạy seed đè lên hai tài khoản Android cũ; seed mới tạo các UID có namespace.
 5. Migration hai UID demo cũ sang custom claims sẽ thực hiện riêng sau khi đối chiếu dữ liệu. Sign out/in lại sau đổi claims. Không tự deploy rules/indexes lúc này; rules gốc vẫn chặn client ghi dữ liệu tài chính. API sử dụng Admin nên luôn tự kiểm tra quyền.
 
-Connected mode hiện cố ý yêu cầu OTP delivery provider thật. Có thể kiểm thử các API đọc, eKYC và quyền officer sau cấu hình, nhưng cần bổ sung provider OTP trước khi demo giao dịch trên project thật. Emulator cung cấp toàn bộ OTP demo local.
+OTP giao dịch dùng chung chế độ hiển thị demo trong emulator và connected mode. Có thể bỏ cấu hình FIREBASE_PHONE_DEMO_SCOPE cũ. Email đặt mật khẩu tiếp tục dùng Firebase Auth.
+
+## Face API và bước xác minh giao dịch giá trị cao
+
+1. Lấy đúng hai file `det_10g.onnx` và `w600k_r50.onnx` từ gói `buffalo_l` của [bản phát hành InsightFace v0.7](https://github.com/deepinsight/insightface/releases/tag/v0.7). Đặt chúng tại `<FACE_MODEL_PATH>/models/buffalo_l/`. Giữ license đi kèm gói ở ngoài Git. Chủ dự án xác nhận quyền sử dụng đúng bản weights cung cấp. File detection và recognition phát hành công khai thuộc điều khoản nghiên cứu phi thương mại của pretrained models. Quyền thương mại cần cấp phép riêng từ InsightFace. [Model Zoo](https://github.com/deepinsight/insightface/tree/master/model_zoo), [Cấp phép weights](https://www.insightface.ai/solutions/face-recognition-licensing)
+2. Trong `backend/.env`, đặt `FACE_TEMPLATE_KEY_HEX` bằng giá trị sinh độc lập với `OTP_SECRET`, dùng `openssl rand -hex 32`. Giữ khóa ổn định qua restart. Thay khóa cần quy trình chuyển đổi hoặc đăng ký lại template. Cấu hình Firebase Admin phải có quyền tạo custom token.
+3. Từ thư mục gốc, đặt `FACE_MODEL_PATH` là đường dẫn tuyệt đối trên máy host, rồi chạy `docker compose up -d --build face-api backend`. Dùng `docker compose ps` để xem health. Compose đặt `FACE_API_BASE_URL=http://face-api:8000` trên mạng nội bộ. Face API không publish port và khởi động offline. Model version kết hợp hash hai file và phiên bản pipeline `v1`. Mẫu Python đi kèm yêu cầu thiếu file requirements nên bản pin trong `face-api/requirements.txt` là baseline được chọn cho Python 3.11.
+4. Android dùng POST `/auth/face-login` với JPEG/PNG raw, sau đó dùng Firebase `signInWithCustomToken`. Backend giới hạn 5 lần mỗi 5 phút theo IP kết nối và 60 lần mỗi phút toàn dịch vụ. Khi có reverse proxy, IP kết nối có thể là IP chung của proxy. Cấu hình rate-limit theo IP xác thực tại proxy nếu cần tách người dùng. Endpoint dùng tối đa 1.000 template cùng phiên bản và từ chối khi vượt ngưỡng.
+5. Backend áp dụng `FACE_THRESHOLDS_MINOR` (mặc định VND 100 triệu, mặc định dự phòng 100 triệu đơn vị nhỏ nhất mỗi currency chưa cấu hình). Khi `faceRequired` bật, POST JPEG/PNG mới tới `/intents/:id/face` với bearer Firebase. OTP và bằng chứng khuôn mặt có TTL riêng. Demo khớp ảnh tĩnh, thiếu liveness và kiểm tra chống phát lại.
+
+`face: ENABLED` yêu cầu backend có provider và khóa, đồng thời `/health` xác nhận Face API đã nạp đúng model. Hồ sơ REVIEWING cũ có thể được chủ hồ sơ gọi lại POST `/ekyc/:id/submit` để chạy kiểm tra tự động. Hồ sơ VERIFIED cũ chưa có template cần quy trình di chuyển riêng; endpoint Officer duyệt thủ công đã bị loại bỏ. POST `/me/face/revoke` thu hồi template, đặt hồ sơ eKYC mới nhất thành `RESUBMIT_REQUIRED`, cập nhật `customers.kycStatus`, xóa tham chiếu ảnh và đánh dấu tất cả upload ticket của khách hàng `purging`. Tài khoản vẫn ACTIVE. Phản hồi có `evidenceCleanup.status` là `PENDING` khi còn ticket ảnh cần dọn; job `purge:verification` xóa mọi object version S3 và ticket, có thể chạy lại sau lỗi. Hồ sơ cũ giữ metadata kiểm toán tối thiểu. Sau thu hồi, khách hàng có thể tạo hồ sơ eKYC mới qua `/ekyc`.
+
+`FACE_ID_SIMILARITY` mặc định 0.40 cho phép so chân dung in trên CCCD với selfie trong chế độ FULL_ID. Cần hiệu chuẩn với dữ liệu được đồng ý trước khi dùng ngoài demo. Việc khớp ảnh không xác thực CCCD thật hoặc chống ảnh giả/phát lại.
+
+Chế độ tạm `EKYC_DEMO_SELFIE_ONLY=true` trong `backend/.env` bỏ qua hai ảnh CCCD và chỉ yêu cầu selfie ở index 2. Backend vẫn xác nhận S3 và kiểm tra đúng một khuôn mặt đủ chất lượng, rồi lưu template. Hồ sơ có `mode: DEMO_SELFIE_ONLY`; `/ekyc` trả `captureMode`, `/capabilities` trả `ekycMode`. Trạng thái kỹ thuật VERIFIED/ACTIVE trong chế độ này chỉ phục vụ demo đăng nhập khuôn mặt, không phải xác minh danh tính hoặc CCCD. Đặt `false` và restart backend để trở lại luồng FULL_ID; hồ sơ đã nộp giữ nguyên mode ban đầu.
 
 ## Mốc cấu hình S3 eKYC
 
 1. AWS Console → S3 → tạo bucket private trong region đã chọn; bật toàn bộ Block Public Access, encryption mặc định và **bucket versioning**.
 2. Tạo IAM principal chỉ cho prefix `ekyc/*` của bucket. Quyền cần: `s3:PutObject`, `s3:GetObject`, `s3:GetObjectVersion`. Không dùng root credentials. Cấu hình AWS profile trên máy hoặc credential chain phù hợp; không lưu AWS key vào Android.
 3. Đặt `AWS_REGION`, `AWS_PROFILE`, `S3_BUCKET` trong `.env`, restart API. Dùng ảnh giả cho demo.
-4. Tạo hoặc mở lại bản nháp với `{"consented":true}`. Xin vé tải lên với `mime` (`image/jpeg` hoặc `image/png`), `bytes` chính xác và `index` (0: mặt trước, 1: mặt sau, 2: selfie). Gửi multipart form theo `upload.url` và `upload.fields`, tệp ở trường `file`.
-5. Gọi confirm ticket; backend kiểm tra kích thước, MIME, header ảnh và cố định phiên bản đối tượng. API yêu cầu hai mặt giấy tờ đã xác nhận khi submit; Android thu cả selfie. Officer cần quyền `EKYC_REVIEW` trong claim và hồ sơ server để xem ảnh hoặc thẩm định.
-6. Đặt lifecycle cho upload bỏ dở và phiên bản cũ sau khi thống nhất thời hạn lưu bằng chứng. Chưa có job tự xóa ảnh trong code; không bật lifecycle ngắn có thể xóa ảnh đang xét duyệt.
+4. Tạo hoặc mở lại bản nháp với `{"consented":true}`. Xin vé tải lên với `mime` (`image/jpeg` hoặc `image/png`), `bytes` chính xác và `index` (0: mặt trước, 1: mặt sau, 2: selfie). Chế độ demo chỉ cấp vé cho index 2. Gửi multipart form theo `upload.url` và `upload.fields`, tệp ở trường `file`.
+5. Gọi confirm ticket; backend kiểm tra kích thước, MIME, header ảnh và cố định phiên bản đối tượng. Chế độ FULL_ID cần đủ ba ảnh đã xác nhận và so mặt trước CCCD với selfie. Chế độ DEMO_SELFIE_ONLY chỉ cần selfie đã xác nhận và kiểm tra chất lượng khuôn mặt. Kết quả VERIFIED kích hoạt khách hàng; RESUBMIT_REQUIRED yêu cầu hồ sơ mới; lỗi provider giữ REVIEWING và cho phép gọi lại submit. Officer có quyền `EKYC_REVIEW` chỉ xem hồ sơ và ảnh.
+6. Đặt lifecycle cho upload bỏ dở và phiên bản cũ sau khi thống nhất thời hạn lưu bằng chứng. Job `purge:verification` dọn ảnh/template theo retention; không bật lifecycle ngắn có thể xóa ảnh đang xử lý.
 
-URL upload sống 180 giây; URL đọc officer sống 120 giây. S3 không thực hiện nhận dạng khuôn mặt. Demo dùng quyết định của officer. AWS có cơ chế tính phí riêng, không nằm trong Firebase Spark.
+URL upload sống 180 giây, URL đọc theo object version sống 120 giây. Chủ hồ sơ dùng GET `/ekyc/:id/evidence/:index`. Officer có quyền EKYC_REVIEW dùng GET `/officer/ekyc/:id/evidence/:index`. Dùng S3_ENDPOINT và S3_FORCE_PATH_STYLE cho S3-compatible. URL ký phải định tuyến được từ Android. Compose cần nhận AWS credentials qua môi trường hoặc workload identity của container.
+
+### Dọn dữ liệu xác minh
+
+Lên lịch chạy hằng ngày `docker compose exec -T backend npm run purge:verification`. Với backend chạy trực tiếp, build trước rồi chạy `npm run purge:verification` từ thư mục backend. Lệnh xóa tất cả object version và delete marker thuộc ticket hết hạn. Cấp thêm `s3:ListBucketVersions` giới hạn prefix `ekyc/` và `s3:DeleteObjectVersion` chỉ cho job/role dọn dữ liệu. Job có thể chạy lại sau lỗi. Mặc định giữ ảnh của hồ sơ đã có quyết định 90 ngày và giữ ảnh hồ sơ đang review. Ảnh draft đã confirm được giữ 30 ngày, ticket draft bị thay thế/chưa confirm được giữ một ngày rồi có thể chụp/upload lại. Draft cũ thiếu timestamp cần rà soát riêng. Template có TTL mặc định 365 ngày, bị loại khỏi matching ngay khi hết hạn và được xóa ciphertext khi job chạy. Cấu hình vòng đời backup của storage và Firestore riêng theo môi trường.
 
 ## Mốc cấu hình Stripe
 
-1. Dùng Stripe sandbox/test mode; cấu hình `STRIPE_SECRET_KEY=sk_test_...` trên máy. Live keys bị từ chối.
-2. Chạy Stripe CLI: `stripe listen --forward-to localhost:3000/webhooks/stripe`, lưu signing secret vào `STRIPE_WEBHOOK_SECRET`, restart API. Không gửi key/secret vào chat.
-3. Tạo payment intent nghiệp vụ với `billId`, `requestId`; dùng cùng luồng OTP như chuyển khoản; gọi POST `/payments` với hai trường đó.
-4. Dùng `clientSecret` trong Stripe test checkout/Android PaymentSheet khi nối UI. API tạo PaymentIntent; chưa có màn checkout trong Android.
+1. Dùng Stripe sandbox/test mode; cấu hình `STRIPE_SECRET_KEY=sk_test_...` và `STRIPE_WEBHOOK_SECRET=whsec_...` trong `backend/.env`. Live keys bị từ chối.
+2. Cấu hình publishable test key `STRIPE_PUBLISHABLE_KEY=pk_test_...` trong `local.properties` ở thư mục gốc Android. Đây là key công khai dùng bởi Stripe Android SDK; không đưa secret key vào ứng dụng.
+3. Khởi động webhook listener: `stripe listen --events payment_intent.succeeded,payment_intent.payment_failed,payment_intent.canceled --forward-to http://localhost:3001/webhooks/stripe`. Lưu signing secret listener in ra làm `STRIPE_WEBHOOK_SECRET`, rồi khởi động lại backend.
+4. Trong app đăng nhập khách hàng, mở Tiện ích & Thanh toán, chọn hóa đơn chưa thanh toán, hoàn tất OTP, nhập thẻ test ở Stripe PaymentSheet. Sau khi PaymentSheet báo hoàn tất, app đợi webhook và chỉ hiển thị biên nhận khi backend chuyển hóa đơn sang `PAID`.
 5. Webhook hợp lệ cập nhật hóa đơn; gọi `npm run worker` để xử lý outbox. Đơn demo được ghi `DEMO_FULFILLED`; đơn thật cần provider riêng. Browser return không xác nhận thanh toán.
 
-Payment dùng nguồn tiền Stripe, không tự trừ tài khoản nội bộ thêm lần nữa. Webhook phải khớp payment ID, số tiền, currency và provider ID. Stripe CLI `trigger` sự kiện ngẫu nhiên không có metadata payment ID sẽ bị từ chối; cần thanh toán PaymentIntent do backend tạo để kiểm thử toàn luồng.
+Payment dùng nguồn tiền Stripe, không tự trừ tài khoản nội bộ thêm lần nữa. Webhook phải khớp payment ID, số tiền, currency và provider ID. Stripe CLI `trigger` sự kiện ngẫu nhiên không có metadata payment ID sẽ bị từ chối; cần thanh toán PaymentIntent do backend tạo để kiểm thử toàn luồng. Thẻ test thành công: `4242 4242 4242 4242`, ngày hết hạn bất kỳ trong tương lai, CVC bất kỳ; chỉ dùng trong test mode.
 
 ## Kiểm thử và giới hạn
 

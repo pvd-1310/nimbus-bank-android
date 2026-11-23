@@ -7,14 +7,14 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.RadioButton;
+import android.widget.EditText;
 import android.widget.RadioGroup;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -38,7 +38,7 @@ import java.util.List;
 public final class OfficerFeatureFragment extends Fragment {
     private FragmentOfficerFeatureBinding binding;
     private final List<JSONObject> currentEkycItems = new ArrayList<>();
-    private int currentEkycFilter = 0; // 0: All, 1: Pending/Reviewing, 2: Reviewed
+    private int currentEkycFilter = 0; // 0: all, 1: reviewing, 2: verified
 
     @Nullable
     @Override
@@ -65,6 +65,11 @@ public final class OfficerFeatureFragment extends Fragment {
             binding.titleText.setText(title);
             binding.subtitleText.setText(subtitle);
             binding.statusText.setText("BACKEND CHECKPOINT");
+            if (title.contains("eKYC")) {
+                binding.statusBadge.setText("CHỈ XEM");
+                binding.statusText.setText("KIỂM TRA TỰ ĐỘNG");
+                binding.complianceNote.setText("Hệ thống kiểm tra ảnh khi khách nộp hồ sơ. Cán bộ có quyền chỉ xem kết quả và bằng chứng; không phê duyệt thủ công.");
+            }
 
             setupFeatureContent(title, app.getAppContainer().getBackendApiClient());
         });
@@ -88,11 +93,13 @@ public final class OfficerFeatureFragment extends Fragment {
     }
 
     private void renderEkycQueue(BackendApiClient api) {
-        binding.actionButton.setVisibility(View.GONE);
+        binding.actionButton.setVisibility(View.VISIBLE);
+        binding.actionButton.setText("Làm mới hồ sơ");
+        binding.actionButton.setOnClickListener(v -> loadEkycData(api));
         binding.filterScroll.setVisibility(View.VISIBLE);
         binding.chipAll.setText("Tất cả");
-        binding.chipFilter1.setText("Chờ duyệt");
-        binding.chipFilter2.setText("Đã duyệt");
+        binding.chipFilter1.setText("Đang xử lý");
+        binding.chipFilter2.setText("Đã xác thực");
 
         binding.chipAll.setOnClickListener(v -> {
             currentEkycFilter = 0;
@@ -137,22 +144,41 @@ public final class OfficerFeatureFragment extends Fragment {
         api.get("/officer/ekyc").addOnCompleteListener(task -> {
             if (!isAdded()) return;
             requireActivity().runOnUiThread(() -> {
+                if (!task.isSuccessful() || task.getResult() == null || task.getResult().statusCode != 200) {
+                    showEkycLoadError(api);
+                    return;
+                }
                 currentEkycItems.clear();
-                if (task.isSuccessful() && task.getResult() != null && task.getResult().statusCode == 200) {
-                    try {
-                        JSONObject json = new JSONObject(task.getResult().body);
-                        JSONArray items = json.optJSONArray("items");
-                        if (items != null) {
-                            for (int i = 0; i < items.length(); i++) {
-                                currentEkycItems.add(items.getJSONObject(i));
-                            }
-                        }
-                    } catch (Exception ignored) {}
+                try {
+                    JSONObject json = new JSONObject(task.getResult().body);
+                    JSONArray items = json.optJSONArray("items");
+                    if (items != null) {
+                        for (int i = 0; i < items.length(); i++) currentEkycItems.add(items.getJSONObject(i));
+                    }
+                } catch (Exception ignored) {
+                    showEkycLoadError(api);
+                    return;
                 }
                 updateFilterChips();
                 filterAndDisplayEkyc(api);
             });
         });
+    }
+
+    private void showEkycLoadError(BackendApiClient api) {
+        binding.itemsContainer.removeAllViews();
+        TextView message = new TextView(requireContext());
+        message.setText("Không tải được hồ sơ eKYC. Kiểm tra kết nối rồi thử lại.");
+        message.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
+        message.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+        message.setPadding(20, 40, 20, 16);
+        binding.itemsContainer.addView(message);
+        com.google.android.material.button.MaterialButton retry = new com.google.android.material.button.MaterialButton(requireContext());
+        retry.setText("Tải lại hồ sơ");
+        retry.setTextColor(ContextCompat.getColor(requireContext(), R.color.navy));
+        retry.setBackgroundResource(R.drawable.glass_pill_button);
+        retry.setOnClickListener(v -> loadEkycData(api));
+        binding.itemsContainer.addView(retry);
     }
 
     private void filterAndDisplayEkyc(BackendApiClient api) {
@@ -164,7 +190,7 @@ public final class OfficerFeatureFragment extends Fragment {
             if (currentEkycFilter == 1) {
                 if ("REVIEWING".equals(status)) filtered.add(item);
             } else if (currentEkycFilter == 2) {
-                if (!"REVIEWING".equals(status)) filtered.add(item);
+                if ("VERIFIED".equals(status)) filtered.add(item);
             } else {
                 filtered.add(item);
             }
@@ -172,8 +198,8 @@ public final class OfficerFeatureFragment extends Fragment {
 
         if (filtered.isEmpty()) {
             TextView empty = new TextView(requireContext());
-            empty.setText(currentEkycFilter == 1
-                    ? "Hiện không có hồ sơ nào đang chờ thẩm định."
+            empty.setText(currentEkycFilter == 1 ? "Hiện không có hồ sơ nào đang xử lý."
+                    : currentEkycFilter == 2 ? "Chưa có hồ sơ nào được xác thực."
                     : "Không tìm thấy hồ sơ eKYC nào.");
             empty.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
             empty.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
@@ -191,7 +217,8 @@ public final class OfficerFeatureFragment extends Fragment {
         String id = item.optString("id", "N/A");
         String customerUid = item.optString("customerUid", "N/A");
         String status = item.optString("reviewStatus", "DRAFT");
-        String reason = item.optString("reason", "");
+        boolean demo = "DEMO_SELFIE_ONLY".equals(item.optString("mode"));
+        String reason = screeningMessage(item.optString("reason", ""), demo);
         JSONArray storageRefs = item.optJSONArray("storageRefs");
         int photosCount = storageRefs != null ? storageRefs.length() : 0;
 
@@ -199,8 +226,10 @@ public final class OfficerFeatureFragment extends Fragment {
         TextView title = row.findViewById(R.id.title_text);
         TextView subtitle = row.findViewById(R.id.subtitle_text);
         TextView amount = row.findViewById(R.id.amount_text);
+        ImageView icon = row.findViewById(R.id.transaction_icon);
+        icon.setImageResource(R.drawable.ic_shield);
 
-        title.setText("Hồ sơ: " + id);
+        title.setText((demo ? "Selfie demo: " : "Hồ sơ: ") + id);
 
         StringBuilder sb = new StringBuilder();
         sb.append("KH: ").append(customerUid);
@@ -214,11 +243,11 @@ public final class OfficerFeatureFragment extends Fragment {
 
         switch (status) {
             case "REVIEWING":
-                amount.setText("Chờ duyệt");
+                amount.setText("Đang xử lý");
                 amount.setTextColor(ContextCompat.getColor(requireContext(), R.color.warning));
                 break;
             case "VERIFIED":
-                amount.setText("Đã duyệt");
+                amount.setText(demo ? "Demo" : "Đã xác thực");
                 amount.setTextColor(ContextCompat.getColor(requireContext(), R.color.success));
                 break;
             case "RESUBMIT_REQUIRED":
@@ -235,15 +264,16 @@ public final class OfficerFeatureFragment extends Fragment {
                 break;
         }
 
-        row.setOnClickListener(v -> showEkycReviewDialog(api, item));
+        row.setOnClickListener(v -> showEkycDetailDialog(api, item));
         binding.itemsContainer.addView(row);
     }
 
-    private void showEkycReviewDialog(BackendApiClient api, JSONObject item) {
+    private void showEkycDetailDialog(BackendApiClient api, JSONObject item) {
         String id = item.optString("id");
         String customerUid = item.optString("customerUid", "N/A");
         String status = item.optString("reviewStatus", "DRAFT");
-        String existingReason = item.optString("reason", "");
+        boolean demo = "DEMO_SELFIE_ONLY".equals(item.optString("mode"));
+        String existingReason = screeningMessage(item.optString("reason", ""), demo);
         JSONArray storageRefs = item.optJSONArray("storageRefs");
         int count = storageRefs != null ? storageRefs.length() : 0;
 
@@ -255,10 +285,15 @@ public final class OfficerFeatureFragment extends Fragment {
 
         // Header info
         TextView info = new TextView(requireContext());
-        info.setText("Mã hồ sơ: " + id + "\nKhách hàng: " + customerUid + "\nTrạng thái: " + status + (existingReason.isEmpty() ? "" : "\nLý do trước: " + existingReason));
+        info.setText("Mã hồ sơ: " + id + "\nKhách hàng: " + customerUid + "\nChế độ: "
+                + (demo ? "Selfie demo, chưa xác minh CCCD" : "CCCD và selfie")
+                + "\nTrạng thái: " + statusLabel(status, demo)
+                + (existingReason.isEmpty() ? "" : "\nKết quả: " + existingReason));
         info.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
         info.setTextSize(14f);
         info.setLineSpacing(4, 1.2f);
+        info.setBackgroundResource(R.drawable.glass_panel_soft);
+        info.setPadding(16, 16, 16, 16);
         layout.addView(info);
 
         // Evidence section header
@@ -271,7 +306,8 @@ public final class OfficerFeatureFragment extends Fragment {
 
         String[] mediaNames = new String[]{"Mặt trước CCCD", "Mặt sau CCCD", "Chân dung Selfie"};
         for (int i = 0; i < count; i++) {
-            final int photoIndex = i;
+            JSONObject ref = storageRefs.optJSONObject(i);
+            final int photoIndex = ref == null ? i : ref.optInt("index", i);
             String label = photoIndex < mediaNames.length ? mediaNames[photoIndex] : ("Ảnh " + (photoIndex + 1));
 
             com.google.android.material.button.MaterialButton btnViewPhoto =
@@ -293,85 +329,33 @@ public final class OfficerFeatureFragment extends Fragment {
             layout.addView(btnViewPhoto);
         }
 
-        // Review form (only if REVIEWING)
-        RadioGroup rgStatus = null;
-        EditText reasonInput = null;
-        if ("REVIEWING".equals(status)) {
-            TextView reviewTitle = new TextView(requireContext());
-            reviewTitle.setText("\nQUYẾT ĐỊNH THẨM ĐỊNH");
-            reviewTitle.setTextColor(ContextCompat.getColor(requireContext(), R.color.navy));
-            reviewTitle.setTextSize(12f);
-            reviewTitle.setTypeface(null, android.graphics.Typeface.BOLD);
-            layout.addView(reviewTitle);
-
-            rgStatus = new RadioGroup(requireContext());
-            RadioButton rbVerify = new RadioButton(requireContext());
-            rbVerify.setText("Phê duyệt (VERIFIED)");
-            rbVerify.setId(View.generateViewId());
-            rbVerify.setChecked(true);
-            rgStatus.addView(rbVerify);
-
-            RadioButton rbResubmit = new RadioButton(requireContext());
-            rbResubmit.setText("Yêu cầu chụp lại (RESUBMIT_REQUIRED)");
-            rbResubmit.setId(View.generateViewId());
-            rgStatus.addView(rbResubmit);
-
-            RadioButton rbReject = new RadioButton(requireContext());
-            rbReject.setText("Từ chối hồ sơ (REJECTED)");
-            rbReject.setId(View.generateViewId());
-            rgStatus.addView(rbReject);
-
-            layout.addView(rgStatus);
-
-            TextView reasonLabel = new TextView(requireContext());
-            reasonLabel.setText("Lý do thẩm định (Bắt buộc, từ 3 ký tự):");
-            reasonLabel.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
-            reasonLabel.setTextSize(13f);
-            reasonLabel.setPadding(0, 16, 0, 8);
-            layout.addView(reasonLabel);
-
-            reasonInput = new EditText(requireContext());
-            reasonInput.setHint("Nhập lý do phê duyệt / yêu cầu bổ sung...");
-            reasonInput.setBackgroundResource(R.drawable.input_glass_field);
-            reasonInput.setPadding(24, 16, 24, 16);
-            reasonInput.setTextSize(14f);
-            layout.addView(reasonInput);
-        }
-
-        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext())
-                .setTitle("Chi tiết thẩm định eKYC")
+        new MaterialAlertDialogBuilder(requireContext())
+                .setTitle("Chi tiết hồ sơ eKYC")
                 .setView(scroll)
-                .setNegativeButton("Đóng", null);
+                .setPositiveButton("Đóng", null)
+                .show();
+    }
 
-        if ("REVIEWING".equals(status) && rgStatus != null && reasonInput != null) {
-            final RadioGroup finalRg = rgStatus;
-            final EditText finalReason = reasonInput;
-            builder.setPositiveButton("Xác nhận", null); // Set listener later to control dismiss
+    private static String statusLabel(String status, boolean demo) {
+        switch (status) {
+            case "VERIFIED": return demo ? "Đã đăng ký khuôn mặt demo" : "Đã xác thực tự động";
+            case "REVIEWING": return "Đang chờ kiểm tra lại";
+            case "RESUBMIT_REQUIRED": return "Cần chụp lại ảnh";
+            case "REJECTED": return "Đã từ chối";
+            default: return "Bản nháp";
         }
+    }
 
-        AlertDialog dialog = builder.create();
-        dialog.show();
-
-        if ("REVIEWING".equals(status) && rgStatus != null && reasonInput != null) {
-            final RadioGroup finalRg = rgStatus;
-            final EditText finalReason = reasonInput;
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-                String reasonText = finalReason.getText().toString().trim();
-                if (reasonText.length() < 3) {
-                    Toast.makeText(requireContext(), "Vui lòng nhập lý do thẩm định ít nhất 3 ký tự", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-
-                String decision = "VERIFIED";
-                int checkedId = finalRg.getCheckedRadioButtonId();
-                if (checkedId == finalRg.getChildAt(1).getId()) {
-                    decision = "RESUBMIT_REQUIRED";
-                } else if (checkedId == finalRg.getChildAt(2).getId()) {
-                    decision = "REJECTED";
-                }
-
-                submitOfficerReview(api, id, decision, reasonText, dialog);
-            });
+    private static String screeningMessage(String code, boolean demo) {
+        if (code.isEmpty()) return "";
+        switch (code) {
+            case "FACE_ID_MISMATCH": return "Khuôn mặt trên CCCD và selfie không khớp.";
+            case "FACE_BLURRY": return demo ? "Ảnh selfie bị nhòe." : "Ảnh CCCD hoặc selfie bị nhòe.";
+            case "FACE_EXPOSURE": return "Khuôn mặt quá tối hoặc quá sáng.";
+            case "FACE_TOO_SMALL": return "Khuôn mặt quá nhỏ.";
+            case "FACE_NOT_FOUND": return "Không tìm thấy khuôn mặt.";
+            case "MULTIPLE_FACES": return "Ảnh có nhiều khuôn mặt.";
+            default: return code.matches("[A-Z_]+") ? "Ảnh chưa đạt yêu cầu kiểm tra tự động." : code;
         }
     }
 
@@ -444,44 +428,6 @@ public final class OfficerFeatureFragment extends Fragment {
                     });
                 } catch (Exception e) {
                     Toast.makeText(requireContext(), "Lỗi xử lý URL ảnh", Toast.LENGTH_SHORT).show();
-                }
-            });
-        });
-    }
-
-    private void submitOfficerReview(BackendApiClient api, String requestId, String status, String reason, AlertDialog parentDialog) {
-        JSONObject body = new JSONObject();
-        try {
-            body.put("status", status);
-            body.put("reason", reason);
-        } catch (Exception ignored) {}
-
-        api.post("/officer/ekyc/" + requestId + "/review", body.toString()).addOnCompleteListener(reviewTask -> {
-            if (!isAdded()) return;
-            requireActivity().runOnUiThread(() -> {
-                if (reviewTask.isSuccessful() && reviewTask.getResult() != null && reviewTask.getResult().statusCode == 200) {
-                    Toast.makeText(requireContext(), "✓ Đã thẩm định hồ sơ " + requestId + " (" + status + ")", Toast.LENGTH_LONG).show();
-                    if (parentDialog != null && parentDialog.isShowing()) {
-                        parentDialog.dismiss();
-                    }
-                    loadEkycData(api);
-                } else {
-                    int sc = reviewTask.getResult() != null ? reviewTask.getResult().statusCode : -1;
-                    String errorBody = reviewTask.getResult() != null ? reviewTask.getResult().body : "";
-                    String msg = "HTTP " + sc;
-                    if (errorBody.contains("SELF_REVIEW_FORBIDDEN")) {
-                        msg = "Cán bộ không được tự thẩm định hồ sơ eKYC của chính mình (SELF_REVIEW_FORBIDDEN).";
-                    } else if (errorBody.contains("INVALID_STATE")) {
-                        msg = "Hồ sơ không ở trạng thái chờ thẩm định (REVIEWING).";
-                    } else if (!errorBody.isEmpty()) {
-                        msg = errorBody;
-                    }
-
-                    new AlertDialog.Builder(requireContext())
-                            .setTitle("Không thể hoàn tất thẩm định")
-                            .setMessage(msg)
-                            .setPositiveButton("Đóng", null)
-                            .show();
                 }
             });
         });

@@ -7,14 +7,12 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.navigation.Navigation;
 
-import com.example.final_term.BuildConfig;
 import com.example.final_term.R;
 import com.example.final_term.core.FinalTermApplication;
 import com.example.final_term.data.BackendApiClient;
@@ -22,28 +20,34 @@ import com.example.final_term.data.ReadModelResult;
 import com.example.final_term.data.ReadModels;
 import com.example.final_term.data.ReadSummaryFormatter;
 import com.example.final_term.databinding.FragmentTransferBinding;
+import com.example.final_term.domain.DomainDtos.OtpVerification;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.google.firebase.FirebaseApp;
-import com.google.firebase.FirebaseException;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.PhoneAuthCredential;
-import com.google.firebase.auth.PhoneAuthOptions;
-import com.google.firebase.auth.PhoneAuthProvider;
 
+import androidx.activity.OnBackPressedCallback;
+
+import com.example.final_term.ui.ekyc.FaceCamera;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 public final class TransferFragment extends Fragment {
     private FragmentTransferBinding binding;
     private BackendApiClient api;
     private String intentId;
-    private FirebaseAuth demoPhoneAuth;
-    private String phoneVerificationId;
+    private String requestId;
+    private String payloadKey;
+    private String challengeId;
+    private boolean faceRequired;
+    private boolean faceVerified;
+    private boolean commitPending;
+    private long authoritativeAmount;
+    private long authoritativeFee;
+    private String authoritativeCurrency = "VND";
+    private String authoritativeTarget = "";
+    private final FaceCamera faceCamera = new FaceCamera(this, this::verifyFace, this::faceError);
     private boolean busy;
     private boolean completed;
     private final List<String> sourceIds = new ArrayList<>();
@@ -51,6 +55,39 @@ public final class TransferFragment extends Fragment {
 
     private enum Step { INPUT, CONFIRM, OTP, SUCCESS }
     private Step currentStep = Step.INPUT;
+
+    @Override
+    public void onCreate(@Nullable Bundle state) {
+        super.onCreate(state);
+        faceCamera.restore(state);
+        if (state == null) return;
+        intentId = state.getString("intentId");
+        requestId = state.getString("requestId");
+        payloadKey = state.getString("payloadKey");
+        challengeId = state.getString("challengeId");
+        faceRequired = state.getBoolean("faceRequired");
+        commitPending = state.getBoolean("commitPending");
+        authoritativeAmount = state.getLong("authoritativeAmount");
+        authoritativeFee = state.getLong("authoritativeFee");
+        authoritativeCurrency = state.getString("authoritativeCurrency", "VND");
+        authoritativeTarget = state.getString("authoritativeTarget", "");
+    }
+
+    @Override
+    public void onSaveInstanceState(@NonNull Bundle state) {
+        super.onSaveInstanceState(state);
+        faceCamera.save(state);
+        state.putString("intentId", intentId);
+        state.putString("requestId", requestId);
+        state.putString("payloadKey", payloadKey);
+        state.putString("challengeId", challengeId);
+        state.putBoolean("faceRequired", faceRequired);
+        state.putBoolean("commitPending", commitPending);
+        state.putLong("authoritativeAmount", authoritativeAmount);
+        state.putLong("authoritativeFee", authoritativeFee);
+        state.putString("authoritativeCurrency", authoritativeCurrency);
+        state.putString("authoritativeTarget", authoritativeTarget);
+    }
 
     @Nullable
     @Override
@@ -67,6 +104,10 @@ public final class TransferFragment extends Fragment {
         api = app.getAppContainer().getBackendApiClient();
 
         binding.backButton.setOnClickListener(v -> handleBackNavigation());
+        requireActivity().getOnBackPressedDispatcher().addCallback(getViewLifecycleOwner(),
+                new OnBackPressedCallback(true) {
+                    @Override public void handleOnBackPressed() { handleBackNavigation(); }
+                });
 
         // Quick amount chips
         binding.chip500k.setOnClickListener(v -> appendAmount(500000));
@@ -77,14 +118,20 @@ public final class TransferFragment extends Fragment {
         binding.btnProceedToConfirm.setOnClickListener(v -> validateAndProceedToConfirm());
 
         // Step 2 -> Step 1 (Edit)
-        binding.btnBackToEdit.setOnClickListener(v -> showStep(Step.INPUT));
+        binding.btnBackToEdit.setOnClickListener(v -> cancelForEdit());
 
         // Step 2 Confirm -> Create Intent & Request OTP
         binding.submitButton.setOnClickListener(v -> createIntent());
 
         // Step 3 OTP -> Verify OTP & Commit
+        binding.otpResendTimer.setOnClickListener(v -> requestOtp());
         binding.verifyButton.setOnClickListener(v -> verifyOtp());
-        binding.commitButton.setOnClickListener(v -> commit());
+        binding.commitButton.setOnClickListener(v -> recover());
+        binding.faceStepUpButton.setOnClickListener(v -> {
+            if (busy) return;
+            setBusy(true);
+            faceCamera.open();
+        });
 
         // Step 4 Success Actions
         binding.btnSuccessHome.setOnClickListener(v -> {
@@ -94,8 +141,8 @@ public final class TransferFragment extends Fragment {
         binding.btnShareReceipt.setOnClickListener(v -> {
             String receipt = "Biên lai chuyển khoản Nimbus Bank\n" +
                     "Mã giao dịch: " + intentId + "\n" +
-                    "Số tiền: " + ReadSummaryFormatter.money(getCurrentAmount()) + "\n" +
-                    "Người nhận: " + text(binding.targetInput.getText());
+                    "Số tiền: " + ReadSummaryFormatter.money(receiptAmount()) + "\n" +
+                    "Người nhận: " + receiptTarget();
             Intent share = new Intent(Intent.ACTION_SEND);
             share.setType("text/plain");
             share.putExtra(Intent.EXTRA_TEXT, receipt);
@@ -111,7 +158,8 @@ public final class TransferFragment extends Fragment {
         });
 
         setBusy(false);
-        showStep(Step.INPUT);
+        showStep(intentId == null ? Step.INPUT : Step.OTP);
+        if (intentId != null) recover();
 
         app.getAppContainer().getAuthRepository().observeAuthState().observe(getViewLifecycleOwner(), auth -> {
             if (auth == null || auth.getUser() == null) return;
@@ -121,15 +169,40 @@ public final class TransferFragment extends Fragment {
     }
 
     private void handleBackNavigation() {
-        if (currentStep == Step.CONFIRM) {
-            showStep(Step.INPUT);
-        } else if (currentStep == Step.OTP) {
-            showStep(Step.CONFIRM);
-        } else if (currentStep == Step.SUCCESS) {
-            Navigation.findNavController(requireView()).popBackStack(R.id.customerHome, false);
-        } else {
-            Navigation.findNavController(requireView()).navigateUp();
+        if (busy) return;
+        if (commitPending && !completed) {
+            status("Chưa có kết quả cuối cùng. Bấm kiểm tra lại trước khi rời.");
+            return;
         }
+        if (currentStep == Step.CONFIRM || currentStep == Step.OTP) cancelForEdit();
+        else if (currentStep == Step.SUCCESS)
+            Navigation.findNavController(requireView()).popBackStack(R.id.customerHome, false);
+        else Navigation.findNavController(requireView()).navigateUp();
+    }
+
+    private void cancelForEdit() {
+        if (busy || commitPending) return;
+        if (intentId == null) {
+            showStep(Step.INPUT);
+            return;
+        }
+        FragmentTransferBinding view = binding;
+        setBusy(true);
+        api.post("/intents/" + intentId + "/cancel", "{}").addOnCompleteListener(task -> {
+            if (binding != view) return;
+            setBusy(false);
+            if (!task.isSuccessful() || !ok(task.getResult())) {
+                status("Chưa hủy được yêu cầu cũ. Kiểm tra kết nối rồi thử lại.");
+                return;
+            }
+            intentId = null;
+            requestId = null;
+            challengeId = null;
+            faceVerified = false;
+            binding.demoCode.setText("");
+            binding.otpInput.setText("");
+            showStep(Step.INPUT);
+        });
     }
 
     private void showStep(Step step) {
@@ -149,7 +222,7 @@ public final class TransferFragment extends Fragment {
             bindConfirmationView();
         } else if (step == Step.OTP) {
             binding.headerTitle.setText(R.string.otp_title);
-            startOtpCountdown();
+            renderAuthorization();
         } else if (step == Step.SUCCESS) {
             binding.headerTitle.setText(R.string.transfer_success_title);
             bindSuccessView();
@@ -179,8 +252,8 @@ public final class TransferFragment extends Fragment {
         }
         String target = text(binding.targetInput.getText());
         String amount = text(binding.amountInput.getText());
-        if (target.isEmpty() || !Phase2Presentation.validRequestAmount(amount)) {
-            status("Nhập tài khoản nhận và số tiền VND hợp lệ.");
+        if (!target.matches("(?:0[0-9]{9}|\\+84[0-9]{9})") || !Phase2Presentation.validRequestAmount(amount)) {
+            status("Nhập số điện thoại Việt Nam 10 chữ số và số tiền VND hợp lệ.");
             return;
         }
         showStep(Step.CONFIRM);
@@ -191,38 +264,53 @@ public final class TransferFragment extends Fragment {
         String sourceId = sourceIndex >= 0 && sourceIndex < sourceIds.size() ? sourceIds.get(sourceIndex) : "";
         String target = text(binding.targetInput.getText());
         String note = text(binding.noteInput.getText());
-        long amount = getCurrentAmount();
+        long amount = authoritativeAmount > 0 ? authoritativeAmount : getCurrentAmount();
+        String targetText = !authoritativeTarget.isEmpty() ? authoritativeTarget : target;
 
-        binding.confirmAmountDisplay.setText(ReadSummaryFormatter.money(amount));
+        binding.confirmAmountDisplay.setText(ReadSummaryFormatter.money(amount) + " " + authoritativeCurrency);
         binding.confirmSourceText.setText("Tài khoản nguồn: " + sourceId);
-        binding.confirmTargetText.setText("Tài khoản nhận: " + target);
+        binding.confirmTargetText.setText("Tài khoản nhận: " + targetText + "\nPhí: " +
+                (authoritativeFee == 0 ? "0 " + authoritativeCurrency : ReadSummaryFormatter.money(authoritativeFee) + " " + authoritativeCurrency) +
+                " · Tổng: " + ReadSummaryFormatter.money(amount + authoritativeFee) + " " + authoritativeCurrency);
         binding.confirmNoteText.setText("Nội dung: " + (note.isEmpty() ? "Chuyển tiền Nimbus" : note));
     }
 
     private void bindSuccessView() {
-        long amount = getCurrentAmount();
-        String target = text(binding.targetInput.getText());
-        binding.successAmountDisplay.setText(ReadSummaryFormatter.money(amount));
-        binding.receiptTxId.setText("Mã giao dịch: " + (intentId != null ? intentId : "tx_nimbus_" + System.currentTimeMillis()));
-        binding.receiptTargetInfo.setText("Chuyển đến: " + target);
-        binding.receiptTime.setText("Thời gian: Vừa xong · Giao dịch thành công");
+        long amount = authoritativeAmount > 0 ? authoritativeAmount : receiptAmount();
+        String target = !authoritativeTarget.isEmpty() ? authoritativeTarget : receiptTarget();
+        binding.successAmountDisplay.setText(ReadSummaryFormatter.money(amount) + " " + authoritativeCurrency);
+        binding.receiptTxId.setText("Mã giao dịch: " + intentId);
+        binding.receiptTargetInfo.setText("Chuyển đến: " + target + " (Phí: " +
+                (authoritativeFee == 0 ? "0 " + authoritativeCurrency : ReadSummaryFormatter.money(authoritativeFee) + " " + authoritativeCurrency) + ")");
+        binding.receiptTime.setText("Thời gian: Vừa xong · Giao dịch thành công (Settled)");
+    }
+
+    private long receiptAmount() {
+        try { return new JSONObject(payloadKey).getLong("amountMinor"); }
+        catch (Exception ignored) { return getCurrentAmount(); }
+    }
+
+    private String receiptTarget() {
+        try { return new JSONObject(payloadKey).getString("destinationAccountId"); }
+        catch (Exception ignored) { return text(binding.targetInput.getText()); }
     }
 
     private void startOtpCountdown() {
         if (otpTimer != null) otpTimer.cancel();
-        otpTimer = new CountDownTimer(45000, 1000) {
+        binding.otpResendTimer.setClickable(false);
+        otpTimer = new CountDownTimer(30_000, 1000) {
             @Override
             public void onTick(long millisUntilFinished) {
                 if (binding != null) {
                     binding.otpResendTimer.setText(String.format(Locale.getDefault(),
-                            "Gửi lại mã sau 00:%02d", millisUntilFinished / 1000));
+                            "Tạo mã mới sau 00:%02d", millisUntilFinished / 1000));
                 }
             }
 
             @Override
             public void onFinish() {
                 if (binding != null) {
-                    binding.otpResendTimer.setText("Gửi lại mã OTP ngay");
+                    binding.otpResendTimer.setText("Tạo mã mới");
                     binding.otpResendTimer.setClickable(true);
                     binding.otpResendTimer.setOnClickListener(v -> requestOtp());
                 }
@@ -257,17 +345,20 @@ public final class TransferFragment extends Fragment {
             status("Nhập tài khoản nhận và số tiền VND hợp lệ.");
             return;
         }
-        phoneVerificationId = null;
-        intentId = null;
         binding.otpInput.setText("");
         FragmentTransferBinding currentView = binding;
         try {
             JSONObject body = new JSONObject()
-                    .put("requestId", UUID.randomUUID().toString().replace("-", "_"))
                     .put("sourceAccountId", sourceIds.get(sourceIndex))
-                    .put("destinationAccountId", target)
+                    .put("destinationPhone", target)
                     .put("amountMinor", Long.parseLong(amount))
                     .put("currency", "VND");
+            String payload = body.toString();
+            if (!payload.equals(payloadKey) || requestId == null) {
+                requestId = UUID.randomUUID().toString();
+                payloadKey = payload;
+            }
+            body.put("requestId", requestId);
             setBusy(true);
             api.post("/transfers/intents", body.toString())
                     .addOnSuccessListener(response -> {
@@ -278,8 +369,18 @@ public final class TransferFragment extends Fragment {
                             return;
                         }
                         try {
-                            intentId = new JSONObject(response.body).getString("intentId");
-                            requestOtp();
+                            JSONObject result = new JSONObject(response.body);
+                            intentId = result.getString("intentId");
+                            faceRequired = result.getBoolean("faceRequired");
+                            showStep(Step.OTP);
+                            if (!"CREATED".equals(result.optString("status"))) recover();
+                            else if (faceRequired) {
+                                setBusy(false);
+                                status("Chụp ảnh mới để xác minh khuôn mặt trước khi lấy mã.");
+                            } else {
+                                setBusy(false);
+                                requestOtp();
+                            }
                         } catch (Exception e) {
                             setBusy(false);
                             status("Phản hồi backend không hợp lệ.");
@@ -296,199 +397,240 @@ public final class TransferFragment extends Fragment {
         }
     }
 
-    private void requestOtp() {
-        FragmentTransferBinding currentView = binding;
-        api.post("/intents/" + intentId + "/otp", "{}")
-                .addOnSuccessListener(response -> {
-                    if (binding != currentView) return;
-                    if (!ok(response)) {
-                        setBusy(false);
-                        status(errorMessage(response, "Không thể yêu cầu OTP"));
-                        return;
-                    }
-                    try {
-                        JSONObject payload = new JSONObject(response.body);
-                        if ("FIREBASE_PHONE_DEMO".equals(payload.optString("method"))) {
-                            beginDemoPhoneVerification(payload.getString("phoneNumber"), currentView);
-                        } else if (payload.optBoolean("sent")) {
-                            showCodeInput("OTP đã được gửi đến số điện thoại của bạn.");
-                        } else {
-                            setBusy(false);
-                            status("Backend trả về phương thức OTP không được hỗ trợ.");
-                        }
-                    } catch (Exception error) {
-                        setBusy(false);
-                        status("Không thể khởi tạo xác minh OTP.");
-                    }
-                })
-                .addOnFailureListener(error -> {
-                    if (binding != currentView) return;
-                    setBusy(false);
-                    status("Không thể kết nối backend để yêu cầu OTP.");
-                });
+    private void renderAuthorization() {
+        boolean canEnterCode = (!faceRequired || faceVerified) && !commitPending;
+        binding.faceStepUpButton.setVisibility(faceRequired && !commitPending ? View.VISIBLE : View.GONE);
+        binding.faceStepUpButton.setEnabled(!busy);
+        binding.otpInput.setVisibility(canEnterCode ? View.VISIBLE : View.GONE);
+        binding.otpResendTimer.setVisibility(canEnterCode ? View.VISIBLE : View.GONE);
+        binding.demoCode.setVisibility(canEnterCode ? View.VISIBLE : View.GONE);
+        binding.verifyButton.setVisibility(canEnterCode ? View.VISIBLE : View.GONE);
+        binding.verifyButton.setEnabled(!busy && challengeId != null);
+        binding.commitButton.setVisibility(commitPending ? View.VISIBLE : View.GONE);
+        binding.commitButton.setEnabled(!busy);
     }
 
-    private void beginDemoPhoneVerification(String phoneNumber, FragmentTransferBinding currentView) {
-        if (!BuildConfig.DEBUG) {
-            setBusy(false);
-            status("OTP Firebase thử nghiệm chỉ khả dụng trong bản Debug.");
-            return;
-        }
-        if (demoPhoneAuth == null) {
-            android.content.Context context = requireContext().getApplicationContext();
-            String appName = "transfer-phone-demo";
-            FirebaseApp phoneApp = FirebaseApp.getApps(context).stream()
-                    .filter(app -> appName.equals(app.getName())).findFirst()
-                    .orElseGet(() -> FirebaseApp.initializeApp(context, FirebaseApp.getInstance().getOptions(), appName));
-            demoPhoneAuth = FirebaseAuth.getInstance(phoneApp);
-        }
-        demoPhoneAuth.signOut();
-        demoPhoneAuth.getFirebaseAuthSettings().setAppVerificationDisabledForTesting(true);
-        status("Đang mở xác minh số điện thoại test Firebase…");
-        PhoneAuthProvider.verifyPhoneNumber(PhoneAuthOptions.newBuilder(demoPhoneAuth)
-                .setActivity(requireActivity())
-                .setPhoneNumber(phoneNumber)
-                .setTimeout(60L, TimeUnit.SECONDS)
-                .setCallbacks(new PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
-                    @Override
-                    public void onVerificationCompleted(@NonNull PhoneAuthCredential credential) {
-                        if (binding == currentView) verifyDemoPhone(credential, currentView);
-                    }
-
-                    @Override
-                    public void onVerificationFailed(@NonNull FirebaseException error) {
-                        if (binding != currentView) return;
-                        setBusy(false);
-                        String detail = error.getMessage();
-                        if (detail != null && detail.contains("until this region enabled")) {
-                            status("Firebase chưa cho phép vùng của số test. Kiểm tra SMS region policy.");
-                            return;
-                        }
-                        status("Firebase không mở được xác minh số test.");
-                    }
-
-                    @Override
-                    public void onCodeSent(@NonNull String id,
-                                           @NonNull PhoneAuthProvider.ForceResendingToken token) {
-                        if (binding != currentView) return;
-                        phoneVerificationId = id;
-                        showCodeInput("Nhập mã test đã cấu hình trong Firebase Console.");
-                    }
-                }).build());
-    }
-
-    private void showCodeInput(String message) {
-        showStep(Step.OTP);
-        setBusy(false);
-        status(message);
-    }
-
-    private void verifyOtp() {
-        if (busy || intentId == null) return;
-        String code = text(binding.otpInput.getText());
-        if (!code.matches("[0-9]{6}")) {
-            status("Nhập mã OTP 6 chữ số.");
-            return;
-        }
+    private void verifyFace(byte[] image) {
+        if (binding == null || intentId == null) return;
+        FragmentTransferBinding view = binding;
         setBusy(true);
-        try {
-            if (phoneVerificationId != null) {
-                verifyDemoPhone(PhoneAuthProvider.getCredential(phoneVerificationId, code), binding);
-            } else {
-                sendOtpProof(new JSONObject().put("code", code), binding);
-            }
-        } catch (Exception error) {
+        status("Đang xác minh khuôn mặt…");
+        api.verifyIntentFace(intentId, image).addOnCompleteListener(task -> {
+            if (binding != view) return;
             setBusy(false);
-            status("Mã OTP không hợp lệ.");
-        }
-    }
-
-    private void verifyDemoPhone(PhoneAuthCredential credential, FragmentTransferBinding currentView) {
-        setBusy(true);
-        demoPhoneAuth.signInWithCredential(credential).continueWithTask(result -> {
-            if (!result.isSuccessful()) throw result.getException();
-            com.google.firebase.auth.FirebaseUser user = result.getResult().getUser();
-            if (user == null) throw new IllegalStateException("Missing Firebase phone user");
-            return user.getIdToken(true);
-        }).addOnCompleteListener(result -> {
-            demoPhoneAuth.signOut();
-            if (binding != currentView) return;
-            try {
-                if (!result.isSuccessful() || result.getResult().getToken() == null) {
-                    setBusy(false);
-                    status("Firebase không xác minh được mã test. Kiểm tra lại.");
-                    return;
-                }
-                sendOtpProof(new JSONObject().put("phoneIdToken", result.getResult().getToken()), currentView);
-            } catch (Exception error) {
-                setBusy(false);
-                status("Không thể gửi kết quả xác minh Firebase.");
+            if (!task.isSuccessful()) faceError("Không nhận được kết quả xác minh. Vui lòng thử lại.");
+            else if (!ok(task.getResult())) faceError(errorMessage(task.getResult(), "Xác minh khuôn mặt thất bại"));
+            else {
+                faceVerified = true;
+                renderAuthorization();
+                recover();
             }
         });
     }
 
-    private void sendOtpProof(JSONObject body, FragmentTransferBinding currentView) {
-        api.post("/intents/" + intentId + "/verify-otp", body.toString())
-                .addOnCompleteListener(task -> {
-                    if (binding != currentView) return;
-                    if (!task.isSuccessful()) {
-                        setBusy(false);
-                        status("Không thể kết nối backend để xác thực OTP.");
-                        return;
-                    }
-                    BackendApiClient.Response response = task.getResult();
-                    if (ok(response)) {
-                        // Automatically commit transfer after OTP verification!
-                        commit();
-                    } else {
-                        setBusy(false);
-                        status(errorMessage(response, "Backend từ chối OTP"));
-                    }
-                });
+    private void faceError(String message) {
+        if (binding == null) return;
+        setBusy(false);
+        status(message);
+    }
+
+    private void requestOtp() {
+        if (busy || intentId == null || commitPending || (faceRequired && !faceVerified)) return;
+        FragmentTransferBinding view = binding;
+        setBusy(true);
+        status("Đang tạo mã xác nhận demo…");
+        api.post("/intents/" + intentId + "/otp", "{}").addOnCompleteListener(task -> {
+            if (binding != view) return;
+            setBusy(false);
+            if (!task.isSuccessful()) {
+                startOtpCountdown();
+                status("Chưa nhận được mã. Chờ rồi tạo mã mới.");
+                return;
+            }
+            BackendApiClient.Response response = task.getResult();
+            if (!ok(response)) {
+                status(errorMessage(response, "Không thể tạo mã"));
+                return;
+            }
+            try {
+                JSONObject result = new JSONObject(response.body);
+                if (!"DEMO_DISPLAY_CODE".equals(result.getString("method"))) throw new IllegalStateException();
+                challengeId = result.getString("challengeId");
+                binding.demoCode.setText(result.getString("code"));
+                binding.otpInput.setText("");
+                startOtpCountdown();
+                renderAuthorization();
+                status("Nhập mã đang hiển thị để xác nhận.");
+            } catch (Exception error) {
+                status("Phản hồi backend không hợp lệ.");
+            }
+        });
+    }
+
+    private void verifyOtp() {
+        if (busy || intentId == null || challengeId == null) return;
+        String code = text(binding.otpInput.getText());
+        if (!code.matches("[0-9]{6}")) {
+            status("Nhập mã xác nhận gồm 6 chữ số.");
+            return;
+        }
+        FragmentTransferBinding view = binding;
+        setBusy(true);
+        api.verifyIntentOtp(new OtpVerification(intentId, challengeId, code)).addOnCompleteListener(task -> {
+            if (binding != view) return;
+            if (!task.isSuccessful() || task.getResult().statusCode >= 500) {
+                commitPending = true;
+                recover();
+            } else if (ok(task.getResult())) {
+                commit();
+            } else {
+                setBusy(false);
+                if ("OTP_USED".equals(errorCode(task.getResult()))) recover();
+                else status(errorMessage(task.getResult(), "Backend từ chối mã"));
+            }
+        });
+    }
+
+    private void recover() {
+        if (intentId == null || completed) return;
+        FragmentTransferBinding view = binding;
+        setBusy(true);
+        binding.otpResendTimer.setText("Tạo mã mới");
+        binding.otpResendTimer.setOnClickListener(v -> requestOtp());
+        status("Đang kiểm tra trạng thái giao dịch…");
+        api.get("/intents/" + intentId).addOnCompleteListener(task -> {
+            if (binding != view) return;
+            setBusy(false);
+            if (!task.isSuccessful() || !ok(task.getResult())) {
+                commitPending = true;
+                renderAuthorization();
+                status("Chưa nhận được trạng thái. Bấm kiểm tra lại.");
+                return;
+            }
+            try {
+                JSONObject result = new JSONObject(task.getResult().body);
+                String state = result.getString("status");
+                authoritativeAmount = result.optLong("amountMinor", authoritativeAmount);
+                authoritativeFee = result.optLong("feeMinor", authoritativeFee);
+                authoritativeCurrency = result.optString("currency", authoritativeCurrency);
+                JSONObject tgt = result.optJSONObject("target");
+                if (tgt != null) authoritativeTarget = tgt.optString("id", authoritativeTarget);
+
+                if ("COMMITTED".equals(state)) {
+                    finishTransfer();
+                    return;
+                }
+                faceRequired = result.optBoolean("faceRequired");
+                faceVerified = "VERIFIED".equals(result.optString("faceStatus"));
+                String challenge = result.optString("challengeStatus");
+                if ("CREATED".equals(state) && "VERIFIED".equals(challenge) && (!faceRequired || faceVerified)) {
+                    commit();
+                    return;
+                }
+                commitPending = "COMMIT_PENDING".equals(state);
+                renderAuthorization();
+                if ("COMMIT_PENDING".equals(state)) {
+                    status("Trạng thái: COMMIT_PENDING — Giao dịch đang chờ xác nhận ghi sổ. Bấm kiểm tra lại.");
+                } else if (!"CREATED".equals(state)) {
+                    status("Giao dịch " + state + ". Quay lại để tạo giao dịch mới.");
+                } else if ("VERIFIED".equals(challenge)) {
+                    status("Chụp lại khuôn mặt để tiếp tục giao dịch đã xác nhận bằng mã.");
+                } else if (faceRequired && !faceVerified) {
+                    status("Giao dịch vượt hạn mức: cần chụp ảnh mới để xác minh khuôn mặt (nhận diện ảnh tĩnh demo).");
+                } else if ("REQUIRED".equals(challenge)) {
+                    requestOtp();
+                } else if ("EXPIRED".equals(challenge)) {
+                    status("Mã xác nhận đã hết hạn (OTP_EXPIRED). Tạo mã mới.");
+                } else if ("LOCKED".equals(challenge)) {
+                    status("Giao dịch bị khóa do nhập sai quá 5 lần (OTP_LOCKED). Cần hủy và tạo lại.");
+                } else {
+                    status("Trạng thái mã: " + challenge + ". Tạo mã mới nếu mã cũ không còn hiển thị.");
+                }
+            } catch (Exception error) {
+                commitPending = true;
+                renderAuthorization();
+                status("Chưa đọc được trạng thái. Bấm kiểm tra lại.");
+            }
+        });
     }
 
     private void commit() {
         if (completed || intentId == null) return;
-        FragmentTransferBinding currentView = binding;
+        FragmentTransferBinding view = binding;
+        commitPending = true;
         setBusy(true);
+        binding.otpInput.setText("");
+        binding.demoCode.setText("");
         status("Đang hoàn tất giao dịch…");
-        api.post("/transfers/" + intentId + "/commit", "{}")
-                .addOnCompleteListener(task -> {
-                    if (binding != currentView) return;
-                    setBusy(false);
-                    if (!task.isSuccessful()) {
-                        status("Chưa nhận được kết quả. Bấm xác nhận lại để kiểm tra.");
+        api.post("/transfers/" + intentId + "/commit", "{}").addOnCompleteListener(task -> {
+            if (binding != view) return;
+            setBusy(false);
+            if (!task.isSuccessful() || task.getResult().statusCode >= 500) {
+                status("Chưa có kết quả cuối cùng từ hệ thống (COMMIT_PENDING). Bấm kiểm tra lại.");
+                return;
+            }
+            BackendApiClient.Response response = task.getResult();
+            if (ok(response)) {
+                try {
+                    if ("SETTLED".equals(new JSONObject(response.body).getString("status"))) {
+                        finishTransfer();
                         return;
                     }
-                    BackendApiClient.Response response = task.getResult();
-                    completed = ok(response);
-                    if (completed) {
-                        showStep(Step.SUCCESS);
-                    } else {
-                        status(errorMessage(response, "Backend chưa xác nhận giao dịch"));
-                    }
-                });
+                } catch (Exception ignored) { }
+                status("Chưa đọc được kết quả. Bấm kiểm tra lại.");
+                return;
+            }
+            commitPending = false;
+            if ("FACE_REQUIRED".equals(errorCode(response)) || "STEP_UP_UNAVAILABLE".equals(errorCode(response))) {
+                faceRequired = true;
+                faceVerified = false;
+            }
+            renderAuthorization();
+            status(errorMessage(response, "Backend từ chối ghi sổ"));
+        });
+    }
+
+    private void finishTransfer() {
+        commitPending = false;
+        completed = true;
+        showStep(Step.SUCCESS);
+        status("");
     }
 
     private boolean ok(BackendApiClient.Response response) {
         return response.statusCode >= 200 && response.statusCode < 300;
     }
 
+    private String errorCode(BackendApiClient.Response response) {
+        try { return new JSONObject(response.body).optString("error"); }
+        catch (Exception ignored) { return ""; }
+    }
+
     private String errorMessage(BackendApiClient.Response response, String prefix) {
-        String code = "";
-        try {
-            code = new JSONObject(response.body).optString("error");
-        } catch (Exception ignored) { }
-        return code.isEmpty() ? prefix + " (HTTP " + response.statusCode + ")." : prefix + " (" + code + ").";
+        String code = errorCode(response);
+        switch (code) {
+            case "INVALID_OTP": return "Mã xác nhận sai. Vui lòng kiểm tra lại.";
+            case "OTP_EXPIRED": return "Mã xác nhận đã hết hạn (OTP_EXPIRED). Tạo mã mới để tiếp tục.";
+            case "OTP_LOCKED": return "Đã nhập sai quá 5 lần, giao dịch bị khóa (OTP_LOCKED). Quay lại và tạo yêu cầu mới.";
+            case "OTP_USED": return "Mã đã được xác minh. Kiểm tra trạng thái giao dịch.";
+            case "RATE_LIMITED": return "Yêu cầu quá nhanh (RATE_LIMITED). Vui lòng chờ rồi thử lại.";
+            case "EXPIRED":
+            case "INTENT_CHANGED": return "Yêu cầu đã hết hạn hoặc thay đổi. Quay lại để xác nhận lại.";
+            case "FACE_REQUIRED": return "Cần chụp lại khuôn mặt (ảnh tĩnh demo) trước khi ghi sổ.";
+            case "FACE_SETUP_REQUIRED":
+            case "STEP_UP_UNAVAILABLE": return "Máy chủ chưa sẵn sàng xác minh khuôn mặt.";
+            case "FACE_MISMATCH": return "Ảnh không khớp với hồ sơ eKYC đã duyệt.";
+            case "FACE_NOT_FOUND":
+            case "MULTIPLE_FACES":
+            case "FACE_LOW_QUALITY": return "Chụp một khuôn mặt rõ nét, đủ sáng trong khung hình.";
+            default: return code.isEmpty() ? prefix + " (HTTP " + response.statusCode + ")." : prefix + " (" + code + ").";
+        }
     }
 
     private void setBusy(boolean busy) {
         this.busy = busy;
         updateSubmitButton();
-        if (binding != null) {
-            binding.verifyButton.setEnabled(!busy && !completed);
-            binding.commitButton.setEnabled(!busy && !completed);
-        }
+        if (binding != null) renderAuthorization();
     }
 
     private void updateSubmitButton() {
@@ -516,10 +658,9 @@ public final class TransferFragment extends Fragment {
             otpTimer = null;
         }
         binding = null;
-        intentId = null;
-        phoneVerificationId = null;
         sourceIds.clear();
         completed = false;
+        busy = false;
         super.onDestroyView();
     }
 }

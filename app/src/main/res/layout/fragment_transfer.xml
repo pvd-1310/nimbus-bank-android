@@ -190,7 +190,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="50dp"
                         android:layout_marginTop="6dp"
-                        android:autofillHints=""
+                        android:importantForAutofill="no"
                         android:background="@drawable/input_glass_field"
                         android:fontFamily="sans-serif-medium"
                         android:hint="500.000"
@@ -253,7 +253,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="48dp"
                     android:layout_marginTop="14dp"
-                    android:autofillHints=""
+                    android:importantForAutofill="no"
                     android:background="@drawable/input_glass_field"
                     android:hint="@string/transfer_note"
                     android:inputType="text"
@@ -431,12 +431,30 @@
                     android:textColor="@color/ink_muted"
                     android:textSize="13sp" />
 
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/face_step_up_button"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Chụp ảnh để xác minh khuôn mặt"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/demo_code"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:saveEnabled="false"
+                    android:textColor="@color/navy"
+                    android:textSize="26sp"
+                    android:accessibilityLiveRegion="polite" />
+
                 <EditText
                     android:id="@+id/otp_input"
+                    android:saveEnabled="false"
                     android:layout_width="match_parent"
                     android:layout_height="56dp"
                     android:layout_marginTop="16dp"
-                    android:autofillHints=""
+                    android:importantForAutofill="no"
                     android:background="@drawable/input_glass_field"
                     android:fontFamily="monospace"
                     android:gravity="center"
@@ -454,7 +472,7 @@
                     android:layout_height="wrap_content"
                     android:layout_gravity="center"
                     android:layout_marginTop="12dp"
-                    android:text="Gửi lại mã sau 00:45"
+                    android:text="Tạo mã mới"
                     android:textColor="@color/ink_muted"
                     android:textSize="12sp" />
 
@@ -477,7 +495,7 @@
                     android:layout_height="52dp"
                     android:layout_marginTop="8dp"
                     android:backgroundTint="@color/navy"
-                    android:text="Hoàn tất chuyển tiền"
+                    android:text="Kiểm tra trạng thái"
                     android:textColor="@color/white"
                     android:textSize="15sp"
                     android:visibility="gone"

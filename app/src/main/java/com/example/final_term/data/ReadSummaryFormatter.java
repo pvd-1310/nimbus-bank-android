@@ -15,7 +15,8 @@ public final class ReadSummaryFormatter {
     }
 
     public static String transactionTitle(ReadModels.TransactionSummary transaction) {
-        String type = transaction.isOutgoing() ? "Chuyển đi" :
+        String type = transaction.isBillPayment() ? "Thanh toán hóa đơn" :
+                transaction.isOutgoing() ? "Chuyển đi" :
                 transaction.isIncoming() ? "Nhận tiền" : transaction.type;
         String status = "SETTLED".equals(transaction.status) ? "Thành công" :
                 "FAILED".equals(transaction.status) ? "Thất bại" : transaction.status;

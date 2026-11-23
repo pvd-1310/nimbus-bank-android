@@ -7,8 +7,8 @@ export function registerProfileRoutes(route: Route, d: AppDependencies) {
       a,
       z
         .object({
-          contactEmail: z.email().optional(),
-          contactPhone: z.string().max(30).optional(),
+          contactEmail: z.email().max(254).optional(),
+          contactPhone: z.string().trim().regex(/^\+[1-9][0-9]{7,14}$/).optional(),
           preferences: z
             .object({
               language: z.enum(["vi", "en"]).optional(),
@@ -18,7 +18,9 @@ export function registerProfileRoutes(route: Route, d: AppDependencies) {
             .optional(),
         })
         .strict()
+        .refine((patch) => Object.keys(patch).length > 0, "NO_FIELDS_TO_UPDATE")
         .parse(r.body),
+      r.res?.locals.requestId,
     ),
   );
 }

@@ -55,7 +55,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
-                android:text="Cán bộ thẩm định"
+                android:text="Vận hành hồ sơ"
                 android:textColor="@color/ink"
                 android:textSize="18sp"
                 android:textStyle="bold"
@@ -158,7 +158,7 @@
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
-                <!-- Metric 2: eKYC chờ duyệt -->
+                <!-- Metric 2: eKYC đang xử lý -->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="0dp"
                     android:layout_height="100dp"
@@ -180,7 +180,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="eKYC chờ duyệt"
+                            android:text="eKYC đang xử lý"
                             android:textColor="@color/warning"
                             android:textSize="12sp"
                             android:textStyle="bold" />
@@ -277,7 +277,7 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Card Action 2: Duyệt eKYC -->
+            <!-- Card Action 2: Theo dõi eKYC -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -318,7 +318,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Duyệt hồ sơ định danh eKYC"
+                                android:text="Theo dõi hồ sơ định danh eKYC"
                                 android:textColor="@color/ink"
                                 android:textSize="15sp"
                                 android:textStyle="bold" />
@@ -327,7 +327,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="2dp"
-                                android:text="Thẩm định bằng chứng CCCD, khuôn mặt và phê duyệt trạng thái."
+                                android:text="Xem trạng thái và bằng chứng của hồ sơ eKYC được xử lý tự động."
                                 android:textColor="@color/ink_muted"
                                 android:textSize="13sp" />
                         </LinearLayout>
@@ -338,7 +338,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="48dp"
                         android:layout_marginTop="12dp"
-                        android:text="Xem hàng đợi eKYC"
+                        android:text="Xem hồ sơ eKYC"
                         android:textColor="@color/navy"
                         android:textSize="14sp"
                         android:background="@drawable/glass_pill_button"
@@ -511,7 +511,7 @@
                 android:layout_marginTop="20dp"
                 android:background="@drawable/glass_panel_soft"
                 android:padding="14dp"
-                android:text="Lưu ý kiểm soát nội bộ: Mọi thao tác cấp mới, điều chỉnh tên và duyệt hồ sơ đều được ghi nhận vĩnh viễn vào hệ thống Audit Log."
+                android:text="Lưu ý kiểm soát nội bộ: Thao tác cấp mới, điều chỉnh tên và kết quả kiểm tra eKYC được ghi nhận vào Audit Log."
                 android:textColor="@color/ink_muted"
                 android:textSize="12sp"
                 android:lineSpacingExtra="2dp" />
