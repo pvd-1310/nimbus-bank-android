@@ -6,6 +6,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import Stripe from "stripe";
 import { z } from "zod";
 import { readFileSync } from "node:fs";
+import { createChatbot, localChatbotEnabled } from "../modules/chatbot/chatbot.js";
 import { Banking } from "../core/banking.js";
 import { config } from "../core/config.js";
 import { Evidence } from "../modules/ekyc/ekyc.service.js";
@@ -81,5 +82,7 @@ export function runtime() {
     evidence: new Evidence(bank, s3, evidenceRetentionMs,
       process.env.EKYC_DEMO_SELFIE_ONLY === "true" ? "DEMO_SELFIE_ONLY" : "FULL_ID"),
     payments: new Payments(bank, stripe),
+    chatbot: createChatbot(process.env),
+    ...(localChatbotEnabled(process.env) && { chatbotMode: "DEMO_ONLY" as const }),
   };
 }

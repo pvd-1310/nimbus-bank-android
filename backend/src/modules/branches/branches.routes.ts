@@ -37,44 +37,48 @@ async function googlePost(
       "X-Goog-FieldMask": fields,
     },
     body: JSON.stringify(body),
-  });
+    signal: AbortSignal.timeout(3500),
+    redirect: "error",
+  }).catch(() => { throw new Fault("ROUTES_PROVIDER_UNAVAILABLE", 502); });
   if (!response.ok) {
-    const payload = await response.json().catch(() => null);
-    const error = (Array.isArray(payload) ? payload[0] : payload)?.error;
-    console.error("Google Routes API request failed", {
-      path,
-      httpStatus: response.status,
-      providerStatus: error?.status ?? "UNKNOWN",
-      providerMessage: error?.message ?? "No provider message",
-    });
     throw new Fault("ROUTES_PROVIDER_UNAVAILABLE", 502);
   }
-  return response.json() as Promise<any>;
+  return response.json().catch(() => { throw new Fault("ROUTES_PROVIDER_UNAVAILABLE", 502); }) as Promise<unknown>;
 }
 
 function branchCoordinates(branch: Doc) {
   return coordinatesSchema.safeParse(branch).success;
 }
 
-function nearestBranchByStraightLine(
-  origin: z.infer<typeof coordinatesSchema>,
-  destinations: Doc[],
-) {
-  if (!destinations.length) throw new Fault("BRANCHES_UNAVAILABLE", 404);
-  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
-  const originLat = toRadians(origin.latitude);
-  return destinations
-    .map((branch) => {
-      const latitudeDelta = toRadians(branch.latitude) - originLat;
-      const longitudeDelta = toRadians(branch.longitude - origin.longitude);
-      const haversine =
-        Math.sin(latitudeDelta / 2) ** 2 +
-        Math.cos(originLat) *
-          Math.cos(toRadians(branch.latitude)) *
-          Math.sin(longitudeDelta / 2) ** 2;
-      return { branch, distance: haversine };
-    })
-    .sort((first, second) => first.distance - second.distance)[0].branch;
+const maxCandidates = 20;
+const routeResultSchema = z.object({
+  routes: z.array(z.object({
+    distanceMeters: z.number().int().nonnegative(),
+    duration: z.string().regex(/^\d+(?:\.\d+)?s$/),
+    polyline: z.object({ encodedPolyline: z.string().min(1) }),
+  })).optional(),
+});
+
+async function walkingRoute(key: string, origin: z.infer<typeof coordinatesSchema>, branch: Doc) {
+  const raw = await googlePost(
+    "/directions/v2:computeRoutes", key,
+    {
+      origin: { location: { latLng: origin } },
+      destination: { location: { latLng: coordinatesSchema.parse(branch) } },
+      travelMode: "WALK",
+      polylineQuality: "OVERVIEW",
+      languageCode: "vi",
+    },
+    "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline",
+  );
+  const response = routeResultSchema.safeParse(raw);
+  if (!response.success) throw new Fault("ROUTES_PROVIDER_UNAVAILABLE", 502);
+  return response.data.routes?.map((route) => ({
+    branch,
+    distanceMeters: route.distanceMeters,
+    duration: route.duration,
+    encodedPolyline: route.polyline.encodedPolyline,
+  })) ?? [];
 }
 
 export function registerBranchesRoutes(route: Route, d: AppDependencies) {
@@ -89,55 +93,23 @@ export function registerBranchesRoutes(route: Route, d: AppDependencies) {
   route("post", "/branches/routes", async (_actor, request) => {
     const { branchId, ...origin } = routeSchema.parse(request.body);
     const key = googleKey();
-    let branch: Doc;
-    if (branchId) {
-      const selected = await d.bank.store.run((t) =>
-        t.get(`bankBranches/${branchId}`),
-      );
-      if (
-        !selected ||
-        selected.active !== true ||
-        !branchCoordinates(selected)
-      ) {
-        throw new Fault("BRANCHES_UNAVAILABLE", 404);
+    const branches = await d.bank.store.run(async (t) => {
+      if (branchId) {
+        const selected = await t.get("bankBranches/" + branchId);
+        return selected?.active === true ? [{ ...selected, id: branchId }] : [];
       }
-      branch = { ...selected, id: branchId };
-    } else {
-      const branches = await d.bank.store.run((t) =>
-        t.list("bankBranches", { active: true }, { limit: 100 }),
-      );
-      branch = nearestBranchByStraightLine(
-        origin,
-        branches.filter(branchCoordinates),
-      );
-    }
-    const routeResult = await googlePost(
-      "/directions/v2:computeRoutes",
-      key,
-      {
-        origin: { location: { latLng: origin } },
-        destination: {
-          location: {
-            latLng: {
-              latitude: branch.latitude,
-              longitude: branch.longitude,
-            },
-          },
-        },
-        travelMode: "WALK",
-        polylineQuality: "OVERVIEW",
-        languageCode: "vi",
-      },
-      "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline",
-    );
-    const best = routeResult.routes?.[0];
-    const encodedPolyline = best?.polyline?.encodedPolyline;
-    if (!encodedPolyline) throw new Fault("WALKING_ROUTE_UNAVAILABLE", 404);
+      return t.list("bankBranches", { active: true }, { limit: maxCandidates + 1 });
+    });
+    if (branches.length > maxCandidates) throw new Fault("SELECT_BRANCH_REQUIRED", 409);
+    const candidates = branches.filter(branchCoordinates);
+    if (!candidates.length) throw new Fault("BRANCHES_UNAVAILABLE", 404);
+    const routes = (await Promise.all(candidates.map((branch) => walkingRoute(key, origin, branch)))).flat();
+    routes.sort((a, b) => a.distanceMeters - b.distanceMeters || parseFloat(a.duration) - parseFloat(b.duration));
+    if (!routes.length) throw new Fault("WALKING_ROUTE_UNAVAILABLE", 404);
     return {
-      branch,
-      distanceMeters: best.distanceMeters ?? 0,
-      duration: best.duration,
-      encodedPolyline,
+      ...routes[0],
+      selection: branchId ? "SELECTED_BRANCH" : "SHORTEST_WALKING_DISTANCE",
+      candidatesCompared: candidates.length,
     };
   });
 }

@@ -11,6 +11,7 @@ async function fixture() {
   const s = new MemoryStore();
   await s.run(async (t) => {
     t.set("users/alice", { role: "CUSTOMER", active: true });
+    t.set("customers/alice", { uidRef: "alice", fullName: "Alice" });
     t.set("users/officer", { role: "OFFICER", active: true });
     t.set("officers/officer", { active: true, permissions: ["CUSTOMER_ADMIN"] });
     t.set("bankBranches/central", {
@@ -96,19 +97,16 @@ it("returns a walking route to the branch selected on the map", async () => {
   });
 });
 
-it("selects the closest branch without calling Compute Route Matrix", async () => {
+it("selects the shortest walking route even when another branch is closer geographically", async () => {
   vi.stubEnv("GOOGLE_ROUTES_API_KEY", "test-key");
   vi.stubGlobal("fetch", async (url: string, options: RequestInit) => {
     if (url.endsWith(":computeRouteMatrix"))
       return new Response(null, { status: 400 });
     const body = JSON.parse(String(options.body));
-    if (body.destination?.location?.latLng?.longitude !== 106.7) {
-      return new Response(null, { status: 400 });
-    }
     return Response.json({
       routes: [
         {
-          distanceMeters: 500,
+          distanceMeters: body.destination.location.latLng.longitude === 106.7 ? 500 : 410,
           duration: "390s",
           polyline: { encodedPolyline: "_p~iF~ps|U_ulLnnqC" },
         },
@@ -122,7 +120,8 @@ it("selects the closest branch without calling Compute Route Matrix", async () =
     .send({ latitude: 10.7769, longitude: 106.7009 });
 
   expect(response.status).toBe(200);
-  expect(response.body.branch.id).toBe("central");
+  expect(response.body.branch.id).toBe("west");
+  expect(response.body.selection).toBe("SHORTEST_WALKING_DISTANCE");
 });
 it("health is public but accounts require a verified token", async () => {
   const app = await fixture();
@@ -179,6 +178,7 @@ it("mounts the unversioned eKYC routes and reports missing S3 configuration", as
     .set("Authorization", "Bearer valid")
     .expect(200);
   expect(own.body.items).toEqual([expect.objectContaining({ id, reviewStatus: "DRAFT" })]);
+  expect(own.body.submissionStatus).toBe("STORAGE_SETUP_REQUIRED");
   const ticket = await request(app)
     .post(`/ekyc/${id}/uploads`)
     .set("Authorization", "Bearer valid")
@@ -198,12 +198,12 @@ it("rejects privileged profile fields", async () => {
     ).status,
   ).toBe(400);
 });
-it("reports deferred chatbot and missing providers", async () => {
+it("reports unconfigured chatbot and missing providers", async () => {
   const app = await fixture();
   const r = await request(app)
     .get("/capabilities")
     .set("Authorization", "Bearer valid");
-  expect(r.body.chatbot).toBe("DEFERRED");
+  expect(r.body.chatbot).toBe("SETUP_REQUIRED");
   expect(r.body.s3).toBe("SETUP_REQUIRED");
   expect(r.body.stripe).toBe("SETUP_REQUIRED");
 });

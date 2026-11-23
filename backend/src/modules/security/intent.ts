@@ -245,6 +245,10 @@ export class IntentSecurity {
         id,
         intentId: id,
         kind: i.kind ?? "TRANSFER",
+        ...(i.sourceId === "SIMULATOR" && { demo: true }),
+        ...(i.kind === "DEMO_MOVEMENT" && {
+          demo: true, providerReference: i.providerReference ?? null,
+        }),
         status,
         expiresAt: i.expiresAt,
         sourceId: i.sourceId ?? i.sourceAccountId,
@@ -283,6 +287,11 @@ export class IntentSecurity {
         return { status: i.status };
       check(i.status === "CREATED", "INVALID_INTENT_STATE", 409);
       const c = await t.get(challengePath(id));
+      if (i.kind === "DEMO_MOVEMENT" && i.movement !== "EXTERNAL_TRANSFER") {
+        const request = await t.get("moneyRequests/" + id);
+        if (request?.demo === true && request.ownerUid === a.uid)
+          t.set("moneyRequests/" + id, { ...request, status: "CANCELLED" });
+      }
       t.set("transactionIntents/" + id, { ...i, status: "CANCELLED" });
       if (c) t.set(challengePath(id), { ...c, status: "CANCELLED" });
       return { status: "CANCELLED" };

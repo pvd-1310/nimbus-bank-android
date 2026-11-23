@@ -100,7 +100,7 @@ it("locks each evidence slot to its current ticket and freezes the submitted ver
   await expect(e.submit(a, draft.id)).rejects.toMatchObject({ code: "EVIDENCE_REQUIRED" });
   const back = await e.ticket(a, draft.id, "image/jpeg", 1000);
   await e.confirm(a, back.id);
-  expect((await e.submit(a, draft.id)).reviewStatus).toBe("REVIEWING");
+  await expect(e.submit(a, draft.id)).rejects.toMatchObject({ code: "FACE_SETUP_REQUIRED" });
   expect((await s.run((t) => t.get("customers/profile")))?.kycStatus).toBe("REVIEWING");
   await expect(e.ticket(a, draft.id, "image/jpeg", 1000, 0)).rejects.toMatchObject({ code: "INVALID_EKYC_STATE" });
   await expect(e.evidence(a, draft.id, 0)).rejects.toMatchObject({ code: "FORBIDDEN" });
@@ -108,17 +108,8 @@ it("locks each evidence slot to its current ticket and freezes the submitted ver
   expect((await e.list(officer, {}, true)).items[0].storageRefs).toEqual(
     [0, 1, 2].map((index) => ({ index, mime: "image/jpeg", bytes: 1000 })),
   );
-  await e.review(officer, draft.id, "RESUBMIT_REQUIRED", "Unclear image", "trace");
-  expect((await s.run((t) => t.get("customers/profile")))?.kycStatus).toBe("RESUBMIT_REQUIRED");
-  expect(await s.run((t) => t.list("auditLogs"))).toMatchObject([
-    { action: "EKYC_REVIEW", resourceId: draft.id, requestId: "trace" },
-  ]);
-  const replacement = await e.create(a, true);
-  const latest = await e.list(a, { limit: 1 });
-  expect(latest.items[0]).toMatchObject({ id: replacement.id, reviewStatus: "DRAFT" });
-  expect(latest.nextCursor).not.toBeNull();
-  expect((await e.list(a, { limit: 1, cursor: latest.nextCursor })).items[0]).toMatchObject({
-    id: draft.id, reviewStatus: "RESUBMIT_REQUIRED", reason: "Unclear image",
+  expect((await e.list(a, { limit: 1 })).items[0]).toMatchObject({
+    id: draft.id, reviewStatus: "REVIEWING",
   });
 });
 

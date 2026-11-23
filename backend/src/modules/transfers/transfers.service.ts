@@ -8,12 +8,13 @@ import { intentDigest } from "../security/intent.js";
 const transferRejections = new Set([
   "INVALID_DESTINATION", "ACCOUNT_INACTIVE", "CURRENCY_MISMATCH",
   "INSUFFICIENT_FUNDS", "POLICY_CHANGED", "DAILY_LIMIT_EXCEEDED",
-  "AMOUNT_OVERFLOW", "EXPIRED",
+  "AMOUNT_OVERFLOW", "EXPIRED", "INVALID_ACCOUNT",
 ]);
 
 export class TransferService {
   constructor(private bank: Banking) {}
   async intent(a: Actor, input: Doc) {
+    check(a.role === "CUSTOMER", "FORBIDDEN", 403);
     key(input.requestId);
     key(input.sourceAccountId);
     const destinationInput = String(input.destinationAccountId);
@@ -59,6 +60,8 @@ export class TransferService {
         src.status === "ACTIVE" && dst.status === "ACTIVE",
         "ACCOUNT_INACTIVE",
       );
+      check(src.type !== "MORTGAGE" && dst.type !== "MORTGAGE" &&
+        (src.demo === true) === (dst.demo === true), "INVALID_ACCOUNT", 409);
       check(
         src.currency === input.currency && dst.currency === input.currency,
         "CURRENCY_MISMATCH",
@@ -139,6 +142,7 @@ export class TransferService {
   }
 
   async commit(a: Actor, id: string) {
+    check(a.role === "CUSTOMER", "FORBIDDEN", 403);
     return this.bank.store.run(async (t) => {
       await this.bank.authorize(t, a);
       const i = await this.getIntent(t, a, id);
@@ -152,6 +156,8 @@ export class TransferService {
         dst && src.status === "ACTIVE" && dst.status === "ACTIVE",
         "ACCOUNT_INACTIVE",
       );
+      check(src.type !== "MORTGAGE" && dst.type !== "MORTGAGE" &&
+        (src.demo === true) === (dst.demo === true), "INVALID_ACCOUNT", 409);
       check(
         src.currency === i.currency && dst.currency === i.currency,
         "CURRENCY_MISMATCH",

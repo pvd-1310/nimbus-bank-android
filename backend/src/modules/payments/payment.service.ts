@@ -17,7 +17,8 @@ const compatiblePayment = (d: Doc | undefined): Doc | undefined =>
     : undefined;
 
 async function recordBillPayment(t: Tx, id: string, payment: Doc, intent: Doc | undefined, committedAt: number) {
-  const path = "transactions/stripe_" + id;
+  const demo = payment.gateway === "SIMULATOR";
+  const path = "transactions/" + (demo ? "simulator_" : "stripe_") + id;
   if (await t.get(path)) return;
   t.set(path, {
     ownerUid: payment.ownerUid,
@@ -28,7 +29,8 @@ async function recordBillPayment(t: Tx, id: string, payment: Doc, intent: Doc | 
     billId: payment.billId,
     amountMinor: payment.amountMinor,
     currency: payment.currency,
-    status: "SETTLED",
+    status: demo ? "DEMO_SETTLED" : "SETTLED",
+    ...(demo && { demo: true }),
     committedAt,
   });
 }
@@ -99,6 +101,7 @@ export class Payments {
         return { id, intentId: id, requestId: paymentRequestId, status: old.status };
       }
       check(bill.status === "UNPAID", "INVALID_STATE");
+      this.checkQuote(bill);
       const intent = {
         id,
         sourceId: "STRIPE",
@@ -112,13 +115,89 @@ export class Payments {
         amountMinor: bill.amountMinor,
         currency: bill.currency,
         payloadDigest: hash,
-        expiresAt: this.bank.now() + 300000,
+        expiresAt: Math.min(this.bank.now() + 300000, bill.quoteExpiresAt ?? Infinity),
         status: "CREATED",
       };
       t.set("transactionIntents/" + id, { ...intent, digest: intentDigest(intent) });
       return { id, intentId: id, requestId: paymentRequestId, status: intent.status, expiresAt: intent.expiresAt, faceRequired: intent.faceRequired };
     });
   }
+  async prepareDemo(a: Actor, billId: string, requestId: string) {
+    key(requestId);
+    const id = digest([a.uid, "SIMULATOR_PAYMENT", requestId]);
+    return this.bank.store.run(async (t) => {
+      await this.bank.authorize(t, a);
+      const bill = await this.demoBill(t, a, billId);
+      const previous = await t.get("transactionIntents/" + id);
+      const payloadDigest = digest([billId, bill.amountMinor, bill.currency]);
+      if (bill.status === "UNPAID") await this.checkDemoPaymentLock(t, billId);
+      if (previous) {
+        check(previous.payloadDigest === payloadDigest, "IDEMPOTENCY_CONFLICT", 409);
+        return { id, intentId: id, requestId, status: previous.status, demo: true };
+      }
+      check(bill.status === "UNPAID", "INVALID_STATE");
+      this.checkQuote(bill);
+      minor(bill.amountMinor);
+      const intent = {
+        id, actorUid: a.uid, requestId, billId, payloadDigest, kind: "PAYMENT",
+        sourceId: "SIMULATOR", status: "CREATED", securityVersion: 1,
+        amountMinor: bill.amountMinor, currency: bill.currency, feeMinor: 0,
+        faceRequired: this.bank.security.requiresFace(bill.currency, bill.amountMinor),
+        expiresAt: Math.min(this.bank.now() + 300000, bill.quoteExpiresAt ?? Infinity),
+      };
+      t.set("transactionIntents/" + id, { ...intent, digest: intentDigest(intent) });
+      return { id, intentId: id, requestId, status: intent.status, demo: true };
+    });
+  }
+
+  private async demoBill(t: Tx, a: Actor, billId: string) {
+    key(billId);
+    const bill = await t.get("bills/" + billId);
+    check(a.role === "CUSTOMER" && bill?.ownerUid === a.uid, "FORBIDDEN", 403);
+    check(bill.demo === true, "DEMO_BILL_REQUIRED", 409);
+    return bill;
+  }
+
+  private checkQuote(bill: Doc) {
+    check(bill.quoteExpiresAt == null || this.bank.now() < bill.quoteExpiresAt, "QUOTE_EXPIRED", 410);
+  }
+
+  private async checkDemoPaymentLock(t: Tx, billId: string) {
+    const lock = await t.get("billPaymentLocks/" + billId);
+    check(!lock || lock.released === true, "PAYMENT_IN_PROGRESS", 409);
+  }
+
+  async settleDemo(a: Actor, billId: string, requestId: string) {
+    key(requestId);
+    const id = digest([a.uid, "SIMULATOR_PAYMENT", requestId]);
+    return this.bank.store.run(async (t) => {
+      await this.bank.authorize(t, a);
+      const bill = await this.demoBill(t, a, billId);
+      const intent = await this.bank.transfers.getIntent(t, a, id);
+      check(intent.sourceId === "SIMULATOR" && intent.kind === "PAYMENT" &&
+        intent.billId === billId, "INVALID_INTENT");
+      const result = { id, paymentId: id, gateway: "SIMULATOR", status: "SUCCEEDED", demo: true };
+      if (bill.status === "PAID" && bill.paymentId === id && intent.status === "COMMITTED") return result;
+      check(bill.status === "UNPAID", "INVALID_STATE");
+      this.checkQuote(bill);
+      check(bill.amountMinor === intent.amountMinor && bill.currency === intent.currency, "REQUOTE_REQUIRED", 409);
+      await this.checkDemoPaymentLock(t, billId);
+      await this.bank.security.consume(t, intent);
+      const now = this.bank.now();
+      const payment = {
+        ...result, ownerUid: a.uid, billId, amountMinor: intent.amountMinor, currency: intent.currency,
+        authorizationDigest: intent.digest, providerId: "DEMO-" + id, createdAt: now, updatedAt: now,
+      };
+      await recordBillPayment(t, id, payment, intent, now);
+      t.set("payments/" + id, payment);
+      t.set("bills/" + billId, { ...bill, status: "PAID", paymentId: id });
+      t.set("transactionIntents/" + id, { ...intent, status: "COMMITTED" });
+      t.set("outbox/" + id, { paymentId: id, billId, ownerUid: a.uid, status: "PENDING", attempts: 0, createdAt: now });
+      this.bank.audit(t, a, "DEMO_PAYMENT_SETTLED", id, requestId);
+      return result;
+    });
+  }
+
   async create(a: Actor, billId: string, requestId: string) {
     check(this.provider, "SETUP_REQUIRED", 503);
     key(billId);
@@ -134,13 +213,14 @@ export class Payments {
       }
       const i = await this.bank.transfers.getIntent(t, a, id),
         bill = await t.get("bills/" + billId);
-      check(i.kind === "PAYMENT" && i.billId === billId, "INVALID_INTENT");
+      check(i.kind === "PAYMENT" && i.sourceId !== "SIMULATOR" && i.billId === billId, "INVALID_INTENT");
       minor(i.amountMinor);
       await this.bank.security.consume(t, i);
       check(
         bill?.ownerUid === a.uid && bill.status === "UNPAID",
         "INVALID_STATE",
       );
+      this.checkQuote(bill);
       check(
         bill.amountMinor === i.amountMinor && bill.currency === i.currency,
         "REQUOTE_REQUIRED",
@@ -224,7 +304,7 @@ export class Payments {
       if (previousEvent && (!success || previousEvent.paymentId !== id ||
           previousEvent.type !== event.type || p?.status !== "SUCCEEDED"))
         return { duplicate: true };
-      check(p, "UNKNOWN_PAYMENT");
+      check(p && p.gateway !== "SIMULATOR", "UNKNOWN_PAYMENT");
       check(!p.providerId || p.providerId === o.id, "PROVIDER_MISMATCH");
       check(
         p.amountMinor === o.amount && p.currency.toLowerCase() === o.currency,

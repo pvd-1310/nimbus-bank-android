@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { AppDependencies, Route } from "../../core/http.js";
-import { Fault } from "../../shared/errors.js";
+import { digest } from "../../shared/crypto.js";
 import { amount, currency, id } from "../../shared/validation.js";
 const common = { requestId: id, amountMinor: amount, currency };
 const transferRequest = z.union([
@@ -28,6 +28,9 @@ export function registerTransfersRoutes(route: Route, d: AppDependencies) {
   route("post", "/transfers/intents", (a, r) =>
     d.bank.transfers.intent(a, transferRequest.parse(r.body)),
   );
+  route("get", "/transfers/by-request/:id", (a, r) =>
+    d.bank.security.describe(a, digest([a.uid, "TRANSFER", id.parse(r.params.id)])),
+  );
   route("get", "/intents/:id", (a, r) => d.bank.security.describe(a, String(r.params.id)));
   route("post", "/intents/:id/cancel", (a, r) => d.bank.security.cancel(a, String(r.params.id)));
   route("post", "/intents/:id/otp", (a, r) => d.bank.security.challenge(a, String(r.params.id)));
@@ -38,7 +41,4 @@ export function registerTransfersRoutes(route: Route, d: AppDependencies) {
   route("post", "/transfers/:id/commit", (a, r) =>
     d.bank.transfers.commit(a, String(r.params.id)),
   );
-  route("post", "/external-transfers", async () => {
-    throw new Fault("SETUP_REQUIRED", 503);
-  });
 }

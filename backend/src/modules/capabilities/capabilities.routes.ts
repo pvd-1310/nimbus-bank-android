@@ -7,8 +7,8 @@ export function registerCapabilitiesRoutes(route: Route, d: AppDependencies) {
     otp: "DEMO_DISPLAY_CODE",
     face: await d.bank.options.face?.ready() ? "ENABLED" : "SETUP_REQUIRED",
     ekycMode: d.evidence.captureMode,
-    externalTransfer: "SETUP_REQUIRED",
-    routes: "SETUP_REQUIRED",
-    chatbot: "DEFERRED",
+    externalTransfer: "DEMO_ONLY",
+    routes: process.env.GOOGLE_ROUTES_API_KEY ? "ENABLED" : "SETUP_REQUIRED",
+    chatbot: d.chatbot ? d.chatbotMode ?? "ENABLED" : "SETUP_REQUIRED",
   }));
 }

@@ -1,5 +1,6 @@
 import { registerFaceLogin, registerFaceStepUp } from "./modules/security/face.routes.js";
 import express from "express";
+import { registerChatbotRoutes } from "./modules/chatbot/chatbot.js";
 import {
   authenticateRequests,
   createRouteRegistrar,
@@ -37,6 +38,7 @@ export function createApp(d: AppDependencies) {
   const route = createRouteRegistrar(app);
   for (const register of [
     registerCapabilitiesRoutes,
+    registerChatbotRoutes,
     registerProfileRoutes,
     registerAccountsRoutes,
     registerTransactionsRoutes,

@@ -131,7 +131,7 @@ Ví dụ tạo intent chuyển nội bộ:
 
 Gọi POST `/intents/:id/otp` để nhận `challengeId`, `code`, `expiresAt` và trạng thái AWAITING_CODE. Gọi POST `/intents/:id/verify-otp` với `{challengeId,code}`, sau đó commit. Giữ nguyên requestId và intent ID khi retry. GET `/intents/:id` trả trạng thái giao dịch, OTP và face. Khi chỉnh sửa nội dung, POST `/intents/:id/cancel` trước khi tạo intent mới. Intent sống 5 phút, mã sống tối đa 2 phút. Mỗi intent có tối đa 5 lần nhập và mỗi lần tạo mã cách nhau ít nhất 30 giây.
 
-Yêu cầu nạp/rút dùng `requestId`, `accountId`, `amountMinor`, `currency`, `type` (`DEPOSIT`/`WITHDRAWAL`); trạng thái `REQUESTED` không thay số dư. Chuyển liên ngân hàng chưa có provider nên trả `SETUP_REQUIRED`.
+Yêu cầu nạp/rút dùng `requestId`, `accountId`, `amountMinor`, `currency`, `type` (`DEPOSIT`/`WITHDRAWAL`); trạng thái `REQUESTED` không thay số dư. Chuyển liên ngân hàng dùng simulator `DEMO_ONLY` cho tài khoản checking có cờ demo. Xem phần demo cục bộ.
 
 ## Mốc cấu hình Firebase thật
 
@@ -204,3 +204,43 @@ Kiểm thử emulator được chạy riêng, không âm thầm kết nối proj
 Truy vấn phân trang ngay trên Firestore; cursor là opaque token, cần gửi lại nguyên giá trị. Lịch sử có bộ lọc ngày có thể cần composite index trên Spark; chốt/deploy index theo truy vấn khi kết nối thật. Worker xử lý tối đa 25 job mỗi lần, chạy lại để drain. Hạn mức ngày checking được kiểm tra và tăng usage nguyên tử theo ngày UTC; policy thay đổi yêu cầu tạo intent mới.
 
 Giới hạn demo còn lại: kích hoạt khách hàng cần hardening, chưa có real SMS/face/Routes/interbank/inventory provider, webhook reconciliation sau timeout cần thao tác retry cùng request ID, chưa có credential rotation, metrics, backup hoặc production deployment. Chưa triển khai refund, dispute hoặc các luồng Stripe live. Việc triển khai app hoàn chỉnh là giai đoạn tiếp theo.
+
+
+## Demo cục bộ từ Android Emulator
+
+Dùng một Android Emulator API 26 trở lên và project emulator `demo-mobile-banking`. Hai lệnh sau minh họa thiết lập local. Firebase CLI và Java cần sẵn bản tương thích và Firestore Emulator trong cache.
+
+```sh
+CI=true FIREBASE_CLI_DISABLE_TELEMETRY=1 FIREBASE_SKIP_UPDATE_CHECK=true   firebase --config firebase.backend-test.json emulators:start   --project demo-mobile-banking --only auth,firestore
+```
+
+Từ một shell riêng, cung cấp các biến này cho tiến trình backend và seed. Nhập mật khẩu demo thông qua môi trường hoặc trình quản lý bí mật, không đặt mật khẩu trên dòng lệnh. Các giá trị trống ghi đè cấu hình dịch vụ ngoài trong tệp local cho phiên shell này.
+
+```sh
+export APP_MODE=emulator FIREBASE_PROJECT_ID=demo-mobile-banking
+export FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:19099 FIRESTORE_EMULATOR_HOST=127.0.0.1:18080
+export HOST=127.0.0.1 PORT=3198 DEMO_NAMESPACE=local_demo
+export CHATBOT_ENABLED=false CHATBOT_LOCAL_DEMO=true GOOGLE_ROUTES_API_KEY= STRIPE_SECRET_KEY= STRIPE_WEBHOOK_SECRET=
+export S3_BUCKET= FACE_API_BASE_URL=
+export OTP_SECRET="$(openssl rand -hex 32)"
+# Cung cấp DEMO_PASSWORD trước khi chạy --apply.
+npm --prefix backend run seed -- --apply
+npm --prefix backend run build
+npm --prefix backend start
+```
+
+Đăng nhập `local_demo.customer@example.com` hoặc `local_demo.officer@example.com` bằng mật khẩu demo đã cấp. Chạy seed trên namespace emulator cục bộ để thêm hóa đơn nước và danh mục mới. Seed thêm bản ghi còn thiếu. Khi có thanh toán đồ án đã quyết toán, từ shell dùng cùng môi trường, chạy:
+
+```sh
+npm --prefix backend run worker
+```
+
+Lệnh xử lý outbox cập nhật fulfillment của đơn demo. Màn tra cứu hiển thị trạng thái thanh toán, trạng thái thực hiện và mã demo. Tài khoản giả lập có cờ `demo: true`; các API mô phỏng từ chối tài khoản hoặc hóa đơn ngoài phạm vi đó. Kiểm thử liên ngân hàng dùng `DEMO_BANK` với `0000000001` (chấp nhận) hoặc `0000000002` (từ chối). Sau OTP và step-up nếu cần, đợi ít nhất 5 giây và bấm kiểm tra để đối soát. Mã OTP demo chỉ hiện trong ứng dụng, không phải 2FA độc lập.
+
+## Chatbot tùy chọn
+
+`APP_MODE=emulator CHATBOT_LOCAL_DEMO=true` bật trợ lý hướng dẫn local, với trạng thái API `DEMO_ONLY`. Chế độ này hỗ trợ câu chào và các chủ đề điều hướng bằng câu trả lời có sẵn. Nó không gửi yêu cầu đến OpenAI.
+
+Khi được phép dùng provider, chỉ đặt `CHATBOT_ENABLED=true`, `OPENAI_API_KEY` và `OPENAI_MODEL` trong môi trường backend hoặc kho bí mật. Chọn model hỗ trợ [Responses API](https://platform.openai.com/docs/api-reference/responses/create). Không cấu hình key trong Gradle, local.properties hoặc APK.
+
+`POST /chatbot` yêu cầu khách hàng active. Bộ từ vựng nhận các câu như “nạp tiền điện thoại”, “hóa đơn”, “giao dịch tháng này”, “chuyển khoản”, “tìm chi nhánh” và “nạp tiền”. Server chỉ gửi mã chủ đề thuộc allowlist. Không gửi văn bản người dùng, ảnh, OTP, UID hoặc dữ liệu tài khoản, và không cấp tools cho model. Android chỉ mở màn khi người dùng bấm action đã cho phép. Thiếu cấu hình trả `CHATBOT_SETUP_REQUIRED`. Provider quá hạn hoặc lỗi báo trạng thái có thể thử lại.
