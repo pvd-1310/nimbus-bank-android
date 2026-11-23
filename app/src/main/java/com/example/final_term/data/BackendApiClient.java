@@ -16,6 +16,7 @@ import java.util.Iterator;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import okhttp3.ConnectionPool;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -23,7 +24,7 @@ import okhttp3.RequestBody;
 import okhttp3.ResponseBody;
 import org.json.JSONObject;
 
-/** Authenticated production REST transport. Money is never mutated locally. */
+/** Authenticated REST transport shared by the local demo and configured builds. */
 public final class BackendApiClient {
     public static final class Response {
         public final int statusCode;
@@ -32,13 +33,23 @@ public final class BackendApiClient {
     }
     private static final MediaType JSON = MediaType.get("application/json");
     private static final String BASE_URL = BuildConfig.BACKEND_BASE_URL.replaceFirst("/+$", "");
-    private final OkHttpClient http = new OkHttpClient.Builder()
+    private final OkHttpClient http = newHttpClient();
+
+    private static OkHttpClient newHttpClient() {
+        var builder = new OkHttpClient.Builder()
             .connectTimeout(5, TimeUnit.SECONDS)
             .readTimeout(5, TimeUnit.SECONDS)
             .writeTimeout(5, TimeUnit.SECONDS)
             .followRedirects(false)
-            .retryOnConnectionFailure(false)
-            .build();
+            .retryOnConnectionFailure(false);
+        if (BuildConfig.FIREBASE_DEMO) {
+            // Avoid reusing an idle socket through the Android Emulator host bridge.
+            builder.connectionPool(new ConnectionPool(0, 5, TimeUnit.SECONDS));
+        }
+        return builder.build();
+    }
+
+    private final OkHttpClient readHttp = http.newBuilder().retryOnConnectionFailure(true).build();
     private final OkHttpClient cameraHttp = http.newBuilder().callTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS).build();
     private final FirebaseAuth auth;
@@ -124,7 +135,8 @@ public final class BackendApiClient {
                         .header("Authorization", "Bearer " + token)
                         .method(method, jsonBody == null ? null : RequestBody.create(jsonBody, JSON))
                         .build();
-                OkHttpClient client = path.startsWith("/ekyc/") && path.endsWith("/submit") ? cameraHttp : http;
+                OkHttpClient client = "GET".equals(method) ? readHttp
+                        : path.startsWith("/ekyc/") && path.endsWith("/submit") ? cameraHttp : http;
                 try (okhttp3.Response response = client.newCall(request).execute()) {
                     ResponseBody body = response.body();
                     return new Response(response.code(), body == null ? "" : body.string());

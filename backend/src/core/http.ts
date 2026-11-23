@@ -8,6 +8,8 @@ import { Fault } from "../shared/errors.js";
 import type { Banking } from "./banking.js";
 import type { Doc } from "./store.js";
 export interface AppDependencies {
+  chatbotMode?: "DEMO_ONLY";
+  chatbot?: (message: string) => Promise<{ action: string | null; text: string }>;
   createFaceToken?: (uid: string) => Promise<string>;
   bank: Banking;
   evidence: Evidence;
@@ -38,7 +40,7 @@ export function authenticateRequests(d: AppDependencies) {
       console.warn("API authentication failed", {
         requestId: res.locals.requestId,
         method: req.method,
-        path: req.path,
+        route: typeof req.route?.path === "string" ? req.route.path : "unmatched",
         reason: "MISSING_BEARER_TOKEN",
       });
       throw new Fault("UNAUTHENTICATED", 401);
@@ -54,7 +56,7 @@ export function authenticateRequests(d: AppDependencies) {
       console.warn("API authentication failed", {
         requestId: res.locals.requestId,
         method: req.method,
-        path: req.path,
+        route: typeof req.route?.path === "string" ? req.route.path : "unmatched",
         reason: authErrorCode,
       });
       throw new Fault("UNAUTHENTICATED", 401);
@@ -90,13 +92,10 @@ export function errorHandler(
       err instanceof ZodError || (err instanceof SyntaxError && "body" in err);
   const requestId = res.locals.requestId;
   const errorCode = fault ? fault.code : malformed ? "INVALID_REQUEST" : "INTERNAL_ERROR";
-  const stackFrames = err instanceof Error
-    ? err.stack?.split("\n").slice(1, 9).map((frame) => frame.trim())
-    : undefined;
   console.error("API request failed", {
-    requestId, method: req.method, path: req.path, errorCode,
-    errorName: err instanceof Error ? err.name : "UNKNOWN",
-    ...(stackFrames?.length ? { stackFrames } : {}),
+    requestId, method: req.method,
+    route: typeof req.route?.path === "string" ? req.route.path : "unmatched",
+    errorCode,
   });
   res.status(fault ? fault.status : malformed ? 400 : 500).json({
     error: fault ? fault.code : malformed ? "INVALID_REQUEST" : "INTERNAL_ERROR",

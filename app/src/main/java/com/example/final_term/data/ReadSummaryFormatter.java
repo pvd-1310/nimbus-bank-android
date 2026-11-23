@@ -15,12 +15,15 @@ public final class ReadSummaryFormatter {
     }
 
     public static String transactionTitle(ReadModels.TransactionSummary transaction) {
-        String type = transaction.isBillPayment() ? "Thanh toán hóa đơn" :
+        String type = "DEMO_DEPOSIT".equals(transaction.type) ? "Nạp tiền"
+                : "DEMO_WITHDRAWAL".equals(transaction.type) ? "Rút tiền"
+                : "DEMO_EXTERNAL_TRANSFER".equals(transaction.type) ? "Chuyển liên ngân hàng"
+                : transaction.isBillPayment() ? "Thanh toán hóa đơn" :
                 transaction.isOutgoing() ? "Chuyển đi" :
                 transaction.isIncoming() ? "Nhận tiền" : transaction.type;
         String status = "SETTLED".equals(transaction.status) ? "Thành công" :
                 "FAILED".equals(transaction.status) ? "Thất bại" : transaction.status;
-        return type + " · " + status;
+        return type + " · " + ("DEMO_SETTLED".equals(status) ? "Đã ghi sổ mô phỏng" : status);
     }
 
     public static String transactionDetail(ReadModels.TransactionSummary transaction) {
@@ -39,7 +42,7 @@ public final class ReadSummaryFormatter {
             detail.append(amount);
         }
         if (!transaction.accountId.isEmpty()) detail.append("\n").append(transaction.accountId);
-        if ("SETTLED".equals(transaction.status) && transaction.balanceAfterMinor != null) {
+        if (("SETTLED".equals(transaction.status) || "DEMO_SETTLED".equals(transaction.status)) && transaction.balanceAfterMinor != null) {
             detail.append("\nSố dư sau giao dịch ")
                     .append(formatCurrency(transaction.balanceAfterMinor, transaction.currency));
         }

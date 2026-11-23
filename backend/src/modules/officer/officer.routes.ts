@@ -14,8 +14,11 @@ export function registerOfficerRoutes(route: Route, d: AppDependencies) {
     route("get", "/officer/" + path, async (a, r) =>
       d.bank.store.run(async (t) => {
         await d.bank.authorize(t, a, permission);
+        const action = path === "audit"
+          ? z.enum(["TRANSFER_COMMIT", "CUSTOMER_UPDATE"]).optional().parse(r.query.action)
+          : undefined;
         return page(
-          await t.list(collection, {}, queryOptions(r.query)),
+          await t.list(collection, action ? { action } : {}, queryOptions(r.query)),
           r.query,
         );
       }),

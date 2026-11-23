@@ -16,6 +16,7 @@ export async function drainOutbox(store: Store) {
           ...order,
           fulfillmentStatus: "DEMO_FULFILLED",
           paymentId: j.paymentId,
+          providerReference: "DEMO-FULFILLMENT-" + j.id,
           demo: true,
         });
       t.set("outbox/" + j.id, {

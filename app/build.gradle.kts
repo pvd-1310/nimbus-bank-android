@@ -4,10 +4,13 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
-check(file("google-services.json").exists()) {
-    "Production Android build requires app/google-services.json"
+val firebaseDemo = providers.gradleProperty("firebaseDemo").orNull == "true"
+if (!firebaseDemo) {
+    check(file("google-services.json").exists()) {
+        "Connected Android builds require app/google-services.json"
+    }
+    apply(plugin = "com.google.gms.google-services")
 }
-apply(plugin = "com.google.gms.google-services")
 
 android {
     namespace = "com.example.final_term"
@@ -34,9 +37,13 @@ android {
         check(stripePublishableKey.isEmpty() || stripePublishableKey.startsWith("pk_test_")) {
             "Debug Stripe checkout requires a test publishable key (pk_test_...)"
         }
-        val simulatorBackendUrl = configuredBackendUrl ?: "http://10.0.2.2:3001"
+        val simulatorBackendUrl = if (firebaseDemo) "http://10.0.2.2:3198"
+            else configuredBackendUrl ?: "http://10.0.2.2:3001"
         val releaseRequested = gradle.startParameter.taskNames.any {
             it.contains("release", ignoreCase = true)
+        }
+        check(!firebaseDemo || !releaseRequested) {
+            "Firebase Emulator is available for debug builds only"
         }
         if (releaseRequested && configuredBackendUrl == null) {
             error(
@@ -49,10 +56,14 @@ android {
                     || simulatorBackendUrl.startsWith("http://127.0.0.1:")))) {
             "Backend URL must use HTTPS; debug builds also support emulator or ADB reverse loopback"
         }
+        buildConfigField("boolean", "FIREBASE_DEMO", firebaseDemo.toString())
         buildConfigField("String", "BACKEND_BASE_URL", "\"$simulatorBackendUrl\"")
-        buildConfigField("String", "STRIPE_PUBLISHABLE_KEY", "\"$stripePublishableKey\"")
+        val checkoutKey = if (firebaseDemo) "" else stripePublishableKey
+        buildConfigField("String", "STRIPE_PUBLISHABLE_KEY", "\"$checkoutKey\"")
 
-        manifestPlaceholders["MAPS_API_KEY"] = localProperties.getProperty("MAPS_API_KEY", "")
+        manifestPlaceholders["bankAppLabel"] = if (firebaseDemo) "Nimbus Bank (Local)" else "@string/app_name"
+        manifestPlaceholders["bankAllowBackup"] = (!firebaseDemo).toString()
+        manifestPlaceholders["MAPS_API_KEY"] = if (firebaseDemo) "" else localProperties.getProperty("MAPS_API_KEY", "")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -63,6 +74,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            if (firebaseDemo) applicationIdSuffix = ".localreview"
+        }
         release {
             optimization {
                 enable = true

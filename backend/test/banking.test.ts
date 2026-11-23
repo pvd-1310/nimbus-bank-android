@@ -7,16 +7,13 @@ import {
 import { type Actor } from "../src/modules/auth/auth.types.js";
 import { MemoryStore } from "./support/memory-store.js";
 const customer: Actor = { uid: "alice", role: "CUSTOMER", permissions: [] };
-let s: MemoryStore, b: Banking, code: string, now: number;
+let s: MemoryStore, b: Banking, now: number;
 beforeEach(async () => {
   s = new MemoryStore();
   now = 1700000000000;
   b = new Banking(s, {
     otpSecret: "test-secret-with-at-least-32-characters",
     now: () => now,
-    deliver: async (_uid, c) => {
-      code = c;
-    },
   });
   await s.run(async (t) => {
     t.set("users/alice", { active: true, role: "CUSTOMER" });
@@ -49,8 +46,8 @@ async function authorized(key = "request-0001", amount = 300) {
     amountMinor: amount,
     currency: "VND",
   });
-  await b.transfers.challenge(customer, i.id);
-  await b.transfers.verify(customer, i.id, code);
+  const { challengeId, code } = await b.security.challenge(customer, i.id);
+  await b.security.verify(customer, i.id, challengeId, code);
   return i;
 }
 describe("banking invariants", () => {
@@ -139,13 +136,13 @@ describe("banking invariants", () => {
       amountMinor: 300,
       currency: "VND",
     });
-    await b.transfers.challenge(customer, i.id);
+    const { challengeId, code } = await b.security.challenge(customer, i.id);
     for (let n = 0; n < 5; n++)
       await expect(
-        b.transfers.verify(customer, i.id, "wrong"),
+        b.security.verify(customer, i.id, challengeId, code === "000000" ? "000001" : "000000"),
       ).rejects.toThrow();
     await expect(
-      b.transfers.verify(customer, i.id, code),
+      b.security.verify(customer, i.id, challengeId, code),
     ).rejects.toMatchObject({
       code: "OTP_LOCKED",
     });
@@ -163,15 +160,11 @@ describe("banking invariants", () => {
     });
   });
   it("blocks high value without configured verifier", async () => {
-    await expect(
-      b.transfers.intent(customer, {
-        requestId: "request-0001",
-        sourceAccountId: "a",
-        destinationAccountId: "b",
-        amountMinor: 100000000,
-        currency: "VND",
-      }),
-    ).rejects.toMatchObject({ code: "STEP_UP_UNAVAILABLE" });
+    b.options.faceThresholds = { VND: 500 };
+    const intent = await authorized("high-value", 700);
+    expect(intent.faceRequired).toBe(true);
+    await expect(b.transfers.commit(customer, intent.id)).rejects.toMatchObject({ code: "STEP_UP_UNAVAILABLE" });
+    expect((await b.accounts.get(customer, "a")).bookedMinor).toBe(1000);
   });
   it("request submission never credits money and survives retry", async () => {
     const x = {

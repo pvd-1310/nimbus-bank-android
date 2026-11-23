@@ -231,7 +231,7 @@ export function normalizeDocument(path: string, input: Doc): Doc {
     case "transactionIntents":
       assign(
         "sourceId",
-        out.sourceAccountId ?? (out.kind === "PAYMENT" ? "STRIPE" : undefined),
+        out.sourceAccountId ?? (out.kind === "PAYMENT" ? out.sourceId ?? "STRIPE" : undefined),
       );
       if (out.destinationAccountId)
         assign("target", { kind: "ACCOUNT", id: out.destinationAccountId });
@@ -245,7 +245,7 @@ export function normalizeDocument(path: string, input: Doc): Doc {
       break;
     case "payments":
       assign("billOrOrderRef", out.billId);
-      assign("gateway", "STRIPE");
+      assign("gateway", out.demo === true && out.gateway === "SIMULATOR" ? "SIMULATOR" : "STRIPE");
       assign("merchantRef", id);
       assign("providerTxnRef", out.providerId);
       if (out.providerTxnRef === undefined) out.providerTxnRef = null;

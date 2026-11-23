@@ -266,6 +266,13 @@
 
             <!-- History Button -->
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/demo_settlement_button"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Thực hành xác thực và ghi sổ demo" />
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/history_button"
                 style="@style/Widget.Material3.Button.TonalButton"
                 android:layout_width="match_parent"

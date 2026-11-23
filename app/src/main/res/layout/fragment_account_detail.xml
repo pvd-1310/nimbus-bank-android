@@ -123,20 +123,6 @@
                     android:textSize="32sp"
                     tools:text="24.990.000 ₫" />
 
-                <!-- Hatched Limit Bar -->
-                <com.example.final_term.ui.common.HatchedProgressBar
-                    android:id="@+id/detail_hatched_progress"
-                    android:layout_width="match_parent"
-                    android:layout_height="18dp"
-                    android:layout_marginTop="16dp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:text="Hạn mức giao dịch trực tuyến: 10.000.000 ₫/ngày"
-                    android:textColor="@color/ink_muted"
-                    android:textSize="11sp" />
             </LinearLayout>
 
             <!-- Detailed Specifications Card -->

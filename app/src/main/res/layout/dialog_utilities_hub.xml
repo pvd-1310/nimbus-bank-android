@@ -203,6 +203,20 @@
                 android:textStyle="bold"
                 android:letterSpacing="0.05" />
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/demo_catalog_button"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Vé, phòng và mua hàng demo" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/order_history_button"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Tra cứu đơn hàng demo" />
+
             <LinearLayout
                 android:id="@+id/bills_list_container"
                 android:layout_width="match_parent"

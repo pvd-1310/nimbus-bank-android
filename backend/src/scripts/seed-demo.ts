@@ -187,10 +187,31 @@ try {
           currency: "VND",
           active: true,
         });
+      for (const [serviceType, name, amountMinor] of [
+        ["FLIGHT", "Bay demo · TP.HCM–Đà Nẵng · chuyến NS101", 180000],
+        ["MOVIE", "Phim demo · suất 19:30 · vé tiêu chuẩn", 80000],
+        ["HOTEL", "Khách sạn demo · phòng đôi · một đêm", 300000],
+        ["ECOMMERCE", "Cửa hàng demo · bình nước", 60000],
+      ] as const)
+        await create("catalog/" + ns + "_selection_" + serviceType.toLowerCase(), {
+          serviceType, name, amountMinor, currency: "VND", active: true,
+        });
+      for (const network of ["A", "B"])
+        for (const amountMinor of [20000, 50000, 100000, 200000])
+          await create("catalog/" + ns + "_topup_" + network + "_" + amountMinor, {
+            serviceType: "TOPUP", name: "Nhà mạng demo " + network, network,
+            amountMinor, currency: "VND", active: true,
+          });
+      await create("bills/" + ns + "_water", {
+        ownerUid, provider: "DEMO", serviceType: "WATER",
+        invoiceRef: ns + "_water", amountMinor: 25000, currency: "VND",
+        status: "UNPAID", dueAt: Date.now() + 14 * 86_400_000,
+      });
       await create("bills/" + ns + "_electricity", {
         ownerUid,
         provider: "DEMO",
         invoiceRef: ns + "_electricity",
+        serviceType: "ELECTRICITY",
         amountMinor: 20000,
         currency: "VND",
         status: "UNPAID",

@@ -83,14 +83,6 @@ public final class CustomerHomeFragment extends Fragment {
             }
         });
 
-        binding.limitPillContainer.setOnClickListener(v -> {
-            new MaterialAlertDialogBuilder(requireContext())
-                    .setTitle("Hạn mức giao dịch")
-                    .setMessage("Hạn mức chuyển khoản trong ngày: 10.000.000 ₫\nĐã sử dụng: 6.400.000 ₫\nCòn lại khả dụng: 3.600.000 ₫\n\nHạn mức được quản lý và bảo vệ bởi Nimbus Bank Security.")
-                    .setPositiveButton("Đã hiểu", null)
-                    .show();
-        });
-
         FinalTermApplication app = (FinalTermApplication) requireActivity().getApplication();
         app.getAppContainer().getAuthRepository().observeAuthState().observe(getViewLifecycleOwner(), authState -> {
             if (authState == null || authState.getStatus() != AuthState.Status.SIGNED_IN
@@ -118,13 +110,13 @@ public final class CustomerHomeFragment extends Fragment {
                         if (binding == null) return;
                         binding.backendStatusText.setText(
                                 response.statusCode >= 200 && response.statusCode < 300
-                                        ? "Backend production: đã xác thực quyền truy cập"
-                                        : "Backend production: HTTP " + response.statusCode);
+                                        ? "Backend đồ án: đã xác thực quyền truy cập"
+                                        : "Backend đồ án: HTTP " + response.statusCode);
                     })
                     .addOnFailureListener(error -> {
                         if (binding == null) return;
                         binding.backendStatusText.setText(
-                                "Backend production chưa kết nối · dữ liệu an toàn cục bộ");
+                                "Backend đồ án chưa kết nối");
                     });
         });
 
@@ -132,6 +124,9 @@ public final class CustomerHomeFragment extends Fragment {
         binding.accountButton.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.accountList));
         binding.historyButton.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.transactionHistory));
         binding.branchLocatorButton.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.branchLocator));
+
+        binding.chatButton.setOnClickListener(v ->
+                new ChatbotDialogFragment().show(getChildFragmentManager(), "Chatbot"));
 
         // Quick action round buttons
         binding.quickTransfer.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.transfer));
@@ -216,7 +211,14 @@ public final class CustomerHomeFragment extends Fragment {
         binding.balanceAccountSelector.setVisibility(balanceAccounts.size() > 1 ? View.VISIBLE : View.GONE);
         showAccountBalance(selected);
 
-        binding.accountStatusText.setVisibility(View.GONE);
+        showBalanceOrigin(result, balanceAccounts.get(selected));
+    }
+
+    private void showBalanceOrigin(ReadModelResult<?> result, ReadModels.AccountSummary account) {
+        String message = (account.demo ? "Dữ liệu mô phỏng" : "")
+                + (result.isReadOnly() ? (account.demo ? " · " : "") + result.getMessage() : "");
+        binding.accountStatusText.setText(message);
+        binding.accountStatusText.setVisibility(message.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
     private void showAccountBalance(int position) {
@@ -253,6 +255,11 @@ public final class CustomerHomeFragment extends Fragment {
     private void renderTransactions(ReadModelResult<List<ReadModels.TransactionSummary>> result) {
         if (result == null || result.getData() == null || binding == null) return;
         binding.recentTransactionsContent.removeAllViews();
+        if (result.isReadOnly()) {
+            TextView status = new TextView(requireContext());
+            status.setText(result.getMessage());
+            binding.recentTransactionsContent.addView(status);
+        }
         if (result.getData().isEmpty()) {
             TextView emptyText = new TextView(requireContext());
             emptyText.setText("Chưa có giao dịch gần đây.");
@@ -269,8 +276,8 @@ public final class CustomerHomeFragment extends Fragment {
                     getLayoutInflater(), binding.recentTransactionsContent, false);
 
             boolean isIncoming = tx.isIncoming();
-            rowBinding.titleText.setText(tx.isBillPayment() ? "Thanh toán hóa đơn" : tx.type);
-            rowBinding.subtitleText.setText("SETTLED".equals(tx.status) ? "Thành công" : tx.status);
+            rowBinding.titleText.setText(ReadSummaryFormatter.transactionTitle(tx));
+            rowBinding.subtitleText.setText(tx.id);
 
             String amountFormatted = ReadSummaryFormatter.formatCurrency(tx.amountMinor, tx.currency);
             if (isIncoming) {

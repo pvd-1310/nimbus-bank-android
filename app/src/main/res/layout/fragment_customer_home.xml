@@ -181,40 +181,10 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:fontFamily="sans-serif-light"
-                    android:text="56.751.230 ₫"
+                    android:text="—"
                     android:textColor="@color/ink"
                     android:textSize="36sp"
                     android:textStyle="normal" />
-
-                <!-- Soft Glass Pill for Limit -->
-                <LinearLayout
-                    android:id="@+id/limit_pill_container"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:background="@drawable/glass_pill_button"
-                    android:gravity="center_vertical"
-                    android:paddingStart="12dp"
-                    android:paddingTop="6dp"
-                    android:paddingEnd="12dp"
-                    android:paddingBottom="6dp">
-
-                    <TextView
-                        android:id="@+id/limit_pill_text"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/transaction_limit_pill"
-                        android:textColor="@color/ink"
-                        android:textSize="12sp" />
-
-                    <ImageView
-                        android:layout_width="14dp"
-                        android:layout_height="14dp"
-                        android:layout_marginStart="4dp"
-                        android:contentDescription="Chi tiết"
-                        android:src="@drawable/ic_chevron_right"
-                        app:tint="@color/ink_muted" />
-                </LinearLayout>
 
                 <TextView
                     android:id="@+id/account_status_text"
@@ -347,101 +317,6 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- 4. Hatched Progress Bar Card (Signature Component) -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:background="@drawable/glass_panel_card"
-                android:elevation="4dp"
-                android:orientation="vertical"
-                android:padding="18dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/monthly_limit"
-                        android:textColor="@color/ink"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/limit_ratio_text"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/monthly_limit_val"
-                        android:textColor="@color/ink_muted"
-                        android:textSize="13sp" />
-                </LinearLayout>
-
-                <com.example.final_term.ui.common.HatchedProgressBar
-                    android:id="@+id/home_hatched_progress"
-                    android:layout_width="match_parent"
-                    android:layout_height="20dp"
-                    android:layout_marginTop="12dp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="64% hạn mức đã sử dụng trong tháng"
-                    android:textColor="@color/ink_muted"
-                    android:textSize="11sp" />
-            </LinearLayout>
-
-            <!-- 5. Income / Spending Activity Chart (Signature Component) -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="18dp"
-                android:background="@drawable/glass_panel_card"
-                android:elevation="4dp"
-                android:orientation="vertical"
-                android:padding="18dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/income_activity"
-                        android:textColor="@color/ink"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:background="@drawable/badge_status_success"
-                        android:paddingStart="8dp"
-                        android:paddingTop="3dp"
-                        android:paddingEnd="8dp"
-                        android:paddingBottom="3dp"
-                        android:text="↗ +4,2%"
-                        android:textColor="@color/success"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
-
-                <com.example.final_term.ui.common.SignatureBarChartView
-                    android:id="@+id/home_bar_chart"
-                    android:layout_width="match_parent"
-                    android:layout_height="110dp"
-                    android:layout_marginTop="12dp" />
-            </LinearLayout>
-
             <!-- 6. Recent Transactions Panel -->
             <LinearLayout
                 android:layout_width="match_parent"
@@ -526,6 +401,13 @@
                     app:strokeColor="@color/glass_border"
                     app:strokeWidth="1dp" />
             </LinearLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/chat_button"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Trợ lý Nimbus" />
 
             <!-- Notifications Container for compatibility -->
             <LinearLayout

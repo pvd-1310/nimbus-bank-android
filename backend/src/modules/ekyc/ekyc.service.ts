@@ -60,7 +60,6 @@ const imageFailures = new Set([
   "MULTIPLE_FACES", "FACE_LOW_QUALITY", "FACE_DETECTION_UNCERTAIN", "FACE_TOO_SMALL",
   "FACE_CROPPED", "FACE_LANDMARKS_INVALID", "FACE_EXPOSURE", "FACE_BLURRY",
   "FACE_EMBEDDING_INVALID", "FACE_ID_MISMATCH",
-  "FACE_SETUP_REQUIRED", "FACE_TIMEOUT", "FACE_BUSY", "SETUP_REQUIRED",
 ]);
 
 function response(record: EvidenceRecord, officer = false) {
@@ -245,8 +244,9 @@ export class Evidence {
         if (current !== record) t.set(requestPath(record.requestId), current);
         return { ...response(current, officer), _cursor: row._cursor };
       });
-      return { ...page(items, query),
-        captureMode: this.captureMode };
+      const submissionStatus = !this.provider ? "STORAGE_SETUP_REQUIRED"
+        : !this.bank.options.face ? "FACE_SETUP_REQUIRED" : "CONFIGURED";
+      return { ...page(items, query), captureMode: this.captureMode, submissionStatus };
     });
   }
 

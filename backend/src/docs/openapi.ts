@@ -78,6 +78,7 @@ const endpoints: [string, string, string, unknown?][] = [
     "Validate and freeze internal transfer",
     transfer,
   ],
+  ["get", "/transfers/by-request/{id}", "Recover an owned transfer by original request ID"],
   ["get", "/intents/{id}", "Read intent, face, challenge and settlement status without returning the code"],
   ["post", "/intents/{id}/cancel", "Cancel an uncommitted intent and invalidate its challenge"],
   ["post", "/intents/{id}/face", "Verify a fresh camera image against the actor's approved face template"],
@@ -104,7 +105,18 @@ const endpoints: [string, string, string, unknown?][] = [
     }),
   ],
   ["get", "/money-requests", "Owned money requests"],
-  ["post", "/external-transfers", "Unavailable until provider configured"],
+  ["get", "/money-requests/by-request/{id}", "Recover an owned money request by original request ID"],
+  ["post", "/money-requests/intents", "Create a cash movement intent for a demo checking account",
+    object({ requestId: id, accountId: id, amountMinor: integer, currency: text,
+      type: { enum: ["DEPOSIT", "WITHDRAWAL"] } })],
+  ["post", "/external-transfers", "Quote a simulated transfer with DEMO_BANK and a sandbox beneficiary",
+    object({ requestId: id, accountId: id, amountMinor: integer, currency: text,
+      bankCode: { const: "DEMO_BANK" }, beneficiaryAccount: { enum: ["0000000001", "0000000002"] } })],
+  ["get", "/demo-movements/by-request/{id}", "Recover an owned demo movement by original request ID"],
+  ["post", "/demo-movements/{id}/commit", "Consume OTP and required face step-up, start simulated processing"],
+  ["post", "/demo-movements/{id}/reconcile", "Resolve simulated processing and post balanced demo ledger if successful"],
+  ["post", "/chatbot", "Authenticate customer and reply with optional allowlisted navigation",
+    object({ message: { type: "string", minLength: 1, maxLength: 300 } })],
   ["get", "/notifications", "Owned notifications"],
   ["post", "/notifications/{id}/read", "Acknowledge notification"],
   [
@@ -135,6 +147,11 @@ const endpoints: [string, string, string, unknown?][] = [
   ["post", "/ekyc/{id}/submit", "FULL_ID screens confirmed CCCD front/back and selfie; DEMO_SELFIE_ONLY screens confirmed selfie only without identity verification. VERIFIED activates customer; REVIEWING can be retried after provider failure"],
   ["get", "/ekyc/{id}/evidence/{index}", "Temporary download of owner evidence"],
   ["get", "/bills", "Owned invoices"],
+  ["get", "/bills/lookup/{ref}", "Look up an invoice ID or reference within the caller's invoices"],
+  ["get", "/payment-intents/by-request/{id}", "Recover the Stripe checkout intent by request ID"],
+  ["get", "/demo-payment-intents/by-request/{id}", "Recover the simulator checkout intent by request ID"],
+  ["post", "/demo-payments/intents", "Quote an owned demo invoice for OTP and policy-required step-up", payment],
+  ["post", "/demo-payments", "Settle an owned demo invoice after OTP and policy-required step-up", payment],
   [
     "post",
     "/payments/intents",
@@ -153,14 +170,19 @@ const endpoints: [string, string, string, unknown?][] = [
       productId: id,
       quantity: { type: "integer", minimum: 1, maximum: 10 },
       customerDetails: text,
-    }),
+      expectedAmountMinor: { type: "integer", minimum: 1 },
+      expectedCurrency: { type: "string", pattern: "^[A-Z]{3}$" },
+    }, ["requestId", "productId", "quantity", "customerDetails"]),
   ],
-  ["get", "/orders", "Owned orders"],
+  ["get", "/orders", "Owned orders with payment and fulfillment status"],
+  ["get", "/orders/{id}", "Owned order with payment and fulfillment status"],
+  ["get", "/orders/by-request/{id}", "Recover an owned order by original request ID"],
+  ["get", "/officer/rate-policies", "List stored rate policy versions with RATE_UPDATE permission"],
   ["get", "/branches", "Active branch directory"],
   [
     "post",
     "/branches/routes",
-    "Walking route to a selected active branch or the nearest branch by walking distance",
+    "Walking route to a selected active branch or the shortest returned walking route among up to 20 active valid branches",
     object(
       {
         latitude: { type: "number", minimum: -90, maximum: 90 },
@@ -274,7 +296,7 @@ paths["/intents/{id}/verify-otp"].post.responses["200"] = jsonResult(object({
   authorized: { const: true }, status: { const: "VERIFIED" },
 }), "Authorization is available for a single commit");
 const intentStatus = {
-  id, intentId: id, kind: { enum: ["TRANSFER", "PAYMENT"] }, sourceId: text,
+  id, intentId: id, kind: { enum: ["TRANSFER", "PAYMENT", "DEMO_MOVEMENT"] }, sourceId: text,
   target: object({ kind: { enum: ["ACCOUNT", "BILL"] }, id }),
   amountMinor: integer, feeMinor: integer, currency: text,
   expiresAt: integer, faceRequired: { type: "boolean" },
@@ -282,9 +304,11 @@ const intentStatus = {
   challengeStatus: { enum: ["REQUIRED", "AWAITING_CODE", "VERIFIED", "EXPIRED", "LOCKED", "USED", "CANCELLED"] },
   status: { enum: ["CREATED", "EXPIRED", "CANCELLED", "COMMIT_PENDING", "COMMITTED", "FAILED"] },
   failureCode: text,
+  demo: { type: "boolean" },
+  providerReference: { type: ["string", "null"] },
 };
 paths["/intents/{id}"].get.responses["200"] = jsonResult(
-  object(intentStatus, Object.keys(intentStatus).filter((field) => field !== "failureCode")),
+  object(intentStatus, Object.keys(intentStatus).filter((field) => !["failureCode", "demo", "providerReference"].includes(field))),
   "Authoritative status for timeout recovery",
 );
 for (const path of ["/auth/face-login", "/intents/{id}/face"]) {

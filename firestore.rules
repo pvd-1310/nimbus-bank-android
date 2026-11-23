@@ -6,8 +6,18 @@ service cloud.firestore {
     function isSelf(uid) { return signedIn() && request.auth.uid == uid; }
     function isActiveOfficer() {
       return signedIn()
+        && request.auth.token.role == 'OFFICER'
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'OFFICER'
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true;
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true
+        && (!('status' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data)
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'ACTIVE');
+    }
+    function officerHas(permission) {
+      return isActiveOfficer()
+        && request.auth.token.permissions is list
+        && permission in request.auth.token.permissions
+        && get(/databases/$(database)/documents/officers/$(request.auth.uid)).data.active == true
+        && permission in get(/databases/$(database)/documents/officers/$(request.auth.uid)).data.permissions;
     }
     function isActiveCustomer() {
       return signedIn()
@@ -16,40 +26,39 @@ service cloud.firestore {
         && (!('status' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data)
           || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'ACTIVE');
     }
-    function canReadBankingData() { return isActiveCustomer() || isActiveOfficer(); }
 
     match /users/{uid} {
-      allow read: if isSelf(uid) || isActiveOfficer();
+      allow read: if isSelf(uid) || officerHas("CUSTOMER_ADMIN");
       allow create, update, delete: if false;
     }
 
     match /customers/{uid} {
-      allow read: if isSelf(uid) || isActiveOfficer();
+      allow read: if isSelf(uid) || officerHas("CUSTOMER_ADMIN");
       allow write: if false;
     }
 
     match /officers/{uid} {
-      allow read: if isSelf(uid) || isActiveOfficer();
+      allow read: if isSelf(uid);
       allow write: if false;
     }
 
     match /accounts/{accountId} {
-      allow read: if canReadBankingData() && (resource.data.ownerUid == request.auth.uid || isActiveOfficer());
+      allow read: if (isActiveCustomer() && resource.data.ownerUid == request.auth.uid) || officerHas("CUSTOMER_ADMIN");
       allow write: if false;
     }
 
     match /transactions/{transactionId} {
-      allow read: if canReadBankingData() && (resource.data.ownerUid == request.auth.uid || isActiveOfficer());
+      allow read: if (isActiveCustomer() && resource.data.ownerUid == request.auth.uid) || officerHas("AUDIT_READ");
       allow write: if false;
     }
 
     match /notifications/{notificationId} {
-      allow read: if canReadBankingData() && (resource.data.ownerUid == request.auth.uid || isActiveOfficer());
+      allow read: if isActiveCustomer() && resource.data.ownerUid == request.auth.uid;
       allow write: if false;
     }
 
     match /auditLogs/{auditId} {
-      allow read: if isActiveOfficer();
+      allow read: if false;
       allow write: if false;
     }
 

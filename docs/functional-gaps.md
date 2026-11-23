@@ -1,5 +1,7 @@
 # Các chức năng còn thiếu và chưa hoàn thiện
 
+> Đây là danh sách thiếu sót dùng làm mốc ban đầu. Đọc [đối chiếu đề bài, trạng thái sau triển khai và checklist](final-project-assessment.md) để xem các thay đổi và mục còn mở.
+
 ## Phạm vi đánh giá
 
 Tài liệu này chỉ theo dõi các chức năng được yêu cầu trong đề bài và SRS còn thiếu, mới có một phần, hoặc chưa được chứng minh là hoạt động hoàn chỉnh trong mã hiện tại. Đây là đánh giá tĩnh dựa trên mã Android, backend và tài liệu dự án; trạng thái triển khai dịch vụ ngoài (Firebase, S3, Stripe, Google Routes) cần được xác minh riêng trong môi trường chạy.

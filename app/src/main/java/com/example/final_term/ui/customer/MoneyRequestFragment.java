@@ -106,6 +106,11 @@ public final class MoneyRequestFragment extends Fragment {
         binding.statusText.setText(pendingBody == null ? "Đang tải tài khoản…" :
                 "Chưa xác nhận được yêu cầu trước. Gửi lại để kiểm tra cùng mã yêu cầu.");
         binding.submitButton.setOnClickListener(v -> submit());
+        binding.demoSettlementButton.setOnClickListener(v -> {
+            Bundle args = new Bundle();
+            args.putString("demoCashOperation", binding.operationInput.getSelectedItemPosition() == 1 ? WITHDRAWAL : DEPOSIT);
+            androidx.navigation.Navigation.findNavController(v).navigate(R.id.transfer, args);
+        });
         binding.historyButton.setOnClickListener(v -> openHistory());
         updateControls();
         app.getAuthRepository().observeAuthState().observe(getViewLifecycleOwner(), auth -> {
@@ -161,7 +166,8 @@ public final class MoneyRequestFragment extends Fragment {
 
     private void submit() {
         if (sending || uid == null) return;
-        if (pendingBody == null) {
+        boolean retry = pendingBody != null;
+        if (!retry) {
             int index = binding.accountInput.getSelectedItemPosition();
             if (index < 0 || index >= accountIds.size()) return;
             String amount = binding.amountInput.getText().toString().trim();
@@ -188,9 +194,26 @@ public final class MoneyRequestFragment extends Fragment {
         String currentUid = uid;
         String requestBody = pendingBody;
         sending = true;
-        binding.statusText.setText("Đang gửi yêu cầu…");
+        binding.statusText.setText(retry ? "Đang tra cứu yêu cầu cũ…" : "Đang gửi yêu cầu…");
         updateControls();
-        api.post(PATH, requestBody).addOnCompleteListener(task -> {
+        com.google.android.gms.tasks.Task<BackendApiClient.Response> submission;
+        if (retry) {
+            try {
+                String requestId = new JSONObject(requestBody).getString("requestId");
+                submission = api.get(PATH + "/by-request/" + requestId).continueWithTask(task -> {
+                    if (!task.isSuccessful()) throw task.getException();
+                    return task.getResult().statusCode == 404 ? api.post(PATH, requestBody)
+                            : com.google.android.gms.tasks.Tasks.forResult(task.getResult());
+                });
+            } catch (JSONException error) {
+                sending = false;
+                clearPending();
+                updateControls();
+                binding.statusText.setText("Không đọc được mã yêu cầu cũ.");
+                return;
+            }
+        } else submission = api.post(PATH, requestBody);
+        submission.addOnCompleteListener(task -> {
             if (binding != currentView || pendingBody != requestBody || !Objects.equals(uid, currentUid)) return;
             sending = false;
             if (task.isSuccessful()) {

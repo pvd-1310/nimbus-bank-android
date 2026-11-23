@@ -210,6 +210,28 @@ it.skipIf(!enabled)(
         },
       );
       expect(write.status).toBe(403);
+      const officerUid = uid + "_officer";
+      const officerEmail = officerUid + "@example.com";
+      await auth.createUser({ uid: officerUid, email: officerEmail, password });
+      await auth.setCustomUserClaims(officerUid, { role: "OFFICER", permissions: ["CUSTOMER_ADMIN", "AUDIT_READ"] });
+      await db.doc("users/" + officerUid).set({ role: "OFFICER", active: true });
+      await db.doc("officers/" + officerUid).set({ active: true, permissions: ["AUDIT_READ"] });
+      await db.doc("accounts/" + uid).set({ ownerUid: uid, balanceMinor: 100 });
+      await db.doc("auditLogs/" + uid).set({ actorUid: uid, action: "FIXTURE" });
+      const officerSignIn = await fetch(
+        "http://" + process.env.FIREBASE_AUTH_EMULATOR_HOST +
+          "/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo",
+        { method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ email: officerEmail, password, returnSecureToken: true }) },
+      );
+      expect(officerSignIn.ok).toBe(true);
+      const officerLogin = (await officerSignIn.json()) as { idToken: string };
+      const headers = { Authorization: "Bearer " + officerLogin.idToken };
+      const firestoreUrl = "http://" + process.env.FIRESTORE_EMULATOR_HOST +
+        "/v1/projects/" + projectId + "/databases/(default)/documents";
+      expect((await fetch(firestoreUrl + "/accounts/" + uid, { headers })).status).toBe(403);
+      expect((await fetch(firestoreUrl + "/auditLogs/" + uid, { headers })).status).toBe(403);
+      expect((await fetch("http://127.0.0.1:3197/officer/audit", { headers })).status).toBe(200);
     } finally {
       child.kill("SIGTERM");
       await db.terminate();
@@ -225,13 +247,7 @@ it.skipIf(!enabled)(
     const app = initializeApp({ projectId }, "integration-" + Date.now());
     const db = getFirestore(app);
     const s = new FirestoreStore(db);
-    let otp = "";
-    const b = new Banking(s, {
-      otpSecret: "test",
-      deliver: async (_u, c) => {
-        otp = c;
-      },
-    });
+    const b = new Banking(s, { otpSecret: "test" });
     const suffix = String(Date.now()),
       uid = "user_" + suffix,
       src = "source_" + suffix,
@@ -268,8 +284,8 @@ it.skipIf(!enabled)(
           amountMinor: 700,
           currency: "VND",
         });
-        await b.transfers.challenge(a, i.id);
-        await b.transfers.verify(a, i.id, otp);
+        const otp = await b.security.challenge(a, i.id);
+        await b.security.verify(a, i.id, otp.challengeId, otp.code);
         intents.push(i);
       }
       const outcomes = await Promise.allSettled(
