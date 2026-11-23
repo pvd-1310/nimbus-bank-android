@@ -169,7 +169,7 @@ it.skipIf(!enabled)(
       const response = await fetch(
         "http://" +
           process.env.FIREBASE_AUTH_EMULATOR_HOST +
-          "/identitytoolkit.googleapis.com/accounts:signInWithPassword?key=demo",
+          "/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo",
         {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -192,7 +192,7 @@ it.skipIf(!enabled)(
       const write = await fetch(
         "http://" +
           process.env.FIRESTORE_EMULATOR_HOST +
-          "/projects/" +
+          "/v1/projects/" +
           projectId +
           "/databases/(default)/documents/accounts/illegal",
         {

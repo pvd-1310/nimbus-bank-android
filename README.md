@@ -18,9 +18,9 @@ Firestore có SDK cho Android; không cần đi qua backend để đọc mọi d
 | --- | --- |
 | Đăng nhập và dữ liệu tài khoản | Android có đăng nhập email/mật khẩu, điều hướng theo vai trò, hồ sơ chỉ đọc, danh sách tài khoản, thông báo và lịch sử giao dịch. Màn tiết kiệm và khoản vay mới hiển thị tổng quan; API tính lãi và lịch trả nợ chưa được nối vào màn hình. |
 | Chuyển tiền và nạp/rút | Android đã nối API chuyển nội bộ và yêu cầu nạp/rút. Yêu cầu nạp/rút ở trạng thái `REQUESTED` không làm thay đổi số dư. OTP hiện là cơ chế demo, chưa phải OTP production. Chuyển liên ngân hàng chưa tích hợp. |
-| Nhân viên ngân hàng | Có màn xem tài khoản và lịch sử. Các màn duyệt eKYC, audit và chính sách lãi suất chưa nối API. Backend có mã cho quản trị hồ sơ khách hàng, audit và cập nhật chính sách lãi suất. |
+| Nhân viên ngân hàng | Có màn xem tài khoản và lịch sử, tạo hồ sơ khách hàng, sửa tên, xem audit và thẩm định eKYC. Các thao tác REST yêu cầu quyền tương ứng trên backend. |
 | Thanh toán và tiện ích | Backend có Stripe test mode, webhook và xử lý đơn demo; Android chưa có checkout. |
-| eKYC, bản đồ và chatbot | Module eKYC backend đang thiếu. Backend có danh mục chi nhánh nhưng chưa tính tuyến đường; chatbot chưa triển khai. |
+| eKYC, bản đồ và chatbot | Android có luồng nộp ảnh eKYC và màn thẩm định thủ công; cần bucket S3 riêng tư bật versioning để trao đổi ảnh. Màn chi nhánh dùng Google Maps và Google Routes để hiển thị tuyến đi bộ; chatbot chưa triển khai. |
 
 ## Cài đặt và chạy
 
@@ -28,14 +28,12 @@ Firestore có SDK cho Android; không cần đi qua backend để đọc mọi d
 
 1. Mở thư mục gốc bằng Android Studio. Cài Android SDK API 37 qua SDK Manager; dự án hiện đặt `minSdk`, `targetSdk` và `compileSdk` là 37. Dùng thiết bị hoặc emulator chạy API 37 trở lên.
 2. Đăng ký ứng dụng `com.example.final_term` trong Firebase và đặt `google-services.json` vào `app/`. Gradle yêu cầu tệp này ngay khi cấu hình dự án. Xem [hướng dẫn Firebase](docs/firebase-setup.md) để bật Email/Password, thiết lập dữ liệu và triển khai rules/indexes trên project thử nghiệm.
-3. Nếu chạy cùng API local với cổng mẫu `3000`, thêm `backendBaseUrl=http://10.0.2.2:3000` vào `local.properties` với Android Emulator. Nếu không cấu hình, app Debug mặc định gọi `http://10.0.2.2:3001`. Khi build để phát hành, cấu hình URL backend HTTPS.
+3. Giữ mặc định `http://10.0.2.2:3001` nếu chạy Docker Compose, hoặc đặt `backendBaseUrl=http://10.0.2.2:3000` trong `local.properties` nếu chạy API trực tiếp trên cổng mẫu `3000`. Khi phát hành, dùng URL HTTPS của backend. Không thêm `/v1` vào URL.
 4. Sync Gradle và chạy cấu hình `app`. Android hiện không tự chuyển Firebase Auth/Firestore sang Firebase Emulator; để kiểm thử luồng REST từ app, cấu hình app và backend dùng cùng Firebase project thử nghiệm và cấp custom claims phù hợp cho tài khoản demo.
 
 ### Backend
 
-**Checkout hiện thiếu** `backend/src/modules/ekyc/ekyc.routes.ts`, `ekyc.service.ts` và `s3.provider.ts`. Các entrypoint vẫn import chúng, nên cần khôi phục module này trước khi build và chạy API.
-
-Sau khi khôi phục module, cài Node.js 22 trở lên, rồi chạy trong `backend/`:
+Cài Node.js 22 trở lên, rồi chạy các lệnh sau trong `backend/`:
 
 ```sh
 npm ci
@@ -45,6 +43,8 @@ npm run dev
 ```
 
 Trước `npm run dev`, sao chép [`backend/.env.example`](backend/.env.example) thành `backend/.env`, điền cấu hình và khởi động Firebase Auth/Firestore Emulator nếu dùng `APP_MODE=emulator`. Xem [README backend](backend/README.md) để chọn chế độ emulator hoặc connected, cấu hình providers và seed dữ liệu. Khi API chạy trên cổng mẫu, `GET http://127.0.0.1:3000/health` kiểm tra tiến trình và `GET http://127.0.0.1:3000/openapi.json` xem hợp đồng API.
+
+`/health` kiểm tra tiến trình HTTP, không xác nhận Firebase hay S3 đã được cấu hình. Các route nghiệp vụ như `/accounts`, `/ekyc` và `/officer/customers/:id` không có tiền tố `/v1`.
 
 Không commit `.env`, `google-services.json`, Firebase Admin credentials, khóa ký APK, khóa provider hoặc ảnh eKYC. Chỉ dùng dữ liệu tổng hợp cho demo.
 

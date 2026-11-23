@@ -20,6 +20,15 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Final_term">
         <meta-data android:name="com.google.android.geo.API_KEY" android:value="${MAPS_API_KEY}" />
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.ekyc-camera"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/ekyc_camera_paths" />
+        </provider>
         <activity
             android:name=".MainActivity"
             android:exported="true"

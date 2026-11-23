@@ -5,6 +5,7 @@ import com.example.final_term.BuildConfig;
 import com.google.android.gms.tasks.Task;
 import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -13,6 +14,12 @@ import java.net.URL;
 import java.util.Iterator;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.ResponseBody;
 import org.json.JSONObject;
 
 /** Authenticated production REST transport. Money is never mutated locally. */
@@ -22,107 +29,55 @@ public final class BackendApiClient {
         public final String body;
         Response(int statusCode, String body) { this.statusCode = statusCode; this.body = body; }
     }
+    private static final MediaType JSON = MediaType.get("application/json");
+    private static final String BASE_URL = BuildConfig.BACKEND_BASE_URL.replaceFirst("/+$", "");
+    private final OkHttpClient http = new OkHttpClient.Builder()
+            .connectTimeout(5, TimeUnit.SECONDS)
+            .readTimeout(5, TimeUnit.SECONDS)
+            .writeTimeout(5, TimeUnit.SECONDS)
+            .followRedirects(false)
+            .retryOnConnectionFailure(false)
+            .build();
     private final FirebaseAuth auth;
     private final ExecutorService executor = Executors.newFixedThreadPool(2);
 
     public BackendApiClient(FirebaseAuth auth) { this.auth = auth; }
 
     public Task<Response> get(@NonNull String path) {
-        if (auth == null || auth.getCurrentUser() == null)
-            return Tasks.forException(new IllegalStateException("BACKEND_AUTH_REQUIRED"));
-        return auth.getCurrentUser().getIdToken(false).continueWithTask(tokenTask -> {
-            if (!tokenTask.isSuccessful() || tokenTask.getResult() == null)
-                throw tokenTask.getException() == null
-                        ? new IllegalStateException("BACKEND_TOKEN_UNAVAILABLE") : tokenTask.getException();
-            return Tasks.call(executor, () -> executeGet(path, tokenTask.getResult().getToken()));
-        });
+        return request("GET", path, null);
     }
 
     public Task<Response> post(@NonNull String path, @NonNull String jsonBody) {
-        if (auth == null || auth.getCurrentUser() == null)
-            return Tasks.forException(new IllegalStateException("BACKEND_AUTH_REQUIRED"));
-        return auth.getCurrentUser().getIdToken(false).continueWithTask(tokenTask -> {
-            if (!tokenTask.isSuccessful() || tokenTask.getResult() == null)
-                throw tokenTask.getException() == null
-                        ? new IllegalStateException("BACKEND_TOKEN_UNAVAILABLE") : tokenTask.getException();
-            return Tasks.call(executor, () -> executePost(path, tokenTask.getResult().getToken(), jsonBody));
-        });
+        return request("POST", path, jsonBody);
     }
 
     public Task<Response> patch(@NonNull String path, @NonNull String jsonBody) {
-        if (auth == null || auth.getCurrentUser() == null)
-            return Tasks.forException(new IllegalStateException("BACKEND_AUTH_REQUIRED"));
-        return auth.getCurrentUser().getIdToken(false).continueWithTask(tokenTask -> {
-            if (!tokenTask.isSuccessful() || tokenTask.getResult() == null)
+        return request("PATCH", path, jsonBody);
+    }
+
+    private Task<Response> request(String method, String path, String jsonBody) {
+        FirebaseUser user = auth == null ? null : auth.getCurrentUser();
+        if (user == null) return Tasks.forException(new IllegalStateException("BACKEND_AUTH_REQUIRED"));
+        return user.getIdToken(false).continueWithTask(tokenTask -> {
+            if (!tokenTask.isSuccessful()) {
                 throw tokenTask.getException() == null
                         ? new IllegalStateException("BACKEND_TOKEN_UNAVAILABLE") : tokenTask.getException();
-            return Tasks.call(executor, () -> executePatch(path, tokenTask.getResult().getToken(), jsonBody));
-        });
-    }
-
-    private Response executeGet(String path, String token) throws Exception {
-        return execute(path, token, "GET", null);
-    }
-
-    private Response executePost(String path, String token, String jsonBody) throws Exception {
-        return execute(path, token, "POST", jsonBody);
-    }
-
-    private Response executePatch(String path, String token, String jsonBody) throws Exception {
-        try {
-            return execute(path, token, "PATCH", jsonBody);
-        } catch (java.net.ProtocolException e) {
-            HttpURLConnection connection = (HttpURLConnection) new URL(BuildConfig.BACKEND_BASE_URL + path).openConnection();
-            connection.setRequestMethod("POST");
-            connection.setRequestProperty("X-HTTP-Method-Override", "PATCH");
-            connection.setConnectTimeout(5000);
-            connection.setReadTimeout(5000);
-            connection.setRequestProperty("Accept", "application/json");
-            connection.setRequestProperty("Authorization", "Bearer " + token);
-            connection.setDoOutput(true);
-            connection.setRequestProperty("Content-Type", "application/json");
-            try (java.io.OutputStream output = connection.getOutputStream()) {
-                output.write(jsonBody.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             }
-            int status = connection.getResponseCode();
-            InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
-            StringBuilder body = new StringBuilder();
-            if (stream != null) {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) body.append(line);
+            String token = tokenTask.getResult().getToken();
+            if (token == null) throw new IllegalStateException("BACKEND_TOKEN_UNAVAILABLE");
+            return Tasks.call(executor, () -> {
+                Request request = new Request.Builder()
+                        .url(BASE_URL + path)
+                        .header("Accept", "application/json")
+                        .header("Authorization", "Bearer " + token)
+                        .method(method, jsonBody == null ? null : RequestBody.create(jsonBody, JSON))
+                        .build();
+                try (okhttp3.Response response = http.newCall(request).execute()) {
+                    ResponseBody body = response.body();
+                    return new Response(response.code(), body == null ? "" : body.string());
                 }
-            }
-            connection.disconnect();
-            return new Response(status, body.toString());
-        }
-    }
-
-    private Response execute(String path, String token, String method, String jsonBody) throws Exception {
-        HttpURLConnection connection = (HttpURLConnection) new URL(BuildConfig.BACKEND_BASE_URL + path).openConnection();
-        connection.setRequestMethod(method);
-        connection.setConnectTimeout(5000);
-        connection.setReadTimeout(5000);
-        connection.setRequestProperty("Accept", "application/json");
-        connection.setRequestProperty("Authorization", "Bearer " + token);
-        if (jsonBody != null) {
-            connection.setDoOutput(true);
-            connection.setRequestProperty("Content-Type", "application/json");
-            try (java.io.OutputStream output = connection.getOutputStream()) {
-                output.write(jsonBody.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            }
-        }
-        int status = connection.getResponseCode();
-        InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
-        StringBuilder body = new StringBuilder();
-        if (stream != null) {
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
-                String line;
-                while ((line = reader.readLine()) != null) body.append(line);
-            }
-        }
-        connection.disconnect();
-        return new Response(status, body.toString());
+            });
+        });
     }
 
     public Task<Response> uploadToPresignedPost(@NonNull String uploadUrl, @NonNull JSONObject fields,

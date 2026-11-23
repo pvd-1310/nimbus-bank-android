@@ -82,6 +82,7 @@ dependencies {
     implementation(libs.firebase.firestore)
     implementation(libs.play.services.maps)
     implementation(libs.play.services.location)
+    implementation(libs.okhttp)
     testImplementation(libs.junit)
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.ext.junit)

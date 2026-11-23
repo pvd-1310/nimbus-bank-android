@@ -11,6 +11,8 @@ async function fixture() {
   const s = new MemoryStore();
   await s.run(async (t) => {
     t.set("users/alice", { role: "CUSTOMER", active: true });
+    t.set("users/officer", { role: "OFFICER", active: true });
+    t.set("officers/officer", { active: true, permissions: ["CUSTOMER_ADMIN"] });
     t.set("bankBranches/central", {
       active: true,
       name: "Central",
@@ -45,6 +47,8 @@ async function fixture() {
     evidence: new Evidence(b, undefined),
     payments: new Payments(b, undefined),
     authenticate: async (token) => {
+      if (token === "officer")
+        return { uid: "officer", role: "OFFICER", permissions: ["CUSTOMER_ADMIN"] };
       if (token !== "valid") throw Error("bad token");
       return { uid: "alice", role: "CUSTOMER", permissions: [] };
     },
@@ -150,6 +154,38 @@ it("accepts template transfer input and returns canonical intentId", async () =>
     });
   expect(r.status).toBe(200);
   expect(r.body.intentId).toBe(r.body.id);
+});
+it("requires an authorized officer to update a customer through the unversioned PATCH route", async () => {
+  const app = await fixture();
+  const path = "/officer/customers/alice";
+  const update = { fullName: "Alice Nguyen", reason: "Corrected legal name" };
+  await request(app).patch(path).set("Authorization", "Bearer valid").send(update).expect(403);
+  await request(app).patch("/v1" + path).set("Authorization", "Bearer officer").send(update).expect(404);
+  await request(app).patch(path).set("Authorization", "Bearer officer").send(update).expect(200);
+  const profile = await request(app).get("/me").set("Authorization", "Bearer valid").expect(200);
+  expect(profile.body.fullName).toBe(update.fullName);
+});
+it("mounts the unversioned eKYC routes and reports missing S3 configuration", async () => {
+  const app = await fixture();
+  const draft = await request(app)
+    .post("/ekyc")
+    .set("Authorization", "Bearer valid")
+    .send({ consented: true })
+    .expect(200);
+  const id = draft.body.id;
+  expect(id).toEqual(expect.any(String));
+  const own = await request(app)
+    .get("/ekyc?limit=1")
+    .set("Authorization", "Bearer valid")
+    .expect(200);
+  expect(own.body.items).toEqual([expect.objectContaining({ id, reviewStatus: "DRAFT" })]);
+  const ticket = await request(app)
+    .post(`/ekyc/${id}/uploads`)
+    .set("Authorization", "Bearer valid")
+    .send({ mime: "image/jpeg", bytes: 1000, index: 0 })
+    .expect(503);
+  expect(ticket.body.error).toBe("SETUP_REQUIRED");
+  await request(app).get("/officer/ekyc").set("Authorization", "Bearer officer").expect(403);
 });
 it("rejects privileged profile fields", async () => {
   const app = await fixture();

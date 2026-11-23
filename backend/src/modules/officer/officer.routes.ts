@@ -7,7 +7,6 @@ import { id } from "../../shared/validation.js";
 export function registerOfficerRoutes(route: Route, d: AppDependencies) {
   for (const [path, collection, permission] of [
     ["customers", "customers", "CUSTOMER_ADMIN"],
-    ["ekyc", "ekycRequests", "EKYC_REVIEW"],
     ["audit", "auditLogs", "AUDIT_READ"],
   ] as const)
     route("get", "/officer/" + path, async (a, r) =>

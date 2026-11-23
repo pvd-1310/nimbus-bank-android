@@ -22,7 +22,7 @@ service-account*.json
 .env.*
 
 # Sensitive demo artifacts
-eKYC/
+/eKYC/
 
 # Local Firebase Emulator output
 firestore-debug.log

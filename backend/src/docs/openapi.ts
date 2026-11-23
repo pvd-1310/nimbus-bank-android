@@ -106,25 +106,29 @@ const endpoints: [string, string, string, unknown?][] = [
   [
     "post",
     "/ekyc",
-    "Create consented draft",
+    "Create or resume a consented draft",
     object({ consented: { type: "boolean", const: true } }),
   ],
-  ["get", "/ekyc", "Owned eKYC requests"],
+  ["get", "/ekyc", "Owned eKYC requests, newest first"],
   [
     "post",
     "/ekyc/{id}/uploads",
     "Issue private S3 upload",
-    object({
-      mime: { enum: ["image/jpeg", "image/png"] },
-      bytes: { type: "integer", minimum: 1, maximum: 5000000 },
-    }),
+    object(
+      {
+        mime: { enum: ["image/jpeg", "image/png"] },
+        bytes: { type: "integer", minimum: 1, maximum: 5000000 },
+        index: { type: "integer", minimum: 0, maximum: 2 },
+      },
+      ["mime", "bytes"],
+    ),
   ],
   [
     "post",
     "/uploads/{id}/confirm",
     "Validate immutable uploaded object version",
   ],
-  ["post", "/ekyc/{id}/submit", "Submit two or more validated images"],
+  ["post", "/ekyc/{id}/submit", "Submit validated front/back images and optional selfie"],
   ["get", "/bills", "Owned invoices"],
   [
     "post",
@@ -211,7 +215,7 @@ for (const [method, path, summary, body] of endpoints) {
     name: m[1],
     in: "path",
     required: true,
-    schema: m[1] === "index" ? { type: "integer", minimum: 0 } : id,
+    schema: m[1] === "index" ? { type: "integer", minimum: 0, maximum: 2 } : id,
   }));
   if (
     method === "get" &&

@@ -85,7 +85,7 @@ npm run dev
 
 Lệnh seed đầu tiên chỉ xem trước; `--apply` tạo dữ liệu nếu chưa có và giữ nguyên số dư đã phát sinh. Tài khoản theo namespace mặc định: `local_demo.customer@example.com`, `local_demo.recipient@example.com`, `local_demo.officer@example.com`. Mật khẩu là `DEMO_PASSWORD` bạn tự đặt. Dữ liệu gồm checking/savings/mortgage, tài khoản người nhận, hóa đơn, danh mục dịch vụ và chi nhánh. Seed không có chức năng xóa dữ liệu.
 
-API: `http://127.0.0.1:3000`; health: `GET /health`; hợp đồng API: `GET /openapi.json`. Đăng nhập bằng Firebase Auth emulator rồi gửi ID token qua `Authorization: Bearer ...`. Auth emulator REST: `POST http://127.0.0.1:9099/identitytoolkit.googleapis.com/accounts:signInWithPassword?key=demo` với JSON `email`, `password`, `returnSecureToken: true`. Dùng `idToken` nhận được; không in token vào log hoặc chia sẻ.
+API: `http://127.0.0.1:3000`; health: `GET /health`; hợp đồng API: `GET /openapi.json`. Đăng nhập bằng Firebase Auth emulator rồi gửi ID token qua `Authorization: Bearer ...`. Auth emulator REST: `POST http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo` với JSON `email`, `password`, `returnSecureToken: true`. Tiền tố `/v1` ở đây thuộc Firebase, không thuộc API Nimbus. Không in hoặc chia sẻ ID token.
 
 OTP demo được giao vào file riêng `.local/otp/<intentId>.json` (quyền 0600), hết hạn cùng intent sau 5 phút. File này phục vụ demo trên máy, không đại diện cho SMS/2FA thật. Adapter này chỉ hoạt động với emulator và listener loopback. Connected mode yêu cầu provider OTP riêng trước khi giao dịch được bật.
 
@@ -146,8 +146,8 @@ Connected mode hiện cố ý yêu cầu OTP delivery provider thật. Có thể
 1. AWS Console → S3 → tạo bucket private trong region đã chọn; bật toàn bộ Block Public Access, encryption mặc định và **bucket versioning**.
 2. Tạo IAM principal chỉ cho prefix `ekyc/*` của bucket. Quyền cần: `s3:PutObject`, `s3:GetObject`, `s3:GetObjectVersion`. Không dùng root credentials. Cấu hình AWS profile trên máy hoặc credential chain phù hợp; không lưu AWS key vào Android.
 3. Đặt `AWS_REGION`, `AWS_PROFILE`, `S3_BUCKET` trong `.env`, restart API. Dùng ảnh giả cho demo.
-4. Tạo request với `{"consented":true}`, xin upload với `mime` (`image/jpeg`/`image/png`) và `bytes` chính xác, gửi multipart form theo `upload.url` và `upload.fields`, file ở field `file`.
-5. Gọi confirm ticket; backend kiểm tra kích thước, MIME, header ảnh và lưu object version. Upload ít nhất hai ảnh trước submit. Officer cần claim và server permission `EKYC_REVIEW` để đọc/xét duyệt.
+4. Tạo hoặc mở lại bản nháp với `{"consented":true}`. Xin vé tải lên với `mime` (`image/jpeg` hoặc `image/png`), `bytes` chính xác và `index` (0: mặt trước, 1: mặt sau, 2: selfie). Gửi multipart form theo `upload.url` và `upload.fields`, tệp ở trường `file`.
+5. Gọi confirm ticket; backend kiểm tra kích thước, MIME, header ảnh và cố định phiên bản đối tượng. API yêu cầu hai mặt giấy tờ đã xác nhận khi submit; Android thu cả selfie. Officer cần quyền `EKYC_REVIEW` trong claim và hồ sơ server để xem ảnh hoặc thẩm định.
 6. Đặt lifecycle cho upload bỏ dở và phiên bản cũ sau khi thống nhất thời hạn lưu bằng chứng. Chưa có job tự xóa ảnh trong code; không bật lifecycle ngắn có thể xóa ảnh đang xét duyệt.
 
 URL upload sống 180 giây; URL đọc officer sống 120 giây. S3 không thực hiện nhận dạng khuôn mặt. Demo dùng quyết định của officer. AWS có cơ chế tính phí riêng, không nằm trong Firebase Spark.
