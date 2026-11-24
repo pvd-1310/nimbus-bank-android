@@ -10,24 +10,42 @@ const permissions = [
   "RATE_UPDATE",
   "AUDIT_READ",
 ];
-const identities = [
+type SeedIdentity = {
+  id: string;
+  email: string;
+  role: "CUSTOMER" | "OFFICER";
+  fullName: string;
+  phoneMasked: string;
+  customerNo?: string;
+  address?: string;
+  staffCode?: string;
+};
+const identities: SeedIdentity[] = [
   {
     id: ns + "_customer",
     email: ns + ".customer@example.com",
     role: "CUSTOMER",
-    fullName: "Khách hàng demo",
+    fullName: "Nguyễn Minh Anh",
+    phoneMasked: "•••• 4821",
+    customerNo: "KH-028451",
+    address: "18 Nguyễn Văn Linh, phường Tân Phong, TP. Hồ Chí Minh",
   },
   {
     id: ns + "_recipient",
     email: ns + ".recipient@example.com",
     role: "CUSTOMER",
-    fullName: "Người nhận demo",
+    fullName: "Trần Quốc Bảo",
+    phoneMasked: "•••• 7364",
+    customerNo: "KH-028452",
+    address: "42 Lê Văn Sỹ, phường 13, TP. Hồ Chí Minh",
   },
   {
     id: ns + "_officer",
     email: ns + ".officer@example.com",
     role: "OFFICER",
-    fullName: "Nhân viên demo",
+    fullName: "Lê Thu Hà",
+    phoneMasked: "•••• 1958",
+    staffCode: "NV-01427",
   },
 ];
 try {
@@ -50,7 +68,7 @@ try {
   );
   if (!apply)
     console.log(
-      "Dry run only. Use --apply after checking the project and namespace. Existing records are preserved.",
+      "Dry run only. Use --apply after checking the project and namespace. Login identities and mutable account/payment state are retained; descriptive fixture data in this namespace may be refreshed.",
     );
   else {
     check(
@@ -86,7 +104,7 @@ try {
           role: u.role,
           fullName: u.fullName,
           emailMasked: u.email.replace(/^(.).*(@.*)$/, "$1***$2"),
-          phoneMasked: null,
+          phoneMasked: u.phoneMasked,
           status: old?.status ?? "ACTIVE",
           createdAt: old?.createdAt ?? Date.now(),
           active: true,
@@ -94,9 +112,12 @@ try {
         });
         const collection = u.role === "OFFICER" ? "officers" : "customers";
         const profile = await t.get(collection + "/" + u.id);
+        check(!profile || profile.demoNamespace === ns, "SEED_TARGET_NOT_DEMO");
         t.set(collection + "/" + u.id, {
           ...profile,
           uid: u.id,
+          fullName: u.fullName,
+          phoneMasked: u.phoneMasked,
           active: true,
           permissions: u.role === "OFFICER" ? permissions : [],
           kycStatus: profile?.kycStatus ?? "NOT_SUBMITTED",
@@ -104,127 +125,216 @@ try {
           uidRef: u.id,
           ...(u.role === "OFFICER"
             ? {
-                staffCode: profile?.staffCode ?? "DEMO_" + ns,
-                branchId: profile?.branchId ?? ns + "_branch",
+                staffCode: u.staffCode,
+                branchId: ns + "_branch",
               }
             : {
-                customerNo: profile?.customerNo ?? "DEMO_" + u.id,
-                address: profile?.address ?? "Demo fixture",
+                customerNo: u.customerNo,
+                address: u.address,
                 createdBy: profile?.createdBy ?? "TRUSTED_SEED",
               }),
         });
       });
     }
     await r.bank.store.run(async (t) => {
-      const create = async (path: string, data: Record<string, unknown>) => {
-        if (!(await t.get(path)))
-          t.set(path, { ...data, demo: true, demoNamespace: ns });
+      const upsertDemo = async (
+        path: string,
+        data: Record<string, unknown>,
+        allowLegacyOwned = false,
+      ) => {
+        const old = await t.get(path);
+        check(
+          !old || old.demoNamespace === ns ||
+            (allowLegacyOwned && old.demoNamespace === undefined && old.demo !== true),
+          "SEED_TARGET_NOT_DEMO",
+        );
+        t.set(path, {
+          ...old,
+          ...data,
+          ...(old?.createdAt === undefined ? {} : { createdAt: old.createdAt }),
+          ...(old?.openedAt === undefined ? {} : { openedAt: old.openedAt }),
+          ...(old?.maturityAt === undefined ? {} : { maturityAt: old.maturityAt }),
+          demo: true,
+          demoNamespace: ns,
+        });
+      };
+      const refreshBill = async (path: string, data: Record<string, unknown>) => {
+        const old = await t.get(path);
+        check(!old || old.demoNamespace === ns, "SEED_TARGET_NOT_DEMO");
+        const preserveAmount = !!old && old.status !== "UNPAID";
+        t.set(path, {
+          ...old,
+          ...data,
+          status: old?.status ?? "UNPAID",
+          ...(preserveAmount ? { amountMinor: old?.amountMinor } : {}),
+          demo: true,
+          demoNamespace: ns,
+        });
       };
       const ownerUid = identities[0].id;
-      for (const type of ["CHECKING", "SAVINGS", "MORTGAGE"])
-        await create("accounts/" + ns + "_" + type.toLowerCase(), {
+      const seedAccount = async (id: string, data: Record<string, unknown>) => {
+        const path = "accounts/" + id;
+        const old = await t.get(path);
+        check(!old || old.demoNamespace === ns, "SEED_TARGET_NOT_DEMO");
+        const version = Number(old?.version ?? 0);
+        const baseline = data.availableMinor as number;
+        const account = {
+          ...old,
+          ...data,
+          availableMinor: version > 0 ? (old?.availableMinor ?? baseline) : baseline,
+          bookedMinor: version > 0 ? (old?.bookedMinor ?? data.bookedMinor) : data.bookedMinor,
+          balanceMinor: version > 0 ? (old?.balanceMinor ?? data.balanceMinor) : data.balanceMinor,
+          status: old?.status && old.status !== "ACTIVE" ? old.status : "ACTIVE",
+          version,
+          demo: true,
+          demoNamespace: ns,
+        };
+        t.set(path, account);
+      };
+      for (const [type, balance] of [["CHECKING", 38642500], ["SAVINGS", 62500000], ["MORTGAGE", 742500000]] as const)
+        await seedAccount(ns + "_" + type.toLowerCase(), {
           ownerUid,
           type,
           currency: "VND",
           status: "ACTIVE",
-          availableMinor: 25000000,
-          bookedMinor: 25000000,
-          balanceMinor: 25000000,
-          version: 0,
+          availableMinor: balance,
+          bookedMinor: balance,
+          balanceMinor: balance,
         });
-      await create("accounts/" + ns + "_recipient_checking", {
+      await seedAccount(ns + "_recipient_checking", {
         ownerUid: identities[1].id,
         type: "CHECKING",
         currency: "VND",
         status: "ACTIVE",
-        availableMinor: 1000000,
-        bookedMinor: 1000000,
-        balanceMinor: 1000000,
-        version: 0,
+        availableMinor: 12487500,
+        bookedMinor: 12487500,
+        balanceMinor: 12487500,
       });
-      await create("checkingDetails/" + ns + "_checking", {
+      await upsertDemo("checkingDetails/" + ns + "_checking", {
         accountId: ns + "_checking",
-        dailyLimitMinor: 50000000,
+        dailyLimitMinor: 100000000,
         overdraftPolicy: "NONE",
-        cardAlias: "DEMO",
+        cardAlias: "Minh Anh",
       });
-      await create("ratePolicies/" + ns + "_savings_v1", {
-        productId: "demo_savings",
-        annualRateBasisPoints: 500,
-        effectiveFrom: 0,
+      await upsertDemo("ratePolicies/" + ns + "_savings_v1", {
+        productId: "savings_standard_vnd",
+        accountProduct: "savings_standard_vnd",
+        annualRateBasisPoints: 465,
+        effectiveFrom: Date.now() - 90 * 86400000,
         version: 1,
         updatedBy: "TRUSTED_SEED",
       });
-      await create("savingsDetails/" + ns + "_savings", {
+      const savingsAccount = await t.get("accounts/" + ns + "_savings");
+      const savingsDetails = await t.get("savingsDetails/" + ns + "_savings");
+      await upsertDemo("savingsDetails/" + ns + "_savings", {
         accountId: ns + "_savings",
-        principalMinor: 25000000,
-        productId: "demo_savings",
+        principalMinor: Number(savingsAccount?.version ?? 0) > 0
+          ? (savingsDetails?.principalMinor ?? 62500000)
+          : 62500000,
+        productId: "savings_standard_vnd",
         ratePolicyVersion: ns + "_savings_v1",
-        openedAt: Date.now(),
-        maturityAt: Date.now() + 365 * 86400000,
+        openedAt: Date.now() - 90 * 86400000,
+        maturityAt: Date.now() + 275 * 86400000,
       });
-      await create("mortgageDetails/" + ns + "_mortgage", {
+      const mortgageAccount = await t.get("accounts/" + ns + "_mortgage");
+      const mortgageDetails = await t.get("mortgageDetails/" + ns + "_mortgage");
+      await upsertDemo("mortgageDetails/" + ns + "_mortgage", {
         accountId: ns + "_mortgage",
-        loanPrincipalMinor: 100000000,
-        outstandingMinor: 100000000,
-        annualRateBasisPoints: 800,
-        paymentFrequency: "BIWEEKLY",
-        termMonths: 24,
+        loanPrincipalMinor: 850000000,
+        outstandingMinor: Number(mortgageAccount?.version ?? 0) > 0
+          ? (mortgageDetails?.outstandingMinor ?? 742500000)
+          : 742500000,
+        annualRateBasisPoints: 850,
+        annualRate: 0.085,
+        paymentFrequency: "MONTHLY",
+        termMonths: 240,
       });
-      for (const serviceType of [
-        "ELECTRICITY",
-        "WATER",
-        "TOPUP",
-        "FLIGHT",
-        "MOVIE",
-        "HOTEL",
-        "ECOMMERCE",
-      ])
-        await create("catalog/" + ns + "_" + serviceType.toLowerCase(), {
-          serviceType,
-          name: serviceType + " demo",
-          amountMinor: 20000,
-          currency: "VND",
-          active: true,
-        });
       for (const [serviceType, name, amountMinor] of [
-        ["FLIGHT", "Bay demo · TP.HCM–Đà Nẵng · chuyến NS101", 180000],
-        ["MOVIE", "Phim demo · suất 19:30 · vé tiêu chuẩn", 80000],
-        ["HOTEL", "Khách sạn demo · phòng đôi · một đêm", 300000],
-        ["ECOMMERCE", "Cửa hàng demo · bình nước", 60000],
+        ["ELECTRICITY", "Hóa đơn điện sinh hoạt · EVN TP. Hồ Chí Minh", 936400],
+        ["WATER", "Hóa đơn nước sinh hoạt · SAWACO", 284600],
+        ["TOPUP", "Nạp tiền điện thoại trả trước", 100000],
+        ["MOVIE", "Vé xem phim tiêu chuẩn · suất 19:30", 95000],
+        ["HOTEL", "Phòng Superior · một đêm tại TP. Đà Lạt", 1250000],
+        ["ECOMMERCE", "Bình giữ nhiệt inox 500 ml", 289000],
       ] as const)
-        await create("catalog/" + ns + "_selection_" + serviceType.toLowerCase(), {
+        await upsertDemo("catalog/" + ns + "_" + serviceType.toLowerCase(), {
           serviceType, name, amountMinor, currency: "VND", active: true,
         });
-      for (const network of ["A", "B"])
-        for (const amountMinor of [20000, 50000, 100000, 200000])
-          await create("catalog/" + ns + "_topup_" + network + "_" + amountMinor, {
-            serviceType: "TOPUP", name: "Nhà mạng demo " + network, network,
+      for (const [serviceType, name, amountMinor] of [
+        ["MOVIE", "Vé CGV · phòng tiêu chuẩn · suất 19:30", 95000],
+        ["HOTEL", "Phòng Superior · khách sạn Đà Lạt · một đêm", 1250000],
+        ["ECOMMERCE", "Bình giữ nhiệt inox 500 ml · dung tích 500 ml", 289000],
+      ] as const)
+        await upsertDemo("catalog/" + ns + "_selection_" + serviceType.toLowerCase(), {
+          serviceType, name, amountMinor, currency: "VND", active: true,
+        });
+      const flights = [
+        {
+          id: ns + "_flight",
+          name: "TP. Hồ Chí Minh – Hà Nội · VN 214",
+          airline: "Vietnam Airlines", flightNumber: "VN 214", aircraft: "Airbus A350",
+          origin: "SGN", destination: "HAN", originCity: "TP. Hồ Chí Minh", destinationCity: "Hà Nội",
+          departureTime: "08:30", arrivalTime: "10:45", duration: "2h 15m", fareClass: "Phổ thông",
+          amountMinor: 1890000,
+        },
+        {
+          id: ns + "_selection_flight",
+          name: "TP. Hồ Chí Minh – Hà Nội · QH 220",
+          airline: "Bamboo Airways", flightNumber: "QH 220", aircraft: "Boeing 787",
+          origin: "SGN", destination: "HAN", originCity: "TP. Hồ Chí Minh", destinationCity: "Hà Nội",
+          departureTime: "11:15", arrivalTime: "13:30", duration: "2h 15m", fareClass: "Phổ thông",
+          amountMinor: 1650000,
+        },
+        {
+          id: ns + "_selection_flight_vietjet",
+          name: "TP. Hồ Chí Minh – Hà Nội · VJ 132",
+          airline: "Vietjet Air", flightNumber: "VJ 132", aircraft: "Airbus A321",
+          origin: "SGN", destination: "HAN", originCity: "TP. Hồ Chí Minh", destinationCity: "Hà Nội",
+          departureTime: "14:00", arrivalTime: "16:15", duration: "2h 15m", fareClass: "Phổ thông",
+          amountMinor: 1420000,
+        },
+      ] as const;
+      for (const flight of flights) {
+        const { id, ...data } = flight;
+        await upsertDemo("catalog/" + id, {
+          serviceType: "FLIGHT", ...data, currency: "VND", active: true,
+        });
+      }
+      for (const [network, carrierName] of [["A", "Viettel"], ["B", "MobiFone"], ["C", "VinaPhone"]] as const)
+        for (const amountMinor of [20000, 50000, 100000, 200000, 500000, 1000000])
+          await upsertDemo("catalog/" + ns + "_topup_" + network + "_" + amountMinor, {
+            serviceType: "TOPUP", name: carrierName, network,
             amountMinor, currency: "VND", active: true,
           });
-      await create("bills/" + ns + "_water", {
-        ownerUid, provider: "DEMO", serviceType: "WATER",
-        invoiceRef: ns + "_water", amountMinor: 25000, currency: "VND",
-        status: "UNPAID", dueAt: Date.now() + 14 * 86_400_000,
+      const now = new Date();
+      const billingPeriod = "Tháng " + String(now.getMonth() + 1).padStart(2, "0") + "/" + now.getFullYear();
+      await refreshBill("bills/" + ns + "_water", {
+        ownerUid, serviceType: "WATER", currency: "VND",
+        provider: "Tổng công ty Cấp nước Sài Gòn (SAWACO)", billingPeriod,
+        invoiceRef: "SAWACO-HCM-" + new Date().getFullYear() + "-" + String(new Date().getMonth() + 1).padStart(2, "0") + "-193846",
+        amountMinor: 284600, dueAt: Date.now() + 14 * 86_400_000,
+        previousReading: "1.246", currentReading: "1.264", consumption: 18, consumptionUnit: "m³",
       });
-      await create("bills/" + ns + "_electricity", {
-        ownerUid,
-        provider: "DEMO",
-        invoiceRef: ns + "_electricity",
-        serviceType: "ELECTRICITY",
-        amountMinor: 20000,
-        currency: "VND",
-        status: "UNPAID",
-        dueAt: null,
+      await refreshBill("bills/" + ns + "_electricity", {
+        ownerUid, serviceType: "ELECTRICITY", currency: "VND",
+        provider: "Tổng công ty Điện lực TP. Hồ Chí Minh (EVNHCMC)", billingPeriod,
+        invoiceRef: "EVNHCMC-" + new Date().getFullYear() + "-" + String(new Date().getMonth() + 1).padStart(2, "0") + "-482731",
+        amountMinor: 936400,
+        previousReading: "4.820", currentReading: "5.145", consumption: 325, consumptionUnit: "kWh",
+        dueAt: Date.now() + 4 * 86_400_000,
       });
-      await create("bankBranches/" + ns + "_branch", {
-        name: "Chi nhánh demo Tân Phong",
-        address: "Tân Phong, TP Hồ Chí Minh",
-        latitude: 10.7326,
-        longitude: 106.6998,
+      const branchPath = "bankBranches/" + ns + "_branch";
+      const oldBranch = await t.get(branchPath);
+      const isLegacySeedBranch = oldBranch?.branchId === ns + "_branch" &&
+        oldBranch.name === "Chi nhánh demo Tân Phong";
+      await upsertDemo(branchPath, {
+        name: "Ngân hàng Nimbus · Phòng giao dịch Phú Mỹ Hưng",
+        address: "Số 12 Nguyễn Lương Bằng, phường Tân Phú, TP. Hồ Chí Minh",
+        latitude: 10.7295,
+        longitude: 106.7216,
         active: true,
-        openingHours: "08:00–17:00",
-      });
+        openingHours: "Thứ Hai–Thứ Sáu, 08:00–17:00",
+      }, isLegacySeedBranch);
     });
     console.log(
       "Namespaced seed completed. Sign in with the DEMO_PASSWORD configured locally.",
