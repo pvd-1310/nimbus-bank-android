@@ -173,7 +173,7 @@ public final class BranchLocatorFragment extends Fragment {
                 if (!task.isSuccessful() || task.getResult().statusCode != 200)
                     throw new JSONException("Unavailable");
                 if (!"ENABLED".equals(new JSONObject(task.getResult().body).optString("routes"))) {
-                    setStatus("Backend chưa cấu hình Routes. Bạn vẫn có thể xem địa chỉ chi nhánh.");
+                    setStatus("Tính năng chỉ đường chưa khả dụng. Bạn vẫn có thể xem địa chỉ chi nhánh.");
                     return;
                 }
                 locateUserForRoute(requestId);
@@ -298,8 +298,8 @@ public final class BranchLocatorFragment extends Fragment {
                 : "Google Maps không tìm được đường đi bộ tới chi nhánh đã chọn.";
         if ("SELECT_BRANCH_REQUIRED".equals(code)) return "Hãy chọn một chi nhánh để tìm đường đi bộ.";
         if ("ROUTES_PROVIDER_UNAVAILABLE".equals(code)) return "Dịch vụ chỉ đường tạm thời không khả dụng.";
-        if ("ROUTES_API_NOT_CONFIGURED".equals(code)) return "Backend chưa được cấu hình Google Routes API key.";
-        if (!code.isEmpty()) return "Không tạo được tuyến (" + code + "). Xem log backend.";
+        if ("ROUTES_API_NOT_CONFIGURED".equals(code)) return "Tính năng chỉ đường hiện chưa khả dụng. Vui lòng thử lại sau.";
+        if (!code.isEmpty()) return "Không thể tạo tuyến đường. Vui lòng thử lại sau.";
         return "Chưa thể tạo tuyến đi bộ. Các chi nhánh vẫn hiển thị trên bản đồ.";
     }
 

@@ -8,7 +8,7 @@
     <string name="password_hint">Nhập mật khẩu</string>
     <string name="sign_in">Đăng nhập</string>
     <string name="biometric_login">Đăng nhập sinh trắc học</string>
-    <string name="production_configuration_required">Ứng dụng chưa được cấu hình production. Vui lòng liên hệ quản trị hệ thống.</string>
+    <string name="production_configuration_required">Ứng dụng chưa sẵn sàng. Vui lòng liên hệ quản trị viên.</string>
     <string name="error_email_required">Vui lòng nhập email.</string>
     <string name="error_password_required">Vui lòng nhập mật khẩu.</string>
     <string name="error_sign_in">Không thể đăng nhập. Kiểm tra thông tin hoặc thử lại.</string>
@@ -20,8 +20,8 @@
     <string name="role_officer">Cán bộ ngân hàng</string>
     <string name="sign_out">Đăng xuất</string>
     <string name="data_not_loaded">Chưa tải dữ liệu tài khoản</string>
-    <string name="data_not_loaded_detail">Không thể tải dữ liệu từ hệ thống ngân hàng production.</string>
-    <string name="production_notice_detail">Các thao tác nhạy cảm chỉ được thực hiện sau khi backend production xác thực quyền.</string>
+    <string name="data_not_loaded_detail">Không thể tải dữ liệu tài khoản lúc này. Vui lòng thử lại.</string>
+    <string name="production_notice_detail">Một số thao tác cần được xác nhận trước khi hoàn tất.</string>
     <string name="customer_actions">Dịch vụ khách hàng</string>
     <string name="officer_actions">Tác vụ nghiệp vụ</string>
     <string name="coming_soon">Đang chuẩn bị</string>
@@ -37,7 +37,7 @@
     <string name="utility_shopping">Mua sắm</string>
     <string name="utility_all">Tất cả</string>
     <string name="utility_internet">Internet &amp; Dịch vụ</string>
-    <string name="utility_pending_order">Kiểm tra đơn demo đang tạo</string>
+    <string name="utility_pending_order">Kiểm tra đơn hàng đang tạo</string>
 
     <!-- Navigation Labels -->
     <string name="nav_home">Trang chủ</string>
@@ -88,7 +88,7 @@
     <string name="transfer_confirm_title">Xác nhận chuyển tiền</string>
     <string name="fee_free">Phí dịch vụ: 0 ₫ (Miễn phí)</string>
     <string name="otp_title">Xác thực giao dịch</string>
-    <string name="otp_subtitle">Mã xác nhận demo — mã hiển thị trong ứng dụng, không gửi qua email/SMS</string>
+    <string name="otp_subtitle">Mã xác nhận hiển thị trên màn hình này.</string>
     <string name="otp_resend">Gửi lại mã sau</string>
     <string name="transfer_success_title">Chuyển tiền thành công</string>
     <string name="back_to_home">Về trang chủ</string>
@@ -98,7 +98,7 @@
     <string name="money_request_title">Nạp / Rút tiền</string>
     <string name="tab_deposit">Nạp tiền</string>
     <string name="tab_withdrawal">Rút tiền</string>
-    <string name="money_request_notice">Yêu cầu nạp/rút tiền có trạng thái riêng. Số dư chỉ thay đổi khi backend ngân hàng xác nhận xử lý.</string>
+    <string name="money_request_notice">Số dư chỉ thay đổi khi giao dịch được xác nhận hoàn tất.</string>
 
     <!-- Quick Actions Bottom Sheet -->
     <string name="quick_actions_title">Thao tác nhanh</string>

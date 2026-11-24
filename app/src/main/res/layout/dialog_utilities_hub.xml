@@ -236,7 +236,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:backgroundTint="@color/bg_fog"
-                android:text="Tra cứu đơn hàng demo"
+                android:text="Tra cứu đơn hàng"
                 android:textColor="@color/navy" />
 
             <LinearLayout
@@ -585,7 +585,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:text="Intent ID: ..."
+                    android:visibility="gone"
                     android:textColor="@color/ink_faint"
                     android:textSize="10sp" />
             </LinearLayout>
@@ -604,7 +604,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Xác thực khuôn mặt (Face Step-up)"
+                    android:text="Xác minh khuôn mặt"
                     android:textColor="@color/ink"
                     android:textSize="14sp"
                     android:textStyle="bold" />
@@ -613,7 +613,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:text="Giao dịch yêu cầu đối chiếu khuôn mặt với hồ sơ eKYC đã duyệt. Nhận diện ảnh tĩnh là tính năng demo."
+                    android:text="Giao dịch cần đối chiếu khuôn mặt với hồ sơ đã duyệt. Ảnh tĩnh không xác minh giấy tờ hoặc danh tính pháp lý."
                     android:textColor="@color/ink_muted"
                     android:textSize="12sp" />
 
@@ -628,7 +628,7 @@
                     app:cornerRadius="16dp" />
             </LinearLayout>
 
-            <!-- Demo OTP Step -->
+            <!-- OTP confirmation step -->
             <LinearLayout
                 android:id="@+id/checkout_otp_step_container"
                 android:layout_width="match_parent"
@@ -655,7 +655,7 @@
                     android:layout_marginTop="4dp"
                     android:background="@drawable/badge_status_neutral"
                     android:padding="8dp"
-                    android:text="Mã xác nhận demo — mã hiển thị trong ứng dụng, không gửi qua email/SMS"
+                    android:text="Mã xác nhận hiển thị trên màn hình này."
                     android:textColor="@color/ink"
                     android:textSize="12sp"
                     android:textStyle="bold" />
@@ -722,7 +722,7 @@
                     android:layout_height="48dp"
                     android:layout_marginTop="12dp"
                     android:backgroundTint="@color/navy"
-                    android:text="Xác thực OTP và mở Stripe"
+                    android:text="Xác nhận và thanh toán"
                     android:textColor="@color/white"
                     app:cornerRadius="16dp" />
             </LinearLayout>
@@ -749,7 +749,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Trạng thái: COMMIT_PENDING"
+                        android:text="Đang xử lý thanh toán"
                         android:textColor="@color/warning"
                         android:textSize="14sp"
                         android:textStyle="bold" />

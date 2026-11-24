@@ -179,7 +179,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="3. Thư viện ảnh và giới hạn demo"
+                            android:text="3. Giới hạn xác minh"
                             android:textColor="@color/ink"
                             android:textSize="15sp"
                             android:textStyle="bold" />
@@ -189,7 +189,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="4dp"
-                            android:text="Ứng dụng mở thư viện ảnh sau khi bạn đồng ý. Bước so khuôn mặt này chưa kiểm tra tính thật của CCCD hoặc chống ảnh giả, ảnh phát lại."
+                            android:text="Ứng dụng mở thư viện ảnh sau khi bạn đồng ý. Việc so khớp ảnh chưa xác minh tính thật của giấy tờ hoặc phát hiện ảnh giả."
                             android:textColor="@color/ink_muted"
                             android:textSize="13sp"
                             android:lineSpacingExtra="2dp" />

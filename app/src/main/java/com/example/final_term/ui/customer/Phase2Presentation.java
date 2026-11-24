@@ -18,7 +18,7 @@ public final class Phase2Presentation {
     }
 
     public static String requestStatusMessage(String operation) {
-        return "Chưa kết nối API yêu cầu nạp/rút. Yêu cầu chưa được gửi; số dư chưa thay đổi.";
+        return "Chưa thể gửi yêu cầu lúc này. Số dư chưa thay đổi; vui lòng thử lại.";
     }
 
     public static boolean validRequestAmount(String value) {

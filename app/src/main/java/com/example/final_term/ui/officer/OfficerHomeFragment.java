@@ -47,7 +47,7 @@ public final class OfficerHomeFragment extends Fragment {
         binding.ekycButton.setOnClickListener(v -> openFeature(v, R.id.officerEkyc,
                 "Hồ sơ eKYC", "Theo dõi kết quả kiểm tra ảnh và xem bằng chứng theo quyền."));
         binding.auditButton.setOnClickListener(v -> openFeature(v, R.id.officerAudit,
-                "Kiểm tra giao dịch", "Theo dõi lịch sử và audit log theo permission."));
+                "Kiểm tra giao dịch", "Theo dõi lịch sử thao tác của cán bộ."));
         binding.ratesButton.setOnClickListener(v -> openFeature(v, R.id.officerRates,
                 "Chính sách lãi suất", "Quản lý policy có version và lý do thay đổi."));
     }

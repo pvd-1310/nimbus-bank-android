@@ -26,8 +26,6 @@ import com.example.final_term.databinding.ItemTransactionRowBinding;
 import com.example.final_term.ui.quickactions.QuickActionsBottomSheet;
 import com.example.final_term.ui.utilities.UtilitiesHubDialogFragment;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import org.json.JSONException;
-import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -39,7 +37,6 @@ public final class CustomerHomeFragment extends Fragment {
     private String currentBalanceCurrency = "VND";
     private boolean isBalanceHidden = false;
     private Long currentBalanceMinor = null;
-    private int balanceRequest;
 
     @Nullable
     @Override
@@ -95,19 +92,6 @@ public final class CustomerHomeFragment extends Fragment {
             reads.observeTransactions(authState.getUser().getUid()).observe(getViewLifecycleOwner(), this::renderTransactions);
             reads.observeNotifications(authState.getUser().getUid()).observe(getViewLifecycleOwner(), this::renderNotifications);
 
-            app.getAppContainer().getBackendApiClient().get("/accounts")
-                    .addOnSuccessListener(response -> {
-                        if (binding == null) return;
-                        binding.backendStatusText.setText(
-                                response.statusCode >= 200 && response.statusCode < 300
-                                        ? "Backend đồ án: đã xác thực quyền truy cập"
-                                        : "Backend đồ án: HTTP " + response.statusCode);
-                    })
-                    .addOnFailureListener(error -> {
-                        if (binding == null) return;
-                        binding.backendStatusText.setText(
-                                "Backend đồ án chưa kết nối");
-                    });
         });
 
         // Navigation CTA handlers
@@ -139,7 +123,7 @@ public final class CustomerHomeFragment extends Fragment {
         binding.quickQr.setOnClickListener(v -> {
             new MaterialAlertDialogBuilder(requireContext())
                     .setTitle("Quét mã QR")
-                    .setMessage("Tính năng Quét QR Pay & Nhận tiền chuẩn bị khả dụng trên backend production.")
+                    .setMessage("Tính năng này đang được hoàn thiện.")
                     .setPositiveButton("Đóng", null)
                     .show();
         });
@@ -171,7 +155,6 @@ public final class CustomerHomeFragment extends Fragment {
         if (result == null || binding == null) return;
         balanceAccounts.clear();
         if (result.getData() == null) {
-            balanceRequest++;
             currentBalanceMinor = null;
             binding.accountStatusText.setVisibility(View.GONE);
             binding.balanceText.setText(result.getStatus() == ReadModelResult.Status.LOADING ? "Đang tải…" : "—");
@@ -187,7 +170,6 @@ public final class CustomerHomeFragment extends Fragment {
         });
 
         if (balanceAccounts.isEmpty()) {
-            balanceRequest++;
             currentBalanceMinor = null;
             binding.balanceText.setText("—");
             binding.accountStatusText.setVisibility(View.GONE);
@@ -212,44 +194,6 @@ public final class CustomerHomeFragment extends Fragment {
         currentBalanceCurrency = paymentAccount.currency;
         binding.accountStatusText.setVisibility(View.GONE);
         updateBalanceDisplay();
-        balanceRequest++;
-    }
-
-    private void loadStripeBalance(String accountId) {
-        FragmentCustomerHomeBinding current = binding;
-        if (current == null) return;
-        int request = ++balanceRequest;
-        currentBalanceMinor = null;
-        currentBalanceCurrency = "USD";
-        current.accountStatusText.setVisibility(View.GONE);
-        updateBalanceDisplay();
-        FinalTermApplication app = (FinalTermApplication) requireActivity().getApplication();
-        app.getAppContainer().getBackendApiClient()
-                .get("/accounts/" + android.net.Uri.encode(accountId) + "/stripe-sandbox")
-                .addOnCompleteListener(task -> {
-                    if (binding != current || request != balanceRequest || !accountId.equals(selectedAccountId)) return;
-                    if (!task.isSuccessful() || task.getResult() == null || task.getResult().statusCode != 200) {
-                        current.accountStatusText.setVisibility(View.GONE);
-                        return;
-                    }
-                    try {
-                        JSONObject snapshot = new JSONObject(task.getResult().body);
-                        if (snapshot.has("availableMinor")) {
-                            currentBalanceMinor = snapshot.getLong("availableMinor");
-                            currentBalanceCurrency = snapshot.optString("currency", "USD");
-                            updateBalanceDisplay();
-                            return;
-                        }
-                        if ("pending".equals(snapshot.optString("status"))) {
-                            current.accountStatusText.postDelayed(() -> {
-                                if (binding == current && isResumed() && request == balanceRequest)
-                                    loadStripeBalance(accountId);
-                            }, 5000);
-                        }
-                    } catch (JSONException ignored) {
-                        current.accountStatusText.setVisibility(View.GONE);
-                    }
-                });
     }
 
     @Override
@@ -286,7 +230,7 @@ public final class CustomerHomeFragment extends Fragment {
         binding.recentTransactionsContent.removeAllViews();
         if (result.isReadOnly()) {
             TextView status = new TextView(requireContext());
-            status.setText(result.getMessage());
+            status.setText("Đang hiển thị dữ liệu đã lưu trên thiết bị.");
             binding.recentTransactionsContent.addView(status);
         }
         List<ReadModels.TransactionSummary> ledgerRows = result.getData();

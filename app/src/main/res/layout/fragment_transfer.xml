@@ -342,7 +342,7 @@
                         android:id="@+id/confirm_source_text"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Tài khoản nguồn: demo_customer_checking"
+                        android:text="Tài khoản nguồn: Nimbus Bank"
                         android:textColor="@color/ink"
                         android:textSize="14sp" />
 
@@ -357,7 +357,7 @@
                         android:id="@+id/confirm_target_text"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Người nhận: demo_customer_savings"
+                        android:text="Người nhận: Tài khoản nhận"
                         android:textColor="@color/ink"
                         android:textSize="14sp"
                         android:textStyle="bold" />
@@ -564,7 +564,7 @@
                         android:id="@+id/receipt_tx_id"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Mã giao dịch: tx_demo_12345"
+                        android:text=""
                         android:textColor="@color/ink_muted"
                         android:textSize="12sp" />
 
@@ -579,7 +579,7 @@
                         android:id="@+id/receipt_target_info"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Chuyển đến: demo_customer_savings"
+                        android:text="Chuyển đến: Tài khoản nhận"
                         android:textColor="@color/ink"
                         android:textSize="14sp"
                         android:textStyle="bold" />

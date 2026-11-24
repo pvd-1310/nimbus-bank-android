@@ -69,7 +69,7 @@ public final class ChatbotDialogFragment extends DialogFragment {
                         if (!task.isSuccessful()) throw new JSONException("Connection unavailable");
                         var response = task.getResult();
                         if (response.statusCode == 401 || response.statusCode == 403) {
-                            serviceStatus.setText("Phiên đăng nhập chưa được backend chấp nhận. Đăng nhập lại bằng tài khoản phù hợp.");
+                            serviceStatus.setText("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
                             send.setText("Kiểm tra lại");
                             send.setEnabled(true);
                             return;
@@ -84,11 +84,11 @@ public final class ChatbotDialogFragment extends DialogFragment {
                         }
                         if (!"ENABLED".equals(mode) && !"DEMO_ONLY".equals(mode))
                             throw new JSONException("Unknown chatbot mode");
-                        serviceStatus.setText("DEMO_ONLY".equals(mode) ? "Trợ lý hướng dẫn demo · chạy cục bộ" : "");
+                        serviceStatus.setText("DEMO_ONLY".equals(mode) ? "Trợ lý có thể hỗ trợ các câu hỏi hướng dẫn cơ bản." : "");
                         send.setText("Gửi");
                         input.setEnabled(true);
                     } catch (JSONException error) {
-                        serviceStatus.setText("Không kiểm tra được trợ lý. Hãy kiểm tra kết nối backend rồi thử lại.");
+                        serviceStatus.setText("Không thể kết nối với trợ lý. Vui lòng thử lại.");
                         send.setText("Kiểm tra lại");
                     }
                     send.setEnabled(true);
@@ -116,7 +116,7 @@ public final class ChatbotDialogFragment extends DialogFragment {
                                 String reply = "Chatbot tạm thời không phản hồi. Vui lòng thử lại.";
                                 if (!task.isSuccessful()
                                         && task.getException() instanceof java.net.SocketTimeoutException) {
-                                    reply = "Kết nối backend quá thời gian. Bạn có thể gửi lại câu hỏi.";
+                                    reply = "Kết nối bị gián đoạn. Bạn có thể gửi lại câu hỏi.";
                                 }
                                 if (task.isSuccessful()) {
                                     try {

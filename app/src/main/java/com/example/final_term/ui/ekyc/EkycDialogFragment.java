@@ -92,7 +92,7 @@ public final class EkycDialogFragment extends DialogFragment {
         binding.btnHelp.setOnClickListener(v -> new MaterialAlertDialogBuilder(requireContext())
                 .setTitle("Trợ giúp định danh eKYC")
                 .setMessage(state.isDemo()
-                        ? "Chế độ demo chỉ cần một ảnh selfie chọn từ thư viện. Ảnh phải rõ, đủ sáng và chỉ có một khuôn mặt. Chế độ này không xác minh CCCD hoặc danh tính pháp lý."
+                        ? "Chọn một ảnh selfie rõ nét, đủ sáng và chỉ có một khuôn mặt. Bước này chưa xác minh CCCD hoặc danh tính pháp lý."
                         : "Chọn mặt trước, mặt sau CCCD và selfie từ thư viện ảnh. Bạn có thể xem và chọn lại từng ảnh trước khi nộp.")
                 .setPositiveButton("Đóng", null)
                 .show());
@@ -132,7 +132,7 @@ public final class EkycDialogFragment extends DialogFragment {
 
     private void render() {
         if (binding == null) return;
-        binding.dialogTitle.setText(state.isDemo() ? "Khuôn mặt demo" : "Định danh eKYC");
+        binding.dialogTitle.setText(state.isDemo() ? "Đăng ký khuôn mặt" : "Định danh eKYC");
         setCancelable(!state.submitting);
         binding.btnBack.setEnabled(!state.submitting);
         if (state.profileChanged) {
@@ -153,11 +153,11 @@ public final class EkycDialogFragment extends DialogFragment {
 
     private void renderConsent() {
         if (state.isDemo()) {
-            binding.consentHeadline.setText("Đăng ký khuôn mặt demo");
-            binding.consentSummary.setText("Tạm bỏ qua chụp CCCD. Ảnh selfie được lưu riêng tư để đăng ký và đăng nhập bằng khuôn mặt trong bản demo.");
+            binding.consentHeadline.setText("Đăng ký khuôn mặt");
+            binding.consentSummary.setText("Bạn chưa cần cung cấp ảnh CCCD. Ảnh selfie được lưu riêng tư để đăng ký và đăng nhập bằng khuôn mặt. Phương thức này chưa xác minh danh tính.");
             binding.consentPurpose.setText("Chỉ thu thập một ảnh selfie từ thư viện để tạo mẫu khuôn mặt cho tài khoản này.");
             binding.consentStorage.setText("Ảnh được tải lên vùng lưu trữ riêng tư bằng URL có thời hạn. Hệ thống kiểm tra chất lượng khuôn mặt; cán bộ có quyền chỉ xem bằng chứng.");
-            binding.consentLimit.setText("Chế độ này không kiểm tra CCCD, danh tính pháp lý, liveness hoặc chống ảnh giả và ảnh phát lại.");
+            binding.consentLimit.setText("Bước này chưa xác minh CCCD, danh tính pháp lý hoặc phát hiện ảnh giả.");
         } else {
             binding.consentHeadline.setText("Thu thập & Xử lý dữ liệu định danh");
             binding.consentSummary.setText("Ảnh định danh được lưu trong vùng riêng tư và chỉ được dùng cho bước xác thực bạn đồng ý thực hiện.");
@@ -203,7 +203,7 @@ public final class EkycDialogFragment extends DialogFragment {
         binding.chipBack.setEnabled(canEdit);
         binding.chipSelfie.setEnabled(canEdit);
         visible(binding.btnSubmitEkyc, state.allPhotosReady());
-        binding.btnSubmitEkyc.setText(demo ? "Đăng ký khuôn mặt demo" : "Nộp và kiểm tra ảnh (3/3)");
+        binding.btnSubmitEkyc.setText(demo ? "Đăng ký khuôn mặt" : "Nộp và kiểm tra ảnh (3/3)");
         binding.btnSubmitEkyc.setEnabled(canEdit);
     }
 
@@ -258,7 +258,7 @@ public final class EkycDialogFragment extends DialogFragment {
             icon = rejected ? R.drawable.ic_close : R.drawable.ic_shield;
             tint = rejected ? R.color.danger : R.color.warning;
         } else if ("VERIFIED".equals(state.reviewStatus())) {
-            headline = state.isDemo() ? "Đã đăng ký khuôn mặt demo" : "Đã hoàn tất đối chiếu ảnh demo";
+            headline = state.isDemo() ? "Đã đăng ký khuôn mặt" : "Đã hoàn tất đối chiếu ảnh";
             detail = state.isDemo()
                     ? "Hệ thống đã kiểm tra ảnh selfie và đăng ký mẫu khuôn mặt. Chưa xác minh CCCD hoặc danh tính pháp lý."
                     : "Hệ thống đã đối chiếu khuôn mặt trên ảnh mặt trước CCCD với ảnh selfie. Đây là so khớp ảnh tĩnh, chưa xác thực giấy tờ, danh tính pháp lý hay liveness.";
@@ -371,11 +371,11 @@ public final class EkycDialogFragment extends DialogFragment {
                     profileChanged = true;
                     if (!"VERIFIED".equals(reviewStatus())) {
                         if ("STORAGE_SETUP_REQUIRED".equals(submissionStatus)) {
-                            fail("Backend chưa cấu hình kho ảnh eKYC. Có thể xem lại khi dịch vụ sẵn sàng.", "Kiểm tra lại", this::load);
+                            fail("Chưa thể tải ảnh hồ sơ. Vui lòng thử lại sau.", "Thử lại", this::load);
                             return;
                         }
                         if ("FACE_SETUP_REQUIRED".equals(submissionStatus)) {
-                            fail("Backend chưa cấu hình kiểm tra khuôn mặt.", "Kiểm tra lại", this::load);
+                            fail("Chưa thể kiểm tra khuôn mặt lúc này. Vui lòng thử lại sau.", "Thử lại", this::load);
                             return;
                         }
                     }

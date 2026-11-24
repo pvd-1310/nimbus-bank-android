@@ -181,12 +181,12 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         binding.pendingOrderButton.setVisibility(pendingOrder == null ? View.GONE : View.VISIBLE);
 
         binding.utilElectricity.setOnClickListener(v -> showBillLookup(
-                "Tra cứu hóa đơn điện demo", "Mã hóa đơn (ví dụ local_demo_electricity)"));
+                "Tra cứu hóa đơn điện", "Mã hóa đơn điện"));
         binding.utilWater.setOnClickListener(v -> showBillLookup(
-                "Tra cứu hóa đơn nước demo", "Mã hóa đơn (ví dụ local_demo_water)"));
+                "Tra cứu hóa đơn nước", "Mã hóa đơn nước"));
         binding.utilMobile.setOnClickListener(v -> {
             binding.topupFormContainer.setVisibility(View.VISIBLE);
-            binding.lookupTitle.setText("Nạp điện thoại mô phỏng");
+            binding.lookupTitle.setText("Nạp tiền điện thoại");
             binding.customerCodeInput.setHint("Nhập mã hóa đơn để tra cứu");
             scrollToSection(binding.topupFormContainer);
         });
@@ -285,26 +285,19 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     private void loadOwnedBills() {
         binding.billsEmptyOrLoadingText.setVisibility(View.VISIBLE);
         if (api == null) {
-            binding.billsEmptyOrLoadingText.setText("Backend API chưa được khởi tạo.");
+            binding.billsEmptyOrLoadingText.setText("Chưa thể tải hóa đơn. Vui lòng thử lại.");
             return;
         }
         binding.billsEmptyOrLoadingText.setText("Đang tải danh sách hóa đơn từ hệ thống…");
         api.get("/bills").addOnCompleteListener(task -> {
             if (!isAdded() || binding == null) return;
             if (!task.isSuccessful()) {
-                Exception error = task.getException();
-                String reason = error == null ? "không rõ" : error.getClass().getSimpleName();
-                if (error != null && error.getMessage() != null
-                        && error.getMessage().contains("BACKEND_AUTH_REQUIRED")) {
-                    reason = "chưa đăng nhập Firebase";
-                }
-                binding.billsEmptyOrLoadingText.setText("Không gọi được backend (" + reason + ").");
+                binding.billsEmptyOrLoadingText.setText("Không thể tải hóa đơn. Kiểm tra kết nối rồi thử lại.");
                 return;
             }
             BackendApiClient.Response response = task.getResult();
             if (response == null || response.statusCode != 200) {
-                binding.billsEmptyOrLoadingText.setText("Backend trả lỗi HTTP "
-                        + (response == null ? "không có phản hồi" : response.statusCode) + ".");
+                binding.billsEmptyOrLoadingText.setText("Không thể tải hóa đơn. Vui lòng thử lại sau.");
                 return;
             }
             try {
@@ -360,7 +353,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         textCol.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f));
 
         TextView title = new TextView(requireContext());
-        title.setText((bill.optBoolean("demo") ? "[Demo] " : "") + provider + " · " + invoiceRef
+        title.setText(provider + " · " + invoiceRef
                 + (bill.isNull("dueAt") ? "" : " · Hạn " + android.text.format.DateFormat.getDateFormat(requireContext())
                         .format(new java.util.Date(bill.optLong("dueAt")))));
         title.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
@@ -494,7 +487,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     private void loadCatalog(String category, Consumer<List<JSONObject>> onLoaded) {
         if (busy) return;
         setBusy(true);
-        hubStatus("Đang tải danh mục mô phỏng…");
+        hubStatus("Đang tải danh mục…");
         api.get("/catalog?limit=100&serviceType=" + category).addOnCompleteListener(task -> {
             if (binding == null || !isAdded()) return;
             setBusy(false);
@@ -517,7 +510,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
 
     private void showCatalogProducts(List<JSONObject> products) {
         if (products.isEmpty()) {
-            hubStatus("Chưa có sản phẩm demo phù hợp.");
+            hubStatus("Chưa có sản phẩm phù hợp.");
             scrollToSection(binding.lookupFormContainer);
             return;
         }
@@ -527,7 +520,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                     + " " + product.optString("currency"));
         }
         new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
-                .setTitle("Chọn sản phẩm demo")
+                .setTitle("Chọn sản phẩm")
                 .setItems(names.toArray(new String[0]), (dialog, index) ->
                         createOrderForProduct(products.get(index), null))
                 .show();
@@ -572,7 +565,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     private void submitOrder() {
         setBusy(true);
         binding.pendingOrderButton.setVisibility(View.VISIBLE);
-        hubStatus("Đang tạo đơn demo…");
+        hubStatus("Đang tạo đơn hàng…");
         api.post("/orders", pendingOrder).addOnCompleteListener(task -> {
             if (binding == null) return;
             setBusy(false);
@@ -622,15 +615,14 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                 var rows = new java.util.ArrayList<String>();
                 for (int i = 0; i < items.length(); i++) {
                     JSONObject order = items.getJSONObject(i);
-                    String id = order.getString("id");
                     String fulfillment = order.getString("fulfillmentStatus");
-                    rows.add("[Demo] " + order.optString("customerDetails") + "\n" + id + "\n"
-                            + "Thanh toán: " + order.optString("paymentStatus") + " · Thực hiện: " + fulfillment
-                            + (order.isNull("providerReference") ? "" : "\n" + order.optString("providerReference")));
+                    rows.add(order.optString("customerDetails") + "\n"
+                            + "Thanh toán: " + paymentStatusLabel(order.optString("paymentStatus"))
+                            + " · Trạng thái: " + fulfillmentStatusLabel(fulfillment));
                 }
-                hubStatus(rows.isEmpty() ? "Chưa có đơn hàng demo." : "Đã tải kết quả đơn hàng.");
+                hubStatus(rows.isEmpty() ? "Chưa có đơn hàng." : "Đã cập nhật danh sách đơn hàng.");
                 new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
-                        .setTitle("Đơn hàng mô phỏng")
+                .setTitle("Đơn hàng")
                         .setItems(rows.toArray(new String[0]), (dialog, index) -> {
                             JSONObject order = items.optJSONObject(index);
                             if (order != null) lookupBill(order.optString("id"));
@@ -670,9 +662,8 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                 if (!task.isSuccessful() || !ok(task.getResult())) throw new JSONException("Unavailable");
                 JSONObject bill = new JSONObject(task.getResult().body);
                 if (!"UNPAID".equals(bill.getString("status"))) {
-                    hubStatus("Hóa đơn " + bill.optString("invoiceRef") + " · " + bill.getString("status")
-                            + (bill.optBoolean("demo") ? " · Hóa đơn demo" : "")
-                            + "\nMã thanh toán: " + bill.optString("paymentId", "—"));
+                    hubStatus("Hóa đơn " + bill.optString("invoiceRef") + " · "
+                            + billStatusLabel(bill.getString("status")));
                     return;
                 }
                 startCheckout(bill, orderDetails);
@@ -709,7 +700,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         binding.checkoutContainer.setVisibility(View.VISIBLE);
         binding.hubMainTitle.setText("Thanh toán dịch vụ");
         binding.hubSubtitle.setVisibility(View.VISIBLE);
-        binding.hubSubtitle.setText("Thanh toán bằng thẻ test");
+        binding.hubSubtitle.setText("Thanh toán bằng thẻ");
         binding.checkoutServiceTitle.setText(currentServiceName);
         binding.checkoutReferenceText.setText("Mã hóa đơn / tham chiếu: " + currentReference);
         renderCheckoutStep();
@@ -718,7 +709,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     private void preparePaymentIntent() {
         if (currentBillId == null || busy) return;
         setBusy(true);
-        checkoutStatus("Đang thiết lập giao dịch từ backend…");
+        checkoutStatus("Đang chuẩn bị thanh toán…");
         try {
             JSONObject body = new JSONObject()
                     .put("billId", currentBillId)
@@ -767,7 +758,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                     faceRequired = result.optBoolean("faceRequired", false);
                     recoverPaymentAndIntent();
                 } catch (Exception e) {
-                    checkoutStatus("Phản hồi backend không hợp lệ.");
+                    checkoutStatus("Không thể chuẩn bị thanh toán. Vui lòng thử lại.");
                 }
             });
         } catch (Exception e) {
@@ -785,7 +776,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                 : ReadSummaryFormatter.formatCurrency(authoritativeFee, authoritativeCurrency));
         binding.checkoutTotalText.setText(quoted
                 ? ReadSummaryFormatter.formatCurrency(authoritativeAmount + authoritativeFee, authoritativeCurrency) : "—");
-        binding.checkoutIntentIdText.setText("Intent ID: " + (intentId == null ? "Đang tạo..." : intentId));
+        binding.checkoutIntentIdText.setVisibility(View.GONE);
 
         boolean needFace = quoted && faceRequired && !faceVerified && !commitPending;
         binding.checkoutFaceStepContainer.setVisibility(needFace ? View.VISIBLE : View.GONE);
@@ -827,7 +818,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     private void requestOtp() {
         if (busy || intentId == null || commitPending || (faceRequired && !faceVerified)) return;
         setBusy(true);
-        checkoutStatus("Đang tạo mã xác nhận demo…");
+        checkoutStatus("Đang tạo mã xác nhận…");
         api.post("/intents/" + intentId + "/otp", "{}").addOnCompleteListener(task -> {
             if (!isAdded() || binding == null) return;
             setBusy(false);
@@ -848,7 +839,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                 binding.checkoutOtpInput.setText("");
                 startOtpTimer();
                 renderCheckoutStep();
-                checkoutStatus("Nhập mã demo đang hiển thị để xác nhận thanh toán.");
+                checkoutStatus("Nhập mã đang hiển thị để xác nhận thanh toán.");
             } catch (Exception e) {
                 checkoutStatus("Phản hồi mã OTP không hợp lệ.");
             }
@@ -936,7 +927,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                 setBusy(false);
                 if (!task.isSuccessful() || task.getResult() == null || task.getResult().statusCode >= 500) {
                     checkoutStatus(errorMessage(task.isSuccessful() ? task.getResult() : null,
-                            "Chưa có kết quả cuối cùng từ Stripe. Bấm kiểm tra lại"));
+                            "Chưa có kết quả thanh toán. Bấm kiểm tra lại"));
                     renderCheckoutStep();
                     return;
                 }
@@ -951,7 +942,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                         }
                         if ("FAILED".equals(status)) {
                             commitPending = false;
-                            checkoutStatus("Stripe từ chối thanh toán · " + p.optString("failureCode"));
+                            checkoutStatus("Thanh toán chưa hoàn tất. Số dư chưa thay đổi.");
                             renderCheckoutStep();
                             return;
                         }
@@ -968,7 +959,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                                         .createWithCustomerSession(p.getString("customerId"),
                                                 p.getString("customerSessionClientSecret")));
                             }
-                            checkoutStatus("Chọn thẻ đã lưu hoặc nhập thẻ test để thanh toán.");
+                            checkoutStatus("Chọn thẻ đã lưu hoặc nhập thông tin thẻ để thanh toán.");
                             paymentSheet.presentWithPaymentIntent(clientSecret, configuration.build());
                             return;
                         }
@@ -1007,7 +998,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         commitPending = true;
         renderCheckoutStep();
         if (result instanceof PaymentSheetResult.Completed) {
-            checkoutStatus("Đã đóng Stripe PaymentSheet. Đang chờ webhook cập nhật hóa đơn…");
+            checkoutStatus("Đang chờ xác nhận thanh toán…");
             settlementPollsRemaining = 20;
             recoverPaymentAndIntent();
         } else if (result instanceof PaymentSheetResult.Canceled) {
@@ -1015,7 +1006,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         } else if (result instanceof PaymentSheetResult.Failed) {
             PaymentSheetResult.Failed failed = (PaymentSheetResult.Failed) result;
             String message = failed.getError().getLocalizedMessage();
-            checkoutStatus("Stripe chưa hoàn tất thanh toán" +
+            checkoutStatus("Thanh toán chưa hoàn tất" +
                     (message == null || message.trim().isEmpty() ? ". Bạn có thể thử lại." : ": " + message));
         }
         renderCheckoutStep();
@@ -1070,8 +1061,8 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                         return;
                     }
                     checkoutStatus(settlementPollsRemaining > 0
-                            ? "Đang chờ Stripe xác nhận kết quả…"
-                            : "Bấm Tiếp tục thanh toán để mở lại giao dịch Stripe.");
+                            ? "Đang chờ xác nhận thanh toán…"
+                            : "Bấm Tiếp tục thanh toán để hoàn tất giao dịch.");
                     if (settlementPollsRemaining > 0) {
                         settlementHandler.removeCallbacks(settlementPoll);
                         settlementHandler.postDelayed(settlementPoll, 1500);
@@ -1090,13 +1081,13 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                 } else if ("REQUIRED".equalsIgnoreCase(challenge)) {
                     requestOtp();
                 } else if ("EXPIRED".equalsIgnoreCase(challenge)) {
-                    checkoutStatus("Mã xác nhận đã hết hạn (OTP_EXPIRED). Bấm tạo mã mới.");
+                    checkoutStatus("Mã xác nhận đã hết hạn. Bấm tạo mã mới.");
                 } else if ("LOCKED".equalsIgnoreCase(challenge)) {
-                    checkoutStatus("Giao dịch bị khóa do nhập sai quá 5 lần (OTP_LOCKED). Cần hủy và tạo lại.");
+                    checkoutStatus("Giao dịch bị khóa do nhập sai quá 5 lần. Cần hủy và tạo lại.");
                 } else if (faceRequired && !faceVerified) {
                     checkoutStatus("Xác minh khuôn mặt để tiếp tục thanh toán.");
                 } else if ("AWAITING_CODE".equalsIgnoreCase(challenge) && challengeId != null) {
-                    checkoutStatus("Nhập mã demo đang hiển thị để xác nhận thanh toán.");
+                    checkoutStatus("Nhập mã đang hiển thị để xác nhận thanh toán.");
                 } else {
                     checkoutStatus("Bấm tạo mã mới để tiếp tục xác thực thanh toán.");
                 }
@@ -1115,12 +1106,12 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
             return;
         }
         setBusy(true);
-        checkoutStatus("Đang hủy yêu cầu cũ trên backend…");
+        checkoutStatus("Đang hủy yêu cầu cũ…");
         api.post("/intents/" + intentId + "/cancel", "{}").addOnCompleteListener(task -> {
             if (!isAdded() || binding == null) return;
             setBusy(false);
             if (!task.isSuccessful() || task.getResult() == null || !ok(task.getResult())) {
-                checkoutStatus("Chưa hủy được yêu cầu trên backend. Kiểm tra kết nối rồi thử lại.");
+                checkoutStatus("Chưa hủy được yêu cầu. Kiểm tra kết nối rồi thử lại.");
                 return;
             }
             intentId = null;
@@ -1158,7 +1149,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
 
     private void showPaymentConflict() {
         returnToHub();
-        hubStatus("Hóa đơn đang có giao dịch Stripe test. Chọn lại hóa đơn để kiểm tra kết quả.");
+        hubStatus("Hóa đơn đang có giao dịch chờ xử lý. Chọn lại hóa đơn để kiểm tra kết quả.");
     }
 
     private void finishPaymentSuccess() {
@@ -1171,7 +1162,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         binding.checkoutSuccessContainer.setVisibility(View.VISIBLE);
         binding.receiptAmountDisplay.setText(ReadSummaryFormatter.formatCurrency(authoritativeAmount + authoritativeFee, authoritativeCurrency));
         binding.receiptDetailsText.setText("Dịch vụ: " + currentServiceName + "\nTham chiếu: " + currentReference +
-                "\nMã thanh toán: " + intentId + "\nThanh toán thẻ đã được xác nhận.");
+                "\nThanh toán bằng thẻ đã được xác nhận.");
         checkoutStatus("");
     }
 
@@ -1208,25 +1199,44 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     private String errorMessage(BackendApiClient.Response response, String fallback) {
         String code = errorCode(response);
         switch (code) {
-            case "SETUP_REQUIRED": return "Máy chủ chưa được cấu hình thanh toán thẻ.";
+            case "SETUP_REQUIRED": return "Thanh toán bằng thẻ hiện chưa khả dụng. Vui lòng thử lại sau.";
             case "INVALID_OTP": return "Mã xác nhận không đúng. Vui lòng kiểm tra lại.";
-            case "OTP_EXPIRED": return "Mã xác nhận đã hết hạn (OTP_EXPIRED). Tạo mã mới.";
-            case "OTP_LOCKED": return "Đã nhập sai quá 5 lần, giao dịch bị khóa (OTP_LOCKED). Hủy để tạo lại.";
+            case "OTP_EXPIRED": return "Mã xác nhận đã hết hạn. Tạo mã mới.";
+            case "OTP_LOCKED": return "Đã nhập sai quá 5 lần, giao dịch bị khóa. Hủy để tạo lại.";
             case "OTP_USED": return "Mã đã được sử dụng. Đang kiểm tra trạng thái giao dịch.";
-            case "RATE_LIMITED": return "Thao tác quá nhanh (RATE_LIMITED). Vui lòng đợi trong giây lát.";
+            case "RATE_LIMITED": return "Bạn thao tác quá nhanh. Vui lòng đợi trong giây lát.";
             case "EXPIRED":
             case "INTENT_CHANGED": return "Giao dịch đã hết hạn hoặc bị thay đổi. Cần tạo lại giao dịch mới.";
             case "FACE_REQUIRED": return "Giao dịch yêu cầu đối chiếu khuôn mặt.";
             case "STEP_UP_UNAVAILABLE":
-            case "FACE_SETUP_REQUIRED": return "Máy chủ chưa sẵn sàng xác minh khuôn mặt.";
+            case "FACE_SETUP_REQUIRED": return "Chưa thể xác minh khuôn mặt. Vui lòng thử lại sau.";
             case "FACE_MISMATCH": return "Khuôn mặt không khớp với hồ sơ đã duyệt.";
             case "FACE_NOT_FOUND":
             case "MULTIPLE_FACES":
             case "FACE_LOW_QUALITY": return "Chụp rõ một khuôn mặt trong khung hình, đủ ánh sáng.";
-            case "IDEMPOTENCY_CONFLICT": return "Trùng lặp mã yêu cầu với nội dung khác.";
-            default: return code.isEmpty() ? fallback + " (HTTP " + (response == null ? -1 : response.statusCode) + ")." :
-                    fallback + " (" + code + ").";
+            case "IDEMPOTENCY_CONFLICT": return "Yêu cầu này đã được gửi trước đó. Kiểm tra trạng thái rồi thử lại.";
+            default: return fallback + ". Vui lòng thử lại sau.";
         }
+    }
+
+    private static String paymentStatusLabel(String status) {
+        if ("SUCCEEDED".equalsIgnoreCase(status) || "PAID".equalsIgnoreCase(status)) return "Đã thanh toán";
+        if ("FAILED".equalsIgnoreCase(status)) return "Thanh toán thất bại";
+        if ("CANCELLED".equalsIgnoreCase(status)) return "Đã hủy";
+        return "Đang chờ thanh toán";
+    }
+
+    private static String fulfillmentStatusLabel(String status) {
+        if ("FULFILLED".equalsIgnoreCase(status) || "COMPLETED".equalsIgnoreCase(status)) return "Đã hoàn tất";
+        if ("FAILED".equalsIgnoreCase(status)) return "Chưa hoàn tất";
+        return "Đang xử lý";
+    }
+
+    private static String billStatusLabel(String status) {
+        if ("PAID".equalsIgnoreCase(status) || "SETTLED".equalsIgnoreCase(status)) return "Đã thanh toán";
+        if ("CANCELLED".equalsIgnoreCase(status)) return "Đã hủy";
+        if ("PROCESSING".equalsIgnoreCase(status) || "PAYMENT_PENDING".equalsIgnoreCase(status)) return "Đang xử lý";
+        return "Chưa thanh toán";
     }
 
     @Override

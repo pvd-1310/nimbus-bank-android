@@ -75,11 +75,8 @@ public final class AccountListFragment extends Fragment {
     private int activeNavItem = R.id.nav_accounts;
     private String pendingProvisionKey;
     private String pendingProvisionRequestId;
-    private String walletStripeAccountId;
-    private Long walletStripeBalanceMinor;
-    private String walletStripeCurrency = "USD";
-    private boolean walletStripeLoading;
-    private boolean walletStripeLoaded;
+    private Long walletBalanceMinor;
+    private String walletCurrency = "VND";
     private boolean walletBillsLoading;
     private boolean walletBillsLoaded;
     private final List<JSONObject> walletUpcomingBills = new ArrayList<>();
@@ -186,7 +183,9 @@ public final class AccountListFragment extends Fragment {
         if (result == null) return;
         accounts = result.getData();
         accountStatus = result.getStatus();
-        accountMessage = result.getMessage();
+        accountMessage = result.getStatus() == ReadModelResult.Status.CACHED
+                ? "Đang hiển thị dữ liệu đã lưu trên thiết bị."
+                : "Chưa thể tải danh sách tài khoản. Vui lòng thử lại.";
         renderAll();
     }
 
@@ -407,7 +406,7 @@ public final class AccountListFragment extends Fragment {
         } else {
             String stateMessage = loading || "pending".equalsIgnoreCase(state)
                     ? "Đang phát hành thẻ" : cardRequestsFailed.contains(account.id)
-                    ? "Chưa có thẻ đã lưu" : "Chọn thẻ test khi thanh toán";
+                    ? "Chưa có thẻ đã lưu" : "Chọn thẻ khi thanh toán";
             TextView cardState = walletText(stateMessage, 14, R.color.white, false);
             cardState.setShadowLayer(dp(2), 0, dp(1), 0x55000000);
             middle.addView(cardState);
@@ -433,9 +432,9 @@ public final class AccountListFragment extends Fragment {
         card.addView(bottom);
 
         String stateLabel = loading ? "Đang tải thông tin thẻ"
-                : cardRequestsFailed.contains(account.id) ? "Thẻ test được chọn tại bước thanh toán"
+                : cardRequestsFailed.contains(account.id) ? "Chọn thẻ ở bước thanh toán"
                 : cardData == null ? ("pending".equalsIgnoreCase(state) ? "Thẻ đang được phát hành"
-                : "Dùng thẻ test trong Stripe PaymentSheet") : formatCardStatus(cardStatus);
+                : "Chọn thẻ khi thanh toán") : formatCardStatus(cardStatus);
         TextView status = walletText(stateLabel, 12, R.color.ink_muted, false);
         status.setGravity(Gravity.CENTER);
         status.setPadding(0, dp(7), 0, 0);
@@ -528,10 +527,9 @@ public final class AccountListFragment extends Fragment {
                 }
             }
         }
-        walletStripeAccountId = checking == null ? null : checking.id;
-        walletStripeBalanceMinor = checking == null ? null
+        walletBalanceMinor = checking == null ? null
                 : checking.availableMinor != null ? checking.availableMinor : checking.balanceMinor;
-        walletStripeCurrency = checking == null ? "VND" : checking.currency;
+        walletCurrency = checking == null ? "VND" : checking.currency;
         if (!walletBillsLoaded && !walletBillsLoading) loadWalletBills();
 
         addWalletSectionTitle("Tài khoản thanh toán");
@@ -539,8 +537,8 @@ public final class AccountListFragment extends Fragment {
         TextView label = walletText("Số dư khả dụng", 13, R.color.ink_muted, false);
         balanceCard.addView(label);
         TextView amount = walletText(checking == null ? "Chưa có tài khoản thanh toán"
-                : walletStripeBalanceMinor == null ? "—"
-                : ReadSummaryFormatter.formatCurrency(walletStripeBalanceMinor, walletStripeCurrency), 27, R.color.ink, true);
+                : walletBalanceMinor == null ? "—"
+                : ReadSummaryFormatter.formatCurrency(walletBalanceMinor, walletCurrency), 27, R.color.ink, true);
         amount.setPadding(0, dp(8), 0, dp(4));
         balanceCard.addView(amount);
         if (checking != null) {
@@ -621,34 +619,6 @@ public final class AccountListFragment extends Fragment {
         LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         buttonParams.topMargin = dp(10);
         binding.content.addView(bills, buttonParams);
-    }
-
-    private void loadWalletBalance(ReadModels.AccountSummary account) {
-        if (walletStripeLoading || account.id.equals(walletStripeAccountId) && walletStripeLoaded) return;
-        if (!account.id.equals(walletStripeAccountId)) {
-            walletStripeLoaded = false;
-            walletStripeBalanceMinor = null;
-        }
-        walletStripeAccountId = account.id;
-        walletStripeLoading = true;
-        var current = binding;
-        String requestedUid = uid;
-        application.getAppContainer().getBackendApiClient()
-                .get("/accounts/" + android.net.Uri.encode(account.id) + "/stripe-sandbox")
-                .addOnCompleteListener(task -> {
-                    if (binding != current || !java.util.Objects.equals(uid, requestedUid)) return;
-                    walletStripeLoading = false;
-                    walletStripeLoaded = true;
-                    try {
-                        if (!task.isSuccessful() || task.getResult().statusCode != 200) throw new org.json.JSONException("Unavailable");
-                        JSONObject result = new JSONObject(task.getResult().body);
-                        if (result.has("availableMinor")) {
-                            walletStripeBalanceMinor = result.getLong("availableMinor");
-                            walletStripeCurrency = result.optString("currency", "USD").toUpperCase(Locale.ROOT);
-                        }
-                    } catch (Exception ignored) { walletStripeBalanceMinor = null; }
-                    renderAll();
-                });
     }
 
     private void loadWalletBills() {
@@ -962,17 +932,17 @@ public final class AccountListFragment extends Fragment {
                                     String error = "";
                                     try { error = new JSONObject(resp.body).optString("error", ""); }
                                     catch (Exception ignored) { }
-                                    String message = "Không thể tạo hồ sơ (HTTP " + resp.statusCode + ").";
+                                    String message = "Không thể tạo hồ sơ. Vui lòng kiểm tra thông tin rồi thử lại.";
                                     if ("CUSTOMER_NUMBER_EXISTS".equals(error)) message = "Mã khách hàng đã tồn tại.";
                                     else if ("CONTACT_PHONE_EXISTS".equals(error)) message = "Số điện thoại liên hệ đã được sử dụng.";
-                                    else if ("PROVISION_IDENTITY_FAILED".equals(error)) message = "Email hoặc số điện thoại đã được đăng ký, hoặc Firebase Auth chưa sẵn sàng.";
+                                    else if ("PROVISION_IDENTITY_FAILED".equals(error)) message = "Email hoặc số điện thoại đã được đăng ký. Kiểm tra thông tin rồi thử lại.";
                                     else if ("IDEMPOTENCY_CONFLICT".equals(error)) message = "Yêu cầu tạo hồ sơ không khớp lần gửi trước; hãy kiểm tra dữ liệu đã nhập.";
                                     Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show();
                                 }
                             })
-                            .addOnFailureListener(err -> Toast.makeText(requireContext(), "Chưa thể cấp mới: " + err.getMessage(), Toast.LENGTH_LONG).show());
+                            .addOnFailureListener(err -> Toast.makeText(requireContext(), "Chưa thể tạo hồ sơ. Vui lòng thử lại.", Toast.LENGTH_LONG).show());
                 } catch (Exception e) {
-                    Toast.makeText(requireContext(), "Lỗi: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    Toast.makeText(requireContext(), "Không thể tạo hồ sơ. Vui lòng kiểm tra thông tin rồi thử lại.", Toast.LENGTH_SHORT).show();
                 }
             });
         });
@@ -1029,7 +999,7 @@ public final class AccountListFragment extends Fragment {
 
         androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
                 .setTitle("Cập nhật hồ sơ khách hàng")
-                .setMessage("Thao tác này được ghi vào audit log của hệ thống ngân hàng.")
+                .setMessage("Thao tác này sẽ được lưu vào lịch sử thay đổi của hệ thống ngân hàng.")
                 .setView(scrollView)
                 .setPositiveButton("Xác nhận", null)
                 .setNegativeButton("Hủy", null)
@@ -1101,12 +1071,12 @@ public final class AccountListFragment extends Fragment {
                                     String error = "";
                                     try { error = new JSONObject(resp.body).optString("error", ""); }
                                     catch (Exception ignored) { }
-                                    Toast.makeText(requireContext(), "Cập nhật thất bại (" + (error.isEmpty() ? "HTTP " + resp.statusCode : error) + ").", Toast.LENGTH_LONG).show();
+                                    Toast.makeText(requireContext(), "Không thể cập nhật hồ sơ. Vui lòng thử lại sau.", Toast.LENGTH_LONG).show();
                                 }
                             })
-                            .addOnFailureListener(err -> Toast.makeText(requireContext(), "Lỗi: " + err.getMessage(), Toast.LENGTH_LONG).show());
+                            .addOnFailureListener(err -> Toast.makeText(requireContext(), "Chưa thể cập nhật hồ sơ. Vui lòng thử lại.", Toast.LENGTH_LONG).show());
                 } catch (Exception e) {
-                    Toast.makeText(requireContext(), "Lỗi: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    Toast.makeText(requireContext(), "Không thể cập nhật hồ sơ. Vui lòng thử lại.", Toast.LENGTH_SHORT).show();
                 }
             });
         });

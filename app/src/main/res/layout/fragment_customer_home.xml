@@ -410,18 +410,6 @@
                 android:orientation="vertical"
                 android:visibility="gone" />
 
-            <!-- Backend Status Footer -->
-            <TextView
-                android:id="@+id/backend_status_text"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="18dp"
-                android:layout_marginBottom="24dp"
-                android:gravity="center"
-                android:text="Backend production: đang kiểm tra…"
-                android:textColor="@color/ink_muted"
-                android:textSize="11sp" />
-
         </LinearLayout>
     </ScrollView>
 </LinearLayout>

@@ -75,7 +75,7 @@ public final class MoneyRequestFragment extends Fragment {
         binding.helpButton.setOnClickListener(v -> {
             new MaterialAlertDialogBuilder(requireContext())
                     .setTitle("Quy trình Nạp / Rút tiền")
-                    .setMessage("Yêu cầu nạp hoặc rút tiền của bạn sẽ được gửi tới backend ngân hàng để kiểm tra tính hợp lệ.\n\nSố dư tài khoản chỉ thay đổi khi backend chính thức duyệt và ghi nhận giao dịch.")
+                    .setMessage("Số dư chỉ thay đổi khi giao dịch được xác nhận hoàn tất.")
                     .setPositiveButton("Đã hiểu", null)
                     .show();
         });
@@ -105,7 +105,7 @@ public final class MoneyRequestFragment extends Fragment {
         });
         binding.statusText.setText(pendingBody == null ? "Đang tải tài khoản…" :
                 "Chưa xác nhận được yêu cầu trước. Gửi lại để kiểm tra cùng mã yêu cầu.");
-        binding.submitButton.setText(WITHDRAWAL.equals(operation) ? "Tiếp tục · rút tiền demo" : "Nạp tiền bằng thẻ test");
+        binding.submitButton.setText(WITHDRAWAL.equals(operation) ? "Tiếp tục · rút tiền" : "Nạp tiền bằng thẻ");
         binding.demoSettlementButton.setVisibility(View.GONE);
         ((View) binding.accountInput.getParent()).setVisibility(View.GONE);
         ((View) binding.amountInput.getParent()).setVisibility(View.GONE);
@@ -167,7 +167,7 @@ public final class MoneyRequestFragment extends Fragment {
         if ("Đang tải tài khoản…".contentEquals(binding.statusText.getText())) {
             binding.statusText.setText(accountIds.isEmpty()
                     ? "Cần tài khoản thanh toán đã đồng bộ."
-                    : "Nạp tiền được ghi có sau khi Stripe xác nhận thanh toán; rút tiền là luồng demo.");
+                    : "Nạp tiền được ghi có sau khi thanh toán hoàn tất.");
         }
         updateControls();
     }
@@ -235,7 +235,7 @@ public final class MoneyRequestFragment extends Fragment {
                                 && requestId.equals(new JSONObject(requestBody).getString("requestId"))) {
                             clearPending();
                             binding.amountInput.setText("");
-                            binding.statusText.setText("Đã gửi yêu cầu · Đã tiếp nhận (REQUESTED)\nMã: " + id);
+                            binding.statusText.setText("Yêu cầu đã được tiếp nhận. Mã yêu cầu: " + id);
                             updateControls();
                             return;
                         }
@@ -245,7 +245,7 @@ public final class MoneyRequestFragment extends Fragment {
                 } else if (response.statusCode >= 400 && response.statusCode < 500
                         && response.statusCode != 408 && response.statusCode != 429) {
                     clearPending();
-                    binding.statusText.setText("Backend từ chối yêu cầu (HTTP " + response.statusCode + ").");
+                    binding.statusText.setText("Không thể gửi yêu cầu. Vui lòng kiểm tra thông tin rồi thử lại.");
                     updateControls();
                     return;
                 }
@@ -304,7 +304,7 @@ public final class MoneyRequestFragment extends Fragment {
         binding.submitButton.setEnabled(uid != null && !sending && (retry || !accountIds.isEmpty()));
         boolean withdrawal = binding.operationInput.getSelectedItemPosition() == 1;
         binding.submitButton.setText(retry && !sending ? "Gửi lại yêu cầu"
-                : withdrawal ? "Tiếp tục · rút tiền demo" : "Nạp tiền bằng thẻ test");
+                : withdrawal ? "Tiếp tục · rút tiền" : "Nạp tiền bằng thẻ");
         binding.historyButton.setEnabled(uid != null && !readingHistory);
     }
 

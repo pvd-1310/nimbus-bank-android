@@ -60,11 +60,11 @@ public final class OfficerFeatureFragment extends Fragment {
             }
             Bundle args = getArguments();
             String title = args == null ? "Tác vụ vận hành" : args.getString("title", "Tác vụ vận hành");
-            String subtitle = args == null ? "Tác vụ này được kiểm soát bởi backend production." : args.getString("subtitle", "Tác vụ này được kiểm soát bởi backend production.");
+            String subtitle = args == null ? "Các thao tác được ghi nhận theo quyền của tài khoản cán bộ." : args.getString("subtitle", "Các thao tác được ghi nhận theo quyền của tài khoản cán bộ.");
             binding.eyebrowText.setText(args == null ? "OFFICER OPERATIONS" : args.getString("eyebrow", "OFFICER OPERATIONS"));
             binding.titleText.setText(title);
             binding.subtitleText.setText(subtitle);
-            binding.statusText.setText("BACKEND CHECKPOINT");
+            binding.statusText.setText("TỔNG QUAN");
             if (title.contains("eKYC")) {
                 binding.statusBadge.setText("CHỈ XEM");
                 binding.statusText.setText("KIỂM TRA TỰ ĐỘNG");
@@ -229,7 +229,7 @@ public final class OfficerFeatureFragment extends Fragment {
         ImageView icon = row.findViewById(R.id.transaction_icon);
         icon.setImageResource(R.drawable.ic_shield);
 
-        title.setText((demo ? "Selfie demo: " : "Hồ sơ: ") + id);
+        title.setText(demo ? "Hồ sơ đăng ký khuôn mặt" : "Hồ sơ định danh");
 
         StringBuilder sb = new StringBuilder();
         sb.append("KH: ").append(customerUid);
@@ -247,7 +247,7 @@ public final class OfficerFeatureFragment extends Fragment {
                 amount.setTextColor(ContextCompat.getColor(requireContext(), R.color.warning));
                 break;
             case "VERIFIED":
-                amount.setText(demo ? "Demo" : "Đã xác thực");
+                amount.setText(demo ? "Chưa xác minh CCCD" : "Đã xác thực");
                 amount.setTextColor(ContextCompat.getColor(requireContext(), R.color.success));
                 break;
             case "RESUBMIT_REQUIRED":
@@ -285,8 +285,8 @@ public final class OfficerFeatureFragment extends Fragment {
 
         // Header info
         TextView info = new TextView(requireContext());
-        info.setText("Mã hồ sơ: " + id + "\nKhách hàng: " + customerUid + "\nChế độ: "
-                + (demo ? "Selfie demo, chưa xác minh CCCD" : "CCCD và selfie")
+        info.setText("Mã hồ sơ: " + id + "\nKhách hàng: " + customerUid + "\nPhạm vi xác minh: "
+                + (demo ? "Ảnh selfie, chưa xác minh CCCD" : "CCCD và selfie")
                 + "\nTrạng thái: " + statusLabel(status, demo)
                 + (existingReason.isEmpty() ? "" : "\nKết quả: " + existingReason));
         info.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
@@ -338,7 +338,7 @@ public final class OfficerFeatureFragment extends Fragment {
 
     private static String statusLabel(String status, boolean demo) {
         switch (status) {
-            case "VERIFIED": return demo ? "Đã đăng ký khuôn mặt demo" : "Đã xác thực tự động";
+            case "VERIFIED": return demo ? "Đã đăng ký khuôn mặt · chưa xác minh CCCD" : "Đã xác thực tự động";
             case "REVIEWING": return "Đang chờ kiểm tra lại";
             case "RESUBMIT_REQUIRED": return "Cần chụp lại ảnh";
             case "REJECTED": return "Đã từ chối";
@@ -373,7 +373,7 @@ public final class OfficerFeatureFragment extends Fragment {
                 if (sc == 503) {
                     new AlertDialog.Builder(requireContext())
                             .setTitle("Thông báo S3")
-                            .setMessage("Dịch vụ S3 của ngân hàng chưa cấu hình bộ nhớ đám mây (SETUP_REQUIRED). Vui lòng kiểm tra biến môi trường S3 trên backend.")
+                            .setMessage("Chưa thể tải ảnh hồ sơ. Vui lòng thử lại sau hoặc liên hệ quản trị viên.")
                             .setPositiveButton("Đã hiểu", null)
                             .show();
                     return;
@@ -450,7 +450,7 @@ public final class OfficerFeatureFragment extends Fragment {
         var current = binding;
         int generation = ++auditLoadGeneration;
         if (cursor == null) current.itemsContainer.removeAllViews();
-        current.statusText.setText("Đang tải audit…");
+        current.statusText.setText("Đang tải lịch sử thay đổi…");
         current.actionButton.setVisibility(View.VISIBLE);
         current.actionButton.setEnabled(false);
         String path = "/officer/audit?limit=25";
@@ -473,7 +473,7 @@ public final class OfficerFeatureFragment extends Fragment {
                                     + item.optString("requestId", "—"), item.optJSONObject("beforeAfterSummary"));
                 }
                 current.statusText.setText(items.length() == 0 && cursor == null
-                        ? "Chưa có sự kiện audit cho bộ lọc này." : "Đã tải audit từ backend.");
+                        ? "Chưa có thay đổi phù hợp." : "Đã cập nhật lịch sử thay đổi.");
                 if (!json.isNull("nextCursor")) {
                     String next = json.getString("nextCursor");
                     current.actionButton.setText("Tải thêm");
@@ -483,7 +483,7 @@ public final class OfficerFeatureFragment extends Fragment {
                 }
             } catch (JSONException error) {
                 current.statusText.setText(task.isSuccessful() && task.getResult().statusCode == 403
-                        ? "Bạn chưa có quyền xem audit." : "Không tải được audit từ backend.");
+                        ? "Bạn chưa có quyền xem nội dung này." : "Không tải được lịch sử thay đổi.");
                 current.actionButton.setText("Thử lại");
                 current.actionButton.setOnClickListener(v -> loadAuditPage(api, action, cursor));
             }
@@ -498,12 +498,12 @@ public final class OfficerFeatureFragment extends Fragment {
 
         title.setText(action);
         subtitle.setText("Actor: " + actor + " → Target: " + target + "\n" + time);
-        amount.setText("AUDIT");
+        amount.setText("Lịch sử");
         amount.setTextColor(ContextCompat.getColor(requireContext(), R.color.navy));
 
         row.setOnClickListener(v -> new AlertDialog.Builder(requireContext())
-                .setTitle("Chi tiết Audit Log")
-                .setMessage("Hành động: " + action + "\nActor: " + actor + "\nTarget: " + target + "\nThời gian: " + time + "")
+                .setTitle("Chi tiết thay đổi")
+                .setMessage("Thao tác: " + action + "\nNgười thực hiện: " + actor + "\nĐối tượng: " + target + "\nThời gian: " + time)
                 .setPositiveButton("Đóng", null)
                 .show());
 
@@ -532,7 +532,7 @@ public final class OfficerFeatureFragment extends Fragment {
                             bps + " bps", "Phiên bản " + policy.optInt("version"),
                             "Hiệu lực từ " + new java.util.Date(policy.optLong("effectiveFrom")));
                 }
-                current.statusText.setText(items.length() == 0 ? "Chưa có chính sách lãi suất." : "Chính sách từ backend.");
+                current.statusText.setText(items.length() == 0 ? "Chưa có chính sách lãi suất." : "Đã cập nhật chính sách lãi suất.");
             } catch (JSONException error) {
                 current.statusText.setText("Không tải được chính sách lãi suất.");
             }
@@ -613,12 +613,12 @@ public final class OfficerFeatureFragment extends Fragment {
                                     Toast.makeText(requireContext(), "Đã ban hành chính sách lãi suất " + ratePercent + "% cho " + selectedProduct, Toast.LENGTH_LONG).show();
                                     renderRatePolicies(api);
                                 } else {
-                                    Toast.makeText(requireContext(), "Backend chưa xác nhận cập nhật chính sách", Toast.LENGTH_SHORT).show();
+                                    Toast.makeText(requireContext(), "Chưa thể cập nhật chính sách. Vui lòng thử lại.", Toast.LENGTH_SHORT).show();
                                 }
                             });
                         });
                     } catch (Exception ex) {
-                        Toast.makeText(requireContext(), "Lỗi định dạng: " + ex.getMessage(), Toast.LENGTH_SHORT).show();
+                        Toast.makeText(requireContext(), "Không thể xử lý yêu cầu. Vui lòng kiểm tra thông tin rồi thử lại.", Toast.LENGTH_SHORT).show();
                     }
                 })
                 .setNegativeButton("Hủy", null)

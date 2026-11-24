@@ -98,7 +98,7 @@ public final class ProfileFragment extends Fragment {
 
         binding.itemCards.setOnClickListener(v -> new AlertDialog.Builder(requireContext())
                 .setTitle("Hạn mức & Bảo mật")
-                .setMessage("Hạn mức được backend kiểm tra theo tài khoản. Mã xác nhận hiển thị trong ứng dụng là OTP demo. Giao dịch vượt ngưỡng có thể cần xác minh khuôn mặt demo.")
+                .setMessage("Hạn mức được kiểm tra theo tài khoản. Mã xác nhận hiển thị trên màn hình này. Giao dịch vượt ngưỡng có thể cần xác minh khuôn mặt.")
                 .setPositiveButton("Đóng", null)
                 .show());
 
@@ -122,15 +122,15 @@ public final class ProfileFragment extends Fragment {
 
         apiClient.get("/capabilities").addOnCompleteListener(task -> {
             if (!isAdded() || binding == null) return;
-            String faceCap = "CHƯA KẾT NỐI";
+            String faceCap = "Chưa khả dụng";
             if (task.isSuccessful() && task.getResult() != null && task.getResult().statusCode == 200) {
                 try {
                     JSONObject cap = new JSONObject(task.getResult().body);
-                    faceCap = cap.optString("face", "SETUP_REQUIRED");
+                    faceCap = "ENABLED".equals(cap.optString("face")) ? "Có thể sử dụng" : "Chưa khả dụng";
                 } catch (Exception ignored) { }
             }
             binding.cameraStatusText.setText("Camera: " + (cameraPermission ? "Đã cấp quyền" : "Chưa cấp quyền") +
-                    " · Face AI: " + faceCap + " (Demo ảnh tĩnh)");
+                    " · Khuôn mặt: " + faceCap);
         });
     }
 
@@ -141,8 +141,8 @@ public final class ProfileFragment extends Fragment {
         new AlertDialog.Builder(requireContext())
                 .setTitle("Trạng thái Camera & Sinh trắc học")
                 .setMessage("• Quyền truy cập Camera: " + (cameraPermission ? "Đã cấp quyền" : "Chưa cấp quyền (Cần cho eKYC & Face)") +
-                        "\n• Phương thức khuôn mặt: Nhận diện ảnh tĩnh (Tính năng demo đồ án)" +
-                        "\n• Mã OTP giao dịch: Hiển thị trực tiếp trong app (Tính năng demo đồ án)" +
+                        "\n• Phương thức khuôn mặt: Ảnh selfie dùng để thử đăng ký và đăng nhập; chưa xác minh giấy tờ hoặc danh tính pháp lý." +
+                        "\n• Mã xác nhận giao dịch hiển thị trực tiếp trên màn hình." +
                         "\n\nLưu ý: Phương thức đăng nhập bằng Email và Mật khẩu luôn là phương thức dự phòng chính thức và an toàn.")
                 .setPositiveButton("Đóng", null)
                 .show();
@@ -171,7 +171,7 @@ public final class ProfileFragment extends Fragment {
                                         message += " Không có ảnh eKYC nào cần xóa.";
                                     }
                                 } else {
-                                    message = "Backend chưa đặt lại trạng thái eKYC. Hãy khởi động lại backend đã cập nhật rồi thử lại.";
+                                    message = "Chưa thể cập nhật trạng thái định danh. Vui lòng thử lại sau.";
                                 }
                             } catch (Exception ignored) { }
                             Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show();
@@ -179,8 +179,8 @@ public final class ProfileFragment extends Fragment {
                             fetchCameraAndCapabilitiesStatus();
                         } else {
                             String message = task.isSuccessful()
-                                    ? "Không thể thu hồi mẫu khuôn mặt (HTTP " + task.getResult().statusCode + ")."
-                                    : "Chưa kết nối được backend để thu hồi mẫu khuôn mặt. Hãy thử lại.";
+                                    ? "Không thể xóa dữ liệu khuôn mặt. Vui lòng thử lại sau."
+                                    : "Chưa thể kết nối để xóa dữ liệu khuôn mặt. Vui lòng thử lại.";
                             Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show();
                         }
                     });
@@ -286,10 +286,10 @@ public final class ProfileFragment extends Fragment {
                         dialog.dismiss();
                         loadProfile();
                     } else {
-                        String message = "Không kết nối được backend để cập nhật hồ sơ.";
+                        String message = "Không thể cập nhật hồ sơ. Kiểm tra kết nối rồi thử lại.";
                         if (task.isSuccessful()) {
                             var response = task.getResult();
-                            message = "Không thể cập nhật hồ sơ (HTTP " + response.statusCode + ").";
+                            message = "Không thể cập nhật hồ sơ. Vui lòng thử lại sau.";
                             try {
                                 if ("CONTACT_PHONE_EXISTS".equals(new JSONObject(response.body).optString("error")))
                                     message = "Số điện thoại liên hệ đã được sử dụng.";
@@ -335,17 +335,17 @@ public final class ProfileFragment extends Fragment {
         if (binding == null) return;
         switch (status) {
             case "VERIFIED":
-                binding.ekycBadge.setText(demo ? "✓ Khuôn mặt demo đã đăng ký" : "✓ eKYC Đã xác thực");
+                binding.ekycBadge.setText(demo ? "✓ Đã đăng ký khuôn mặt" : "✓ Đã xác thực eKYC");
                 binding.ekycBadge.setBackgroundResource(R.drawable.badge_status_success);
                 binding.ekycBadge.setTextColor(ContextCompat.getColor(requireContext(), R.color.success));
                 break;
             case "REVIEWING":
-                binding.ekycBadge.setText(demo ? "⏳ Đang kiểm tra selfie" : "⏳ eKYC Đang xử lý");
+                binding.ekycBadge.setText(demo ? "⏳ Đang kiểm tra ảnh selfie" : "⏳ eKYC đang xử lý");
                 binding.ekycBadge.setBackgroundResource(R.drawable.badge_status_warning);
                 binding.ekycBadge.setTextColor(ContextCompat.getColor(requireContext(), R.color.warning));
                 break;
             case "RESUBMIT_REQUIRED":
-                binding.ekycBadge.setText(demo ? "⚠️ Cần chụp lại selfie" : "⚠️ eKYC Cần chụp lại");
+                binding.ekycBadge.setText(demo ? "⚠️ Cần chọn ảnh selfie khác" : "⚠️ Cần chọn lại ảnh");
                 binding.ekycBadge.setBackgroundResource(R.drawable.badge_status_warning);
                 binding.ekycBadge.setTextColor(ContextCompat.getColor(requireContext(), R.color.warning));
                 break;
@@ -355,12 +355,12 @@ public final class ProfileFragment extends Fragment {
                 binding.ekycBadge.setTextColor(ContextCompat.getColor(requireContext(), R.color.danger));
                 break;
             case "DRAFT":
-                binding.ekycBadge.setText(demo ? "Chưa hoàn tất selfie demo" : "Chưa hoàn tất eKYC");
+                binding.ekycBadge.setText(demo ? "Chưa hoàn tất đăng ký khuôn mặt" : "Chưa hoàn tất eKYC");
                 binding.ekycBadge.setBackgroundResource(R.drawable.glass_panel_soft);
                 binding.ekycBadge.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
                 break;
             default:
-                binding.ekycBadge.setText(demo ? "Chưa đăng ký selfie demo" : "Chưa định danh eKYC");
+                binding.ekycBadge.setText(demo ? "Chưa đăng ký khuôn mặt" : "Chưa định danh eKYC");
                 binding.ekycBadge.setBackgroundResource(R.drawable.glass_panel_soft);
                 binding.ekycBadge.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
                 break;

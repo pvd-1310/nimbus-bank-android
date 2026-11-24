@@ -92,7 +92,7 @@
                 android:layout_marginTop="4dp"
                 android:textColor="@color/ink_muted"
                 android:textSize="14sp"
-                android:text="Tác vụ này được kiểm soát bởi backend production." />
+                android:text="Các thao tác được ghi nhận theo quyền của tài khoản cán bộ." />
 
             <!-- Filter chips / Search row -->
             <HorizontalScrollView
@@ -173,7 +173,7 @@
                 android:background="@drawable/navy_button_pill"
                 app:backgroundTint="@null" />
 
-            <!-- Backend status card -->
+            <!-- Compliance information -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -199,7 +199,7 @@
                         android:paddingEnd="10dp"
                         android:paddingTop="4dp"
                         android:paddingBottom="4dp"
-                        android:text="BACKEND CONNECTED"
+                        android:text="HOẠT ĐỘNG"
                         android:textColor="@color/navy"
                         android:textSize="11sp"
                         android:textStyle="bold" />
@@ -209,7 +209,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
-                        android:text="Thay đổi lãi suất và kết quả kiểm tra eKYC được ghi nhận trong audit log theo quyền của tài khoản Officer."
+                        android:text="Thay đổi lãi suất và kết quả kiểm tra eKYC được lưu trong lịch sử thao tác của cán bộ."
                         android:textColor="@color/ink_muted"
                         android:textSize="13sp"
                         android:lineSpacingExtra="2dp" />

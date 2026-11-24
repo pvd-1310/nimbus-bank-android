@@ -270,7 +270,7 @@
                 style="@style/Widget.Material3.Button.TonalButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Thực hành xác thực và ghi sổ demo" />
+                android:text="Xem lịch sử yêu cầu" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/history_button"

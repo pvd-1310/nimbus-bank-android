@@ -167,7 +167,7 @@ public final class TransactionHistoryFragment extends Fragment {
                 }
                 nextCursor = page.isNull("nextCursor") ? null : page.getString("nextCursor");
                 rows = loaded;
-                baseStatus = rows.isEmpty() ? "Không có giao dịch." : "Lịch sử từ backend";
+                baseStatus = rows.isEmpty() ? "Chưa có giao dịch." : "Lịch sử giao dịch";
             } catch (JSONException error) {
                 pageError = true;
                 baseStatus = cursor == null ? "Không tải được lịch sử." : "Không tải được trang sau. Các dòng cũ có thể đã thay đổi.";
@@ -184,7 +184,7 @@ public final class TransactionHistoryFragment extends Fragment {
             if (generation != loadGeneration || binding == null || result.getData() == null) return;
             rows = new ArrayList<>();
             rows.addAll(result.getData());
-            baseStatus = "Dữ liệu dự phòng Firestore. Chưa kiểm tra được lịch sử từ backend.";
+            baseStatus = "Đang hiển thị dữ liệu đã lưu trên thiết bị. Vuốt xuống để thử tải lại.";
             renderFiltered();
         });
     }
@@ -273,7 +273,7 @@ public final class TransactionHistoryFragment extends Fragment {
         switch (result.getStatus()) {
             case LOADING: return "Đang tải lịch sử…";
             case CACHED: return result.getMessage();
-            case ERROR: return result.getMessage();
+            case ERROR: return "Chưa thể tải lịch sử giao dịch. Vuốt xuống để thử lại.";
             case EMPTY: return "Không có giao dịch.";
             default: return "Lịch sử đã đồng bộ.";
         }
