@@ -52,6 +52,7 @@ import java.util.concurrent.Executors;
 public final class EkycDialogFragment extends DialogFragment {
     private static final int PHOTO_COUNT = 3;
     private static final int SELFIE = 2;
+    private static final String CAMERA_TAG = "ekyc-in-app-camera";
     private static final String[] PHOTO_LABELS = {"Mặt trước CCCD", "Mặt sau CCCD", "Chân dung Selfie"};
     private static final String[] INSTRUCTIONS = {
             "Chọn ảnh rõ toàn bộ mặt trước CCCD, thấy ảnh chân dung trên thẻ, tránh lóa và rung.",
@@ -60,6 +61,7 @@ public final class EkycDialogFragment extends DialogFragment {
     };
     private DialogEkycBinding binding;
     private CaptureState state;
+    private boolean cameraDialogOpen;
 
     private final ActivityResultLauncher<String> gallery = registerForActivityResult(
             new ActivityResultContracts.GetContent(), uri -> {
@@ -89,21 +91,45 @@ public final class EkycDialogFragment extends DialogFragment {
         binding.btnBack.setOnClickListener(v -> dismiss());
         binding.btnCancelConsent.setOnClickListener(v -> dismiss());
         binding.btnConsent.setOnClickListener(v -> state.startDraft());
+        getChildFragmentManager().setFragmentResultListener(InAppCameraDialogFragment.RESULT_KEY,
+                getViewLifecycleOwner(), (key, result) -> {
+                    if (state == null) return;
+                    if (result.containsKey("switch_slot")) {
+                        cameraDialogOpen = true;
+                        int selectedSlot = result.getInt("switch_slot", -1);
+                        state.cancelSelection(null);
+                        state.select(selectedSlot);
+                        View root = getView();
+                        if (root != null) root.post(() -> {
+                            cameraDialogOpen = false;
+                            render();
+                        });
+                        return;
+                    }
+                    cameraDialogOpen = false;
+                    String path = result.getString("path");
+                    String error = result.getString("error");
+                    if (path != null) state.cameraFileSelected(path);
+                    else state.cameraFailed(error == null ? "Đã hủy chụp ảnh." : error);
+                });
         binding.btnHelp.setOnClickListener(v -> new MaterialAlertDialogBuilder(requireContext())
                 .setTitle("Trợ giúp định danh eKYC")
                 .setMessage(state.isDemo()
-                        ? "Chọn một ảnh selfie rõ nét, đủ sáng và chỉ có một khuôn mặt. Bước này chưa xác minh CCCD hoặc danh tính pháp lý."
-                        : "Chọn mặt trước, mặt sau CCCD và selfie từ thư viện ảnh. Bạn có thể xem và chọn lại từng ảnh trước khi nộp.")
+                        ? "Chụp selfie ngay trong ứng dụng, đủ sáng và chỉ có một khuôn mặt. Bước này chưa xác minh CCCD hoặc danh tính pháp lý."
+                        : "Chụp hoặc tải ảnh mặt trước, mặt sau CCCD; sau đó chụp khuôn mặt ngay trong ứng dụng. Bạn có thể xem và chụp lại ảnh trước khi nộp.")
                 .setPositiveButton("Đóng", null)
                 .show());
-        binding.btnShutter.setContentDescription("Chọn ảnh từ thư viện");
+        binding.btnShutter.setContentDescription("Chụp ảnh bằng camera trong ứng dụng");
         binding.btnShutter.setFocusable(true);
-        binding.btnShutter.setOnClickListener(v -> requestGallery());
-        binding.btnRetake.setOnClickListener(v -> requestGallery());
+        binding.btnShutter.setOnClickListener(v -> requestCapture());
+        binding.btnUpload.setOnClickListener(v -> requestGallery());
+        binding.btnRetake.setOnClickListener(v -> requestCapture());
+        binding.btnRetakeUpload.setOnClickListener(v -> requestGallery());
         binding.chipFront.setOnClickListener(v -> state.select(0));
         binding.chipBack.setOnClickListener(v -> state.select(1));
         binding.chipSelfie.setOnClickListener(v -> state.select(SELFIE));
         binding.btnSubmitEkyc.setOnClickListener(v -> state.submit());
+        cameraDialogOpen = getChildFragmentManager().findFragmentByTag(CAMERA_TAG) != null;
         binding.statusHeadline.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         binding.shutterHint.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         render();
@@ -126,8 +152,38 @@ public final class EkycDialogFragment extends DialogFragment {
         super.onDestroyView();
     }
 
+    private void requestCapture() {
+        if (!state.reserveSelection()) return;
+        showCameraForReservedSlot();
+    }
+
+    private void showCameraForReservedSlot() {
+        cameraDialogOpen = true;
+        render();
+        InAppCameraDialogFragment.newInstance(state.pendingSlot(), state.canSelect(0), state.canSelect(1))
+                .show(getChildFragmentManager(), CAMERA_TAG);
+    }
+
+    private void maybeOpenCameraForCurrentStep() {
+        if (cameraDialogOpen || !state.autoCameraPending || state.photoBusy() || state.progress != null) return;
+        if (state.slot < 0 || state.slot >= PHOTO_COUNT || state.previews[state.slot] != null) {
+            state.autoCameraPending = false;
+            return;
+        }
+        state.autoCameraPending = false;
+        cameraDialogOpen = true;
+        if (!state.reserveSelection()) {
+            cameraDialogOpen = false;
+            state.autoCameraPending = true;
+            return;
+        }
+        render();
+        showCameraForReservedSlot();
+    }
+
     private void requestGallery() {
-        if (state.reserveSelection()) gallery.launch("image/*");
+        if (state == null || state.pendingSlot() == SELFIE || !state.reserveSelection()) return;
+        gallery.launch("image/*");
     }
 
     private void render() {
@@ -142,28 +198,35 @@ public final class EkycDialogFragment extends DialogFragment {
 
         boolean showStatus = state.progress != null || state.error != null
                 || (!state.consent && !state.isDraft());
-        boolean showCapture = !showStatus && !state.consent;
+        // The legacy capture view is retained for final review/submission, but must not
+        // flash underneath the full-screen Camera2 flow between automatically opened steps.
+        boolean cameraHandoff = cameraDialogOpen || state.autoCameraPending || state.photoBusy();
+        boolean showCapture = !showStatus && !state.consent && !cameraHandoff;
         visible(binding.layoutStatus, showStatus);
         visible(binding.layoutConsent, !showStatus && state.consent);
         visible(binding.layoutCapture, showCapture);
         if (showCapture) renderCapture();
         else if (showStatus) renderStatus();
-        else renderConsent();
+        else if (state.consent) renderConsent();
+
+        // Auto-open must run from render(), since the capture layout is deliberately
+        // hidden while the camera handoff is pending.
+        maybeOpenCameraForCurrentStep();
     }
 
     private void renderConsent() {
         if (state.isDemo()) {
             binding.consentHeadline.setText("Đăng ký khuôn mặt");
             binding.consentSummary.setText("Bạn chưa cần cung cấp ảnh CCCD. Ảnh selfie được lưu riêng tư để đăng ký và đăng nhập bằng khuôn mặt. Phương thức này chưa xác minh danh tính.");
-            binding.consentPurpose.setText("Chỉ thu thập một ảnh selfie từ thư viện để tạo mẫu khuôn mặt cho tài khoản này.");
+            binding.consentPurpose.setText("Chụp một ảnh selfie bằng camera ngay trong ứng dụng để tạo mẫu khuôn mặt cho tài khoản này.");
             binding.consentStorage.setText("Ảnh được tải lên vùng lưu trữ riêng tư bằng URL có thời hạn. Hệ thống kiểm tra chất lượng khuôn mặt; cán bộ có quyền chỉ xem bằng chứng.");
             binding.consentLimit.setText("Bước này chưa xác minh CCCD, danh tính pháp lý hoặc phát hiện ảnh giả.");
         } else {
             binding.consentHeadline.setText("Thu thập & Xử lý dữ liệu định danh");
             binding.consentSummary.setText("Ảnh định danh được lưu trong vùng riêng tư và chỉ được dùng cho bước xác thực bạn đồng ý thực hiện.");
-            binding.consentPurpose.setText("Thu thập ảnh CCCD mặt trước, mặt sau và selfie để kiểm tra khuôn mặt khi mở tài khoản.");
-            binding.consentStorage.setText("Ảnh được tải lên bộ nhớ riêng tư bằng URL có thời hạn. Hệ thống so khuôn mặt trên mặt trước CCCD với selfie; cán bộ có quyền chỉ xem bằng chứng.");
-            binding.consentLimit.setText("Ứng dụng mở thư viện ảnh sau khi bạn đồng ý. Bước so khuôn mặt chưa xác thực CCCD thật hoặc chống ảnh giả, ảnh phát lại.");
+            binding.consentPurpose.setText("Thu thập ảnh CCCD mặt trước, mặt sau và selfie để lưu hồ sơ định danh, đồng thời tạo mẫu khuôn mặt dùng cho bước xác thực giao dịch.");
+            binding.consentStorage.setText("Ảnh được tải lên bộ nhớ riêng tư bằng URL có thời hạn. Hệ thống kiểm tra chất lượng selfie và tạo mẫu khuôn mặt; ảnh CCCD được lưu làm bằng chứng.");
+            binding.consentLimit.setText("Bạn có thể chụp CCCD bằng camera trong ứng dụng hoặc tải ảnh có sẵn lên; selfie được chụp trong ứng dụng. Hệ thống chưa OCR hoặc xác thực tính thật của CCCD, chưa phát hiện ảnh giả hay ảnh phát lại.");
         }
     }
 
@@ -175,7 +238,7 @@ public final class EkycDialogFragment extends DialogFragment {
         boolean demo = state.isDemo();
         visible(binding.captureStepper, !demo);
         visible(binding.layoutStepChips, !demo);
-        binding.ekycInstructionTitle.setText(slot == SELFIE ? "Chọn ảnh chân dung" : "Chọn ảnh Căn cước công dân");
+        binding.ekycInstructionTitle.setText(slot == SELFIE ? "Chụp khuôn mặt" : "Chụp hoặc tải ảnh Căn cước công dân");
         binding.ekycInstructionSubtitle.setText(INSTRUCTIONS[slot]);
         binding.frameLabel.setText(PHOTO_LABELS[slot]);
         binding.ivCapturedPreview.setContentDescription(PHOTO_LABELS[slot] + " đã chọn");
@@ -185,23 +248,29 @@ public final class EkycDialogFragment extends DialogFragment {
         visible(binding.frameFace, !ready && slot == SELFIE);
         visible(binding.badgeCaptured, ready);
         visible(binding.layoutRetakeAction, ready);
-        visible(binding.btnShutter, !ready);
+        visible(binding.layoutCaptureActions, !ready);
+        visible(binding.btnUpload, !ready && slot != SELFIE && !demo);
+        binding.btnShutter.setText(slot == SELFIE ? "Chụp selfie" : "Chụp bằng camera");
         binding.btnShutter.setEnabled(canEdit);
+        binding.btnUpload.setEnabled(canEdit);
         binding.btnRetake.setEnabled(canEdit);
+        visible(binding.btnRetakeUpload, ready && slot != SELFIE && !demo);
+        binding.btnRetakeUpload.setEnabled(canEdit);
         String notice = state.notice;
         visible(binding.shutterHint, !ready || notice != null || state.processingPhoto);
         binding.shutterHint.setText(notice != null ? notice : state.processingPhoto
-                ? "Đang chuẩn bị ảnh…" : "Chọn ảnh từ thư viện điện thoại");
+                ? "Đang chuẩn bị ảnh…" : slot == SELFIE
+                ? "Đưa mặt vào khung hình và chụp bằng camera trong ứng dụng"
+                : "Đưa thẻ vào khung camera hoặc tải ảnh có sẵn lên");
 
-        updateIndicator(binding.step1Indicator, slot == 0, false);
-        updateIndicator(binding.step2Indicator, slot == 1, false);
-        updateIndicator(binding.step3Indicator, slot == SELFIE, false);
+        updateIndicator(binding.step1Indicator, slot != SELFIE, false);
+        updateIndicator(binding.step2Indicator, slot == SELFIE, false);
         updateIndicator(binding.chipFront, slot == 0, true);
         updateIndicator(binding.chipBack, slot == 1, true);
         updateIndicator(binding.chipSelfie, slot == SELFIE, true);
-        binding.chipFront.setEnabled(canEdit);
-        binding.chipBack.setEnabled(canEdit);
-        binding.chipSelfie.setEnabled(canEdit);
+        binding.chipFront.setEnabled(canEdit && state.canSelect(0));
+        binding.chipBack.setEnabled(canEdit && state.canSelect(1));
+        binding.chipSelfie.setEnabled(canEdit && state.canSelect(SELFIE));
         visible(binding.btnSubmitEkyc, state.allPhotosReady());
         binding.btnSubmitEkyc.setText(demo ? "Đăng ký khuôn mặt" : "Nộp và kiểm tra ảnh (3/3)");
         binding.btnSubmitEkyc.setEnabled(canEdit);
@@ -251,17 +320,17 @@ public final class EkycDialogFragment extends DialogFragment {
                     : serviceUnavailable ? "Dịch vụ nhận diện khuôn mặt đang gặp sự cố. Hồ sơ đã được trả lại để bạn gửi lại khi dịch vụ hoạt động."
                     : state.isDemo()
                     ? "Ảnh selfie chưa đạt yêu cầu. Bắt đầu lượt mới và chọn ảnh khuôn mặt rõ nét trong ánh sáng đều."
-                    : "Bạn có thể bắt đầu hồ sơ mới để gửi lại ảnh định danh. Hãy chọn rõ mặt trước CCCD và selfie trong ánh sáng đều.";
+                    : "Bạn có thể bắt đầu hồ sơ mới để gửi lại ảnh định danh. Hãy bảo đảm hai mặt CCCD rõ nét và selfie có một khuôn mặt, đủ sáng.";
             reason = rejected ? rawReason : explainAutoReview(rawReason, state.isDemo());
             action = "Bắt đầu hồ sơ mới";
             onAction = state::showConsent;
             icon = rejected ? R.drawable.ic_close : R.drawable.ic_shield;
             tint = rejected ? R.color.danger : R.color.warning;
         } else if ("VERIFIED".equals(state.reviewStatus())) {
-            headline = state.isDemo() ? "Đã đăng ký khuôn mặt" : "Đã hoàn tất đối chiếu ảnh";
+            headline = state.isDemo() ? "Đã đăng ký khuôn mặt" : "Đã ghi nhận hồ sơ eKYC";
             detail = state.isDemo()
                     ? "Hệ thống đã kiểm tra ảnh selfie và đăng ký mẫu khuôn mặt. Chưa xác minh CCCD hoặc danh tính pháp lý."
-                    : "Hệ thống đã đối chiếu khuôn mặt trên ảnh mặt trước CCCD với ảnh selfie. Đây là so khớp ảnh tĩnh, chưa xác thực giấy tờ, danh tính pháp lý hay liveness.";
+                    : "Hệ thống đã kiểm tra chất lượng selfie và tạo mẫu khuôn mặt. Ảnh CCCD được lưu làm bằng chứng; hệ thống chưa OCR hoặc xác thực tính thật của giấy tờ.";
             icon = R.drawable.ic_check;
             tint = R.color.success;
         } else {
@@ -294,16 +363,15 @@ public final class EkycDialogFragment extends DialogFragment {
             case "FACE_TIMEOUT": return "Dịch vụ nhận diện khuôn mặt phản hồi quá thời gian. Hồ sơ đã được trả lại để bạn gửi lại sau.";
             case "FACE_BUSY": return "Dịch vụ nhận diện khuôn mặt đang bận. Hồ sơ đã được trả lại để bạn gửi lại sau.";
             case "FACE_TEMPLATE_REVOKED": return "Mẫu khuôn mặt đã được thu hồi. Bắt đầu hồ sơ mới để đăng ký lại eKYC.";
-            case "FACE_BLURRY": return demo ? "Ảnh selfie bị nhòe. Giữ máy ổn định và chụp trong ánh sáng đều."
-                    : "Ảnh mặt trước CCCD hoặc selfie bị nhòe. Giữ máy ổn định và chụp trong ánh sáng đều.";
+            case "FACE_BLURRY": return "Ảnh selfie bị nhòe. Giữ máy ổn định và chụp trong ánh sáng đều.";
             case "FACE_EXPOSURE": return "Khuôn mặt quá tối hoặc quá sáng. Hãy chọn ảnh có ánh sáng đều.";
             case "FACE_TOO_SMALL": return "Khuôn mặt quá nhỏ trong ảnh. Hãy chọn ảnh chân dung gần hơn.";
             case "FACE_CROPPED": return "Khuôn mặt bị cắt khỏi khung hình. Hãy chọn ảnh thấy trọn khuôn mặt.";
             case "FACE_ID_MISMATCH": return "Khuôn mặt trên mặt trước CCCD và selfie không khớp. Hãy kiểm tra và chọn lại ảnh.";
             case "MULTIPLE_FACES": return "Ảnh có nhiều khuôn mặt. Hãy chọn ảnh chỉ có một người.";
-            case "FACE_NOT_FOUND": return "Không tìm thấy khuôn mặt. Hãy chọn ảnh rõ mặt trước CCCD và selfie.";
+            case "FACE_NOT_FOUND": return "Không tìm thấy khuôn mặt trong ảnh selfie. Hãy chụp lại rõ mặt.";
             default: return demo ? "Ảnh selfie chưa đạt yêu cầu. Hãy chọn ảnh khác rõ nét hơn."
-                    : "Ảnh định danh chưa đạt yêu cầu. Hãy chọn lại mặt trước CCCD và selfie rõ nét.";
+                    : "Ảnh selfie chưa đạt yêu cầu. Hãy chụp lại rõ nét, đủ sáng và chỉ có một khuôn mặt.";
         }
     }
 
@@ -335,6 +403,7 @@ public final class EkycDialogFragment extends DialogFragment {
         private boolean started;
         private boolean closed;
         private boolean restoredPhotos;
+        private boolean autoCameraPending;
         private boolean consent;
         private boolean processingPhoto;
         private boolean submitting;
@@ -408,6 +477,9 @@ public final class EkycDialogFragment extends DialogFragment {
                     JSONObject draft = readRecord(responseJson(task));
                     if (!"DRAFT".equals(draft.getString("reviewStatus"))) throw new JSONException("Not a draft");
                     acceptLatest(draft);
+                    slot = nextRequiredSlot();
+                    saved.set("slot", slot);
+                    autoCameraPending = missingRequiredSlot() != -1;
                     profileChanged = true;
                     finishProgress();
                 } catch (IOException | JSONException e) {
@@ -465,6 +537,9 @@ public final class EkycDialogFragment extends DialogFragment {
                 if (Boolean.TRUE.equals(saved.get(RAW_READY))) {
                     processSelectedPhoto();
                 } else {
+                    slot = nextRequiredSlot();
+                    saved.set("slot", slot);
+                    autoCameraPending = missingRequiredSlot() != -1;
                     changed();
                 }
             });
@@ -483,11 +558,33 @@ public final class EkycDialogFragment extends DialogFragment {
         }
 
         private void select(int index) {
-            if (photoBusy()) return;
+            if (photoBusy() || !canSelect(index)) return;
             slot = index;
             saved.set("slot", index);
+            autoCameraPending = previews[index] == null;
             notice = null;
             changed();
+        }
+
+        private int nextRequiredSlot() {
+            if (isDemo()) return SELFIE;
+            for (int i = 0; i < PHOTO_COUNT; i++) if (previews[i] == null) return i;
+            return SELFIE;
+        }
+
+        private int missingRequiredSlot() {
+            if (isDemo()) return previews[SELFIE] == null ? SELFIE : -1;
+            for (int i = 0; i < PHOTO_COUNT; i++) if (previews[i] == null) return i;
+            return -1;
+        }
+
+        private boolean canSelect(int index) {
+            if (index < 0 || index >= PHOTO_COUNT) return false;
+            if (isDemo()) return index == SELFIE;
+            for (int i = 0; i < PHOTO_COUNT; i++) {
+                if (previews[i] == null) return index <= i;
+            }
+            return true;
         }
 
         private int pendingSlot() {
@@ -548,6 +645,41 @@ public final class EkycDialogFragment extends DialogFragment {
             });
         }
 
+        private void cameraFileSelected(String path) {
+            if (closed || pendingSlot() == -1) return;
+            processingPhoto = true;
+            changed();
+            Tasks.call(files, () -> {
+                File captured = new File(path);
+                try {
+                    if (!captured.isFile() || captured.length() == 0 || captured.length() > 30_000_000L) {
+                        throw new IOException("Invalid camera image");
+                    }
+                    Files.createDirectories(directory.toPath());
+                    Files.copy(captured.toPath(), rawPhoto.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                } finally {
+                    captured.delete();
+                }
+                if (!rawPhoto.isFile()) {
+                    throw new IOException("Invalid camera image");
+                }
+                return true;
+            }).addOnCompleteListener(task -> {
+                if (closed || pendingSlot() == -1) return;
+                processingPhoto = false;
+                if (task.isSuccessful()) {
+                    saved.set(RAW_READY, true);
+                    if (isDraft()) processSelectedPhoto();
+                } else {
+                    cancelSelection("Không lưu được ảnh camera. Vui lòng chụp lại.");
+                }
+            });
+        }
+
+        private void cameraFailed(String message) {
+            cancelSelection(message);
+        }
+
         private void processSelectedPhoto() {
             String draftId = saved.get(DRAFT_ID);
             int index = pendingSlot();
@@ -560,8 +692,13 @@ public final class EkycDialogFragment extends DialogFragment {
                 saved.remove(PENDING_SLOT);
                 saved.remove(RAW_READY);
                 if (task.isSuccessful()) {
+                    clearLaterPhotos(index);
+                    if (previews[index] != null) previews[index].recycle();
                     previews[index] = task.getResult();
                     confirmed[index] = false;
+                    slot = nextRequiredSlot();
+                    saved.set("slot", slot);
+                    autoCameraPending = missingRequiredSlot() != -1;
                     notice = null;
                     changed();
                 } else {
@@ -569,6 +706,15 @@ public final class EkycDialogFragment extends DialogFragment {
                     changed();
                 }
             });
+        }
+
+        private void clearLaterPhotos(int index) {
+            for (int i = index + 1; i < PHOTO_COUNT; i++) {
+                if (previews[i] != null) previews[i].recycle();
+                previews[i] = null;
+                confirmed[i] = false;
+                photo(i).delete();
+            }
         }
 
         private Bitmap normalizePhoto(int index) throws IOException {
@@ -819,6 +965,7 @@ public final class EkycDialogFragment extends DialogFragment {
                 previews[i] = null;
                 confirmed[i] = false;
             }
+            autoCameraPending = isDraft();
             deleteLocalFiles();
         }
 
