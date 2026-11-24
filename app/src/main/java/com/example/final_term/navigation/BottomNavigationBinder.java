@@ -2,7 +2,9 @@ package com.example.final_term.navigation;
 
 import android.os.Bundle;
 import android.view.View;
+import android.widget.ImageView;
 import android.widget.TextView;
+import android.content.res.ColorStateList;
 
 import androidx.annotation.IdRes;
 import androidx.annotation.NonNull;
@@ -56,10 +58,10 @@ public final class BottomNavigationBinder {
         accounts.setSelected(activeItem == R.id.nav_accounts);
         profile.setSelected(activeItem == R.id.nav_profile);
 
-        if (activeItem == R.id.nav_home) home.setBackgroundResource(R.drawable.nav_active_background);
-        if (activeItem == R.id.nav_wallet) wallet.setBackgroundResource(R.drawable.nav_active_background);
-        if (activeItem == R.id.nav_accounts) accounts.setBackgroundResource(R.drawable.nav_active_background);
-        if (activeItem == R.id.nav_profile) profile.setBackgroundResource(R.drawable.nav_active_background);
+        tintItem(root, R.id.nav_home, activeItem == R.id.nav_home);
+        tintItem(root, R.id.nav_wallet, activeItem == R.id.nav_wallet);
+        tintItem(root, R.id.nav_accounts, activeItem == R.id.nav_accounts);
+        tintItem(root, R.id.nav_profile, activeItem == R.id.nav_profile);
 
         home.setOnClickListener(v -> navigate(navController, homeDestination));
         wallet.setOnClickListener(v -> selectTab(root, navController, homeDestination, R.id.nav_wallet));
@@ -100,6 +102,19 @@ public final class BottomNavigationBinder {
                 && navController.getCurrentDestination().getId() != destination) {
             navController.navigate(destination);
         }
+    }
+
+    private static void tintItem(@NonNull View root, @IdRes int itemId, boolean selected) {
+        View item = root.findViewById(itemId);
+        if (item == null) return;
+        int color = androidx.core.content.ContextCompat.getColor(root.getContext(),
+                selected ? R.color.navy_deep : R.color.ink_muted);
+        ImageView icon = item instanceof android.view.ViewGroup
+                ? (ImageView) ((android.view.ViewGroup) item).getChildAt(0) : null;
+        TextView label = item instanceof android.view.ViewGroup
+                ? (TextView) ((android.view.ViewGroup) item).getChildAt(1) : null;
+        if (icon != null) icon.setImageTintList(ColorStateList.valueOf(color));
+        if (label != null) label.setTextColor(color);
     }
 
     private static void navigate(NavController navController, @IdRes int destination, @IdRes int activeItem) {
