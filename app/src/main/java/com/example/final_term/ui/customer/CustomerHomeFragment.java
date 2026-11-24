@@ -17,6 +17,7 @@ import com.example.final_term.R;
 import com.example.final_term.auth.AuthState;
 import com.example.final_term.auth.UserRole;
 import com.example.final_term.core.FinalTermApplication;
+import com.example.final_term.data.AvatarCache;
 import com.example.final_term.data.FirestoreReadRepository;
 import com.example.final_term.data.ReadModelResult;
 import com.example.final_term.data.ReadModels;
@@ -86,6 +87,15 @@ public final class CustomerHomeFragment extends Fragment {
             // Compute Initials for Avatar
             String initials = computeInitials(displayName);
             binding.avatarText.setText(initials);
+            android.graphics.Bitmap cachedAvatar = AvatarCache.load(requireContext(), authState.getUser().getUid());
+            if (cachedAvatar == null) {
+                binding.avatarImage.setVisibility(View.GONE);
+                binding.avatarText.setVisibility(View.VISIBLE);
+            } else {
+                binding.avatarImage.setImageBitmap(cachedAvatar);
+                binding.avatarImage.setVisibility(View.VISIBLE);
+                binding.avatarText.setVisibility(View.GONE);
+            }
 
             FirestoreReadRepository reads = app.getAppContainer().getReadRepository();
             reads.observeAccounts(authState.getUser().getUid()).observe(getViewLifecycleOwner(), this::renderAccounts);

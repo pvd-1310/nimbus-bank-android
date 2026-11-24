@@ -42,6 +42,9 @@ const payment = {
 };
 const endpoints: [string, string, string, unknown?][] = [
   ["get", "/me", "Current safe profile"],
+  ["get", "/me/avatar", "Create a short-lived private URL for the current avatar"],
+  ["post", "/me/avatar", "Create a private S3 avatar upload ticket"],
+  ["post", "/me/avatar/{id}/confirm", "Verify the uploaded avatar object and save it to the current profile"],
   [
     "patch",
     "/me",

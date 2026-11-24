@@ -14,6 +14,7 @@ import { Banking } from "../core/banking.js";
 import { config } from "../core/config.js";
 import { Evidence } from "../modules/ekyc/ekyc.service.js";
 import { S3Evidence } from "../modules/ekyc/s3.provider.js";
+import { ProfileAvatarService } from "../modules/profile/profile-avatar.service.js";
 import { Payments } from "../modules/payments/payment.service.js";
 import { StripeGateway } from "../modules/payments/stripe.provider.js";
 import { check } from "../shared/errors.js";
@@ -82,6 +83,7 @@ export function runtime() {
     auth,
     db,
     bank,
+    profileAvatar: new ProfileAvatarService(bank, s3),
     evidence: new Evidence(bank, s3, evidenceRetentionMs,
       process.env.EKYC_DEMO_SELFIE_ONLY === "true" ? "DEMO_SELFIE_ONLY" : "FULL_ID"),
     payments: new Payments(bank, stripe),

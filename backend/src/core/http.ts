@@ -5,6 +5,7 @@ import type { Actor } from "../modules/auth/auth.types.js";
 import type { StripeSandboxAccounts } from "../modules/accounts/stripe-sandbox-accounts.service.js";
 import type { StripeSandboxMovements } from "../modules/accounts/stripe-sandbox-movements.service.js";
 import type { Evidence } from "../modules/ekyc/ekyc.service.js";
+import type { ProfileAvatarService } from "../modules/profile/profile-avatar.service.js";
 import type { Payments } from "../modules/payments/payment.service.js";
 import { Fault } from "../shared/errors.js";
 import type { Banking } from "./banking.js";
@@ -15,6 +16,7 @@ export interface AppDependencies {
   createFaceToken?: (uid: string) => Promise<string>;
   bank: Banking;
   evidence: Evidence;
+  profileAvatar?: ProfileAvatarService;
   payments: Payments;
   stripeSandboxAccounts?: StripeSandboxAccounts;
   stripeSandboxMovements?: StripeSandboxMovements;
@@ -66,7 +68,8 @@ export function authenticateRequests(d: AppDependencies) {
       throw new Fault("UNAUTHENTICATED", 401);
     }
     const onboardingPath = res.locals.actor.role === "CUSTOMER" && (
-      req.path === "/me" || req.path === "/ekyc" ||
+      req.path === "/me" || req.path === "/me/avatar" || req.path === "/ekyc" ||
+      /^\/me\/avatar\/[^/]+\/confirm$/.test(req.path) ||
       /^\/ekyc\/[^/]+\/(uploads|submit|evidence\/[012])$/.test(req.path) ||
       /^\/uploads\/[^/]+\/confirm$/.test(req.path)
     );
