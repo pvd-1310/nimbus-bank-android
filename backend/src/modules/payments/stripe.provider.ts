@@ -33,12 +33,12 @@ export class StripeGateway {
     return session.client_secret;
   }
 
-  async create(id: string, amount: number, currency: string, customerId?: string) {
+  async create(id: string, amount: number, currency: string, customerId?: string, purpose = "BILL_PAYMENT") {
     const p = await this.stripe.paymentIntents.create(
       {
         amount,
         currency: currency.toLowerCase(),
-        metadata: { paymentId: id },
+        metadata: { paymentId: id, purpose },
         automatic_payment_methods: { enabled: true },
         ...(customerId && { customer: customerId }),
       },

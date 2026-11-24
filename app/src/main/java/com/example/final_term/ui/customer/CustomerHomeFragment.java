@@ -208,11 +208,11 @@ public final class CustomerHomeFragment extends Fragment {
             return;
         }
         selectedAccountId = paymentAccount.id;
-        currentBalanceMinor = null;
-        currentBalanceCurrency = "USD";
+        currentBalanceMinor = paymentAccount.availableMinor != null ? paymentAccount.availableMinor : paymentAccount.balanceMinor;
+        currentBalanceCurrency = paymentAccount.currency;
         binding.accountStatusText.setVisibility(View.GONE);
         updateBalanceDisplay();
-        loadStripeBalance(paymentAccount.id);
+        balanceRequest++;
     }
 
     private void loadStripeBalance(String accountId) {
@@ -255,7 +255,7 @@ public final class CustomerHomeFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        if (binding != null && selectedAccountId != null) loadStripeBalance(selectedAccountId);
+        if (binding != null) updateBalanceDisplay();
     }
 
     private void updateBalanceDisplay() {
@@ -289,12 +289,8 @@ public final class CustomerHomeFragment extends Fragment {
             status.setText(result.getMessage());
             binding.recentTransactionsContent.addView(status);
         }
-        List<ReadModels.TransactionSummary> stripeRows = new ArrayList<>();
-        for (ReadModels.TransactionSummary row : result.getData()) {
-            if (!row.isStripeSandbox()) continue;
-            stripeRows.add(row);
-        }
-        if (stripeRows.isEmpty()) {
+        List<ReadModels.TransactionSummary> ledgerRows = result.getData();
+        if (ledgerRows.isEmpty()) {
             TextView emptyText = new TextView(requireContext());
             emptyText.setText("Chưa có giao dịch gần đây.");
             emptyText.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
@@ -303,9 +299,9 @@ public final class CustomerHomeFragment extends Fragment {
             return;
         }
         // Take at most 4 recent transactions for Home preview
-        int limit = Math.min(4, stripeRows.size());
+        int limit = Math.min(4, ledgerRows.size());
         for (int i = 0; i < limit; i++) {
-            ReadModels.TransactionSummary tx = stripeRows.get(i);
+            ReadModels.TransactionSummary tx = ledgerRows.get(i);
             ItemTransactionRowBinding rowBinding = ItemTransactionRowBinding.inflate(
                     getLayoutInflater(), binding.recentTransactionsContent, false);
 

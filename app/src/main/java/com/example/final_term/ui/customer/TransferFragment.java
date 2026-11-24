@@ -14,6 +14,7 @@ import androidx.fragment.app.Fragment;
 import androidx.navigation.Navigation;
 
 import com.example.final_term.R;
+import com.example.final_term.BuildConfig;
 import com.example.final_term.core.FinalTermApplication;
 import com.example.final_term.data.BackendApiClient;
 import com.example.final_term.data.ReadModelResult;
@@ -22,6 +23,9 @@ import com.example.final_term.data.ReadSummaryFormatter;
 import com.example.final_term.databinding.FragmentTransferBinding;
 import com.example.final_term.domain.DomainDtos.OtpVerification;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.stripe.android.PaymentConfiguration;
+import com.stripe.android.paymentsheet.PaymentSheet;
+import com.stripe.android.paymentsheet.PaymentSheetResult;
 
 import androidx.activity.OnBackPressedCallback;
 
@@ -46,7 +50,7 @@ public final class TransferFragment extends Fragment {
     private boolean commitPending;
     private long authoritativeAmount;
     private long authoritativeFee;
-    private String authoritativeCurrency = "USD";
+    private String authoritativeCurrency = "VND";
     private String authoritativeTarget = "";
     private String recipientAccountId;
     private String recipientName = "";
@@ -63,6 +67,8 @@ public final class TransferFragment extends Fragment {
     private boolean completed;
     private final List<String> sourceIds = new ArrayList<>();
     private CountDownTimer otpTimer;
+    private PaymentSheet paymentSheet;
+    private int topupPollsRemaining;
 
     private enum Step { INPUT, CONFIRM, OTP, SUCCESS }
     private Step currentStep = Step.INPUT;
@@ -83,7 +89,7 @@ public final class TransferFragment extends Fragment {
         confirmedSource = state.getString("confirmedSource");
         authoritativeAmount = state.getLong("authoritativeAmount");
         authoritativeFee = state.getLong("authoritativeFee");
-        authoritativeCurrency = state.getString("authoritativeCurrency", "USD");
+        authoritativeCurrency = state.getString("authoritativeCurrency", "VND");
         authoritativeTarget = state.getString("authoritativeTarget", "");
         recipientAccountId = state.getString("recipientAccountId");
         recipientName = state.getString("recipientName", "");
@@ -122,6 +128,10 @@ public final class TransferFragment extends Fragment {
         super.onViewCreated(view, state);
         FinalTermApplication app = (FinalTermApplication) requireActivity().getApplication();
         api = app.getAppContainer().getBackendApiClient();
+        if (BuildConfig.STRIPE_PUBLISHABLE_KEY.startsWith("pk_test_")) {
+            PaymentConfiguration.init(requireContext(), BuildConfig.STRIPE_PUBLISHABLE_KEY);
+            paymentSheet = new PaymentSheet.Builder(this::onPaymentSheetResult).build(this);
+        }
 
         binding.backButton.setOnClickListener(v -> handleBackNavigation());
         requireActivity().getOnBackPressedDispatcher().addCallback(getViewLifecycleOwner(),
@@ -150,7 +160,10 @@ public final class TransferFragment extends Fragment {
         // Step 3 OTP -> Verify OTP & Commit
         binding.otpResendTimer.setOnClickListener(v -> requestOtp());
         binding.verifyButton.setOnClickListener(v -> verifyOtp());
-        binding.commitButton.setOnClickListener(v -> recover());
+        binding.commitButton.setOnClickListener(v -> {
+            if (cardTopup() && commitPending) createTopupPayment();
+            else recover();
+        });
         binding.faceStepUpButton.setOnClickListener(v -> {
             if (busy) return;
             setBusy(true);
@@ -240,12 +253,16 @@ public final class TransferFragment extends Fragment {
     }
 
     private boolean demoMode() {
-        return external || cashOperation != null;
+        return external || "WITHDRAWAL".equals(cashOperation);
+    }
+
+    private boolean cardTopup() {
+        return "DEPOSIT".equals(cashOperation);
     }
 
     private String demoLabel() {
         if (external) return "Chuyển liên ngân hàng mô phỏng";
-        return "DEPOSIT".equals(cashOperation) ? "Nạp tiền mô phỏng" : "Rút tiền mô phỏng";
+        return cardTopup() ? "Nạp tiền vào tài khoản" : "Rút tiền mô phỏng";
     }
 
     private void switchMode(boolean useExternal) {
@@ -346,7 +363,8 @@ public final class TransferFragment extends Fragment {
             binding.headerTitle.setText(R.string.otp_title);
             renderAuthorization();
         } else if (step == Step.SUCCESS) {
-            binding.headerTitle.setText(demoMode() ? "Đã ghi sổ mô phỏng" : getString(R.string.transfer_success_title));
+            binding.headerTitle.setText(cardTopup() ? "Nạp tiền thành công"
+                    : demoMode() ? "Đã ghi sổ mô phỏng" : getString(R.string.transfer_success_title));
             bindSuccessView();
         }
         updateSubmitButton();
@@ -363,8 +381,7 @@ public final class TransferFragment extends Fragment {
     private long getCurrentAmount() {
         String val = text(binding.amountInput.getText());
         try {
-            return new java.math.BigDecimal(val).divide(java.math.BigDecimal.valueOf(
-                    ReadSummaryFormatter.VND_PER_SANDBOX_CENT), 0, java.math.RoundingMode.HALF_UP).longValueExact();
+            return new java.math.BigDecimal(val).longValueExact();
         } catch (Exception e) {
             return 0L;
         }
@@ -428,13 +445,16 @@ public final class TransferFragment extends Fragment {
                 : recipientName.isEmpty() ? target : recipientName + " · " + target;
 
         binding.confirmAmountDisplay.setText(ReadSummaryFormatter.formatCurrency(amount, authoritativeCurrency));
-        binding.confirmSourceText.setText(("DEPOSIT".equals(cashOperation) ? "Tài khoản nhận: " : "Tài khoản nguồn: ") + sourceId);
-        String recipient = cashOperation != null ? "Đối ứng: quỹ demo"
+        binding.confirmSourceText.setText((cardTopup() ? "Tài khoản nhận: " : "Tài khoản nguồn: ") + sourceId);
+        String recipient = cardTopup() ? "Nguồn thanh toán: thẻ test"
+                : cashOperation != null ? "Đối ứng: quỹ demo"
                 : "Tài khoản nhận: " + (external ? "DEMO_BANK / " : "") + targetText;
         binding.confirmTargetText.setText(recipient + "\nPhí: " +
                 ReadSummaryFormatter.formatCurrency(authoritativeFee, authoritativeCurrency) +
                 " · Tổng: " + ReadSummaryFormatter.formatCurrency(amount + authoritativeFee, authoritativeCurrency));
-        binding.confirmNoteText.setText("Stripe Sandbox · Tỷ giá demo 1 USD = 25.000 ₫"
+        binding.confirmNoteText.setText(cardTopup() ? "Thanh toán thẻ test qua Stripe. Số dư cập nhật sau khi backend xác nhận thanh toán."
+                : external ? "Giao dịch liên ngân hàng mô phỏng; chưa chuyển tới ngân hàng thật."
+                : "Giao dịch được xác thực và ghi vào sổ cái VND Nimbus."
                 + (note.isEmpty() ? "" : "\nNội dung: " + note));
     }
 
@@ -443,8 +463,9 @@ public final class TransferFragment extends Fragment {
         String target = demoMode() && !authoritativeTarget.isEmpty() ? authoritativeTarget : receiptTarget();
         binding.successAmountDisplay.setText(ReadSummaryFormatter.formatCurrency(amount, authoritativeCurrency));
         binding.receiptTxId.setText("Mã giao dịch: " + intentId);
-        binding.successHeadline.setText(demoMode() ? "Giao dịch mô phỏng đã ghi sổ" : "Chuyển khoản đã ghi sổ");
-        binding.receiptTargetInfo.setText("Chuyển đến: " + target + " (Phí: " +
+        binding.successHeadline.setText(cardTopup() ? "Tiền đã được ghi có vào tài khoản"
+                : demoMode() ? "Giao dịch mô phỏng đã ghi sổ" : "Chuyển khoản đã ghi sổ");
+        binding.receiptTargetInfo.setText((cardTopup() ? "Tài khoản nhận: " : "Chuyển đến: ") + target + " (Phí: " +
                 ReadSummaryFormatter.formatCurrency(authoritativeFee, authoritativeCurrency) + ")");
         binding.receiptTime.setText(demoMode() ? "Đã ghi sổ mô phỏng · " + providerReference
                 : "Backend xác nhận đã ghi sổ.");
@@ -459,6 +480,7 @@ public final class TransferFragment extends Fragment {
         try {
             JSONObject payload = new JSONObject(payloadKey);
             if (external) return payload.optString("beneficiaryAccount");
+            if (cardTopup()) return confirmedSource == null ? "Tài khoản Nimbus" : confirmedSource;
             if (cashOperation != null) return "Quỹ demo";
             String phone = payload.optString("destinationPhone", payload.optString("destinationAccountId"));
             return recipientName.isEmpty() ? phone : recipientName + " · " + phone;
@@ -505,7 +527,7 @@ public final class TransferFragment extends Fragment {
         for (ReadModels.AccountSummary account : result.getData()) {
             if ("ACTIVE".equalsIgnoreCase(account.status) && "CHECKING".equals(account.type)) {
                 sourceIds.add(account.id);
-                labels.add(account.id + " · Stripe Sandbox");
+                labels.add(account.id + " · " + account.currency);
             }
         }
         if (labels.isEmpty()) labels.add("Không có tài khoản nguồn khả dụng");
@@ -530,11 +552,11 @@ public final class TransferFragment extends Fragment {
         binding.otpInput.setText("");
         try {
             JSONObject body = new JSONObject()
-                    .put(demoMode() ? "accountId" : "sourceAccountId", confirmedSource)
+                    .put(demoMode() || cardTopup() ? "accountId" : "sourceAccountId", confirmedSource)
                     .put("amountMinor", getCurrentAmount())
-                    .put("currency", "USD");
+                    .put("currency", "VND");
             if (external) body.put("bankCode", "DEMO_BANK").put("beneficiaryAccount", target);
-            else if (cashOperation != null) body.put("type", cashOperation);
+            else if (cashOperation != null && !cardTopup()) body.put("type", cashOperation);
             else body.put("destinationPhone", target).put("recipientAccountId", recipientAccountId);
             String payload = body.toString();
             if (!payload.equals(payloadKey) || requestId == null) {
@@ -551,7 +573,9 @@ public final class TransferFragment extends Fragment {
         var view = binding;
         setBusy(true);
         status("Đang tìm yêu cầu cũ theo mã…");
-        api.get((demoMode() ? "/demo-movements/by-request/" : "/transfers/by-request/") + requestId)
+        String recoveryPath = cardTopup() ? "/topup-intents/by-request/"
+                : demoMode() ? "/demo-movements/by-request/" : "/transfers/by-request/";
+        api.get(recoveryPath + requestId)
                 .addOnCompleteListener(task -> {
                     if (binding != view) return;
                     if (task.isSuccessful() && task.getResult().statusCode == 404) {
@@ -570,7 +594,8 @@ public final class TransferFragment extends Fragment {
         var view = binding;
         setBusy(true);
         try {
-            String endpoint = external ? "/external-transfers"
+            String endpoint = cardTopup() ? "/topups/intents"
+                    : external ? "/external-transfers"
                     : cashOperation != null ? "/money-requests/intents" : "/transfers/intents";
             JSONObject body = new JSONObject(payloadKey).put("requestId", requestId);
             api.post(endpoint, body.toString()).addOnCompleteListener(task -> {
@@ -612,6 +637,7 @@ public final class TransferFragment extends Fragment {
         binding.verifyButton.setVisibility(canEnterCode ? View.VISIBLE : View.GONE);
         binding.verifyButton.setEnabled(!busy && challengeId != null);
         binding.commitButton.setVisibility(commitPending ? View.VISIBLE : View.GONE);
+        binding.commitButton.setText(cardTopup() ? "Mở lại thanh toán thẻ" : "Kiểm tra trạng thái");
         binding.commitButton.setEnabled(!busy);
     }
 
@@ -722,6 +748,14 @@ public final class TransferFragment extends Fragment {
                 if (tgt != null) authoritativeTarget = tgt.optString("id", authoritativeTarget);
 
                 providerReference = result.optString("providerReference", "");
+                if (cardTopup()) {
+                    faceRequired = result.optBoolean("faceRequired");
+                    faceVerified = "VERIFIED".equals(result.optString("faceStatus"));
+                    if ("COMMIT_PENDING".equals(state)) {
+                        recoverTopupStatus(false);
+                        return;
+                    }
+                }
                 if (demoMode() && "COMMIT_PENDING".equals(state)) {
                     reconcileDemo();
                     return;
@@ -782,6 +816,10 @@ public final class TransferFragment extends Fragment {
         setBusy(true);
         binding.otpInput.setText("");
         binding.demoCode.setText("");
+        if (cardTopup()) {
+            createTopupPayment();
+            return;
+        }
         status("Đang hoàn tất giao dịch…");
         String path = demoMode() ? "/demo-movements/" : "/transfers/";
         api.post(path + intentId + "/commit", "{}").addOnCompleteListener(task -> {
@@ -822,6 +860,98 @@ public final class TransferFragment extends Fragment {
             }
             renderAuthorization();
             status(errorMessage(response, "Backend từ chối ghi sổ"));
+        });
+    }
+
+    private void createTopupPayment() {
+        if (paymentSheet == null || requestId == null || confirmedSource == null) {
+            setBusy(false);
+            status("Stripe test chưa được cấu hình để nạp tiền bằng thẻ.");
+            return;
+        }
+        setBusy(true);
+        status("Đang tạo thanh toán thẻ test…");
+        try {
+            String body = new JSONObject().put("accountId", confirmedSource).put("requestId", requestId).toString();
+            api.post("/topups", body).addOnCompleteListener(task -> {
+                if (binding == null) return;
+                setBusy(false);
+                if (!task.isSuccessful() || !ok(task.getResult())) {
+                    commitPending = false;
+                    renderAuthorization();
+                    status(task.isSuccessful() ? errorMessage(task.getResult(), "Không thể tạo thanh toán")
+                            : "Chưa nhận được trạng thái thanh toán. Bấm kiểm tra lại.");
+                    return;
+                }
+                try {
+                    JSONObject result = new JSONObject(task.getResult().body);
+                    if ("SUCCEEDED".equals(result.optString("status"))) {
+                        finishTransfer();
+                        return;
+                    }
+                    String secret = result.optString("clientSecret", "");
+                    if (secret.isEmpty()) {
+                        recoverTopupStatus(false);
+                        return;
+                    }
+                    status("Nhập thẻ test trong Stripe để xác nhận nạp tiền.");
+                    PaymentSheet.Configuration.Builder configuration = new PaymentSheet.Configuration.Builder("Nimbus Bank");
+                    if (!result.isNull("customerId") && !result.isNull("customerSessionClientSecret")) {
+                        configuration.customer(PaymentSheet.CustomerConfiguration.Companion.createWithCustomerSession(
+                                result.getString("customerId"), result.getString("customerSessionClientSecret")));
+                    }
+                    paymentSheet.presentWithPaymentIntent(secret, configuration.build());
+                } catch (Exception error) {
+                    status("Phản hồi thanh toán không hợp lệ. Bấm kiểm tra lại.");
+                }
+            });
+        } catch (JSONException error) {
+            setBusy(false);
+            status("Dữ liệu nạp tiền không hợp lệ.");
+        }
+    }
+
+    private void onPaymentSheetResult(@NonNull PaymentSheetResult result) {
+        if (result instanceof PaymentSheetResult.Completed) {
+            status("Đã gửi thanh toán. Đang chờ xác nhận từ Stripe…");
+            topupPollsRemaining = 12;
+            recoverTopupStatus(true);
+        } else if (result instanceof PaymentSheetResult.Canceled) {
+            status("Bạn đã đóng thanh toán; số dư chưa thay đổi.");
+            commitPending = true;
+        } else if (result instanceof PaymentSheetResult.Failed) {
+            status("Stripe không hoàn tất thanh toán. Số dư chưa thay đổi.");
+            commitPending = true;
+        }
+    }
+
+    private void recoverTopupStatus(boolean keepPolling) {
+        if (intentId == null || binding == null) return;
+        api.get("/topups/" + intentId).addOnCompleteListener(task -> {
+            if (binding == null) return;
+            if (!task.isSuccessful() || !ok(task.getResult())) {
+                status("Chưa nhận được trạng thái từ backend. Bấm kiểm tra lại.");
+                return;
+            }
+            try {
+                JSONObject result = new JSONObject(task.getResult().body);
+                String state = result.optString("status");
+                if ("SUCCEEDED".equals(state)) {
+                    finishTransfer();
+                } else if ("FAILED".equals(state) || "CANCELLED".equals(state)) {
+                    commitPending = false;
+                    forgetPending();
+                    renderAuthorization();
+                    status("Thanh toán không thành công; số dư không thay đổi.");
+                } else {
+                    commitPending = true;
+                    status("Đang chờ Stripe xác nhận. Số dư chỉ cập nhật sau webhook.");
+                    if (keepPolling && topupPollsRemaining-- > 0) new android.os.Handler(android.os.Looper.getMainLooper())
+                            .postDelayed(() -> recoverTopupStatus(true), 2500);
+                }
+            } catch (JSONException error) {
+                status("Không đọc được trạng thái nạp tiền.");
+            }
         });
     }
 
@@ -877,7 +1007,9 @@ public final class TransferFragment extends Fragment {
         switch (code) {
             case "INVALID_DESTINATION": return "Không tìm thấy tài khoản nhận đang hoạt động cho số điện thoại này.";
             case "RECIPIENT_CHANGED": return "Thông tin người nhận đã thay đổi. Quay lại để tra cứu lại số điện thoại.";
-            case "STRIPE_SANDBOX_ACCOUNT_REQUIRED": return "Tài khoản chưa sẵn sàng giao dịch trên Stripe Sandbox.";
+            case "STRIPE_SANDBOX_ACCOUNT_REQUIRED": return "Tài khoản chưa sẵn sàng cho giao dịch này.";
+            case "TOP_UP_REQUIRES_CARD": return "Nạp tiền cần thanh toán bằng thẻ test.";
+            case "CURRENCY_NOT_SUPPORTED": return "Luồng này chỉ hỗ trợ tài khoản VND.";
             case "INVALID_OTP": return "Mã xác nhận sai. Vui lòng kiểm tra lại.";
             case "OTP_EXPIRED": return "Mã xác nhận đã hết hạn (OTP_EXPIRED). Tạo mã mới để tiếp tục.";
             case "OTP_LOCKED": return "Đã nhập sai quá 5 lần, giao dịch bị khóa (OTP_LOCKED). Quay lại và tạo yêu cầu mới.";

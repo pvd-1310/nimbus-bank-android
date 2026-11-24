@@ -87,7 +87,11 @@ it("settles a demo order once after OTP and a signed sandbox webhook", async () 
     customerId: "cus_demo1", customerSessionClientSecret: "cuss_demo_1",
   });
   expect(create).toHaveBeenCalledWith(expect.objectContaining({
-    amount: 50000, currency: "vnd", customer: "cus_demo1", metadata: { paymentId: id },
+    amount: 50000,
+    currency: "vnd",
+    customer: "cus_demo1",
+    metadata: expect.objectContaining({ paymentId: id, purpose: "BILL_PAYMENT" }),
+    automatic_payment_methods: { enabled: true },
   }), { idempotencyKey: id });
   expect(create.mock.calls[0][0]).not.toHaveProperty("setup_future_usage");
   expect(sessions).toHaveBeenCalledWith({
@@ -187,4 +191,59 @@ it("retries an older pending Stripe payment with its original parameters", async
   expect(create.mock.calls[0][0]).not.toHaveProperty("customer");
   expect(customers).not.toHaveBeenCalled();
   expect(sessions).not.toHaveBeenCalled();
+});
+
+it("settles a VND card top-up from a signed webhook without an undefined bill field", async () => {
+  const stripe = new Stripe("sk_test_dummy");
+  const signingSecret = "whsec_topup_test";
+  mockStripeCustomers(stripe);
+  vi.spyOn(stripe.paymentIntents, "create").mockImplementation(async (params) => ({
+    id: "pi_topup",
+    client_secret: "pi_topup_secret_dummy",
+    customer: params?.customer ?? null,
+    metadata: params?.metadata,
+    livemode: false,
+  } as Stripe.PaymentIntent));
+  const { api, bank, store, actor } = await fixture(new StripeGateway(stripe, signingSecret));
+  const auth = { Authorization: "Bearer valid" };
+  await store.run(async (t) => t.set("accounts/checking", {
+    ownerUid: actor.uid, type: "CHECKING", currency: "VND", status: "ACTIVE",
+    availableMinor: 100000, bookedMinor: 100000,
+  }));
+
+  const body = { accountId: "checking", amountMinor: 20000, currency: "VND", requestId: "topup-1" };
+  const prepared = await api.post("/topups/intents").set(auth).send(body).expect(200);
+  const otp = await bank.security.challenge(actor, prepared.body.id);
+  await bank.security.verify(actor, prepared.body.id, otp.challengeId, otp.code);
+  const payment = await api.post("/topups")
+    .set(auth)
+    .send({ accountId: body.accountId, requestId: body.requestId })
+    .expect(200);
+
+  const payload = JSON.stringify({
+    id: "evt_topup",
+    type: "payment_intent.succeeded",
+    livemode: false,
+    data: { object: {
+      id: "pi_topup", amount: body.amountMinor, currency: "vnd", livemode: false,
+      metadata: { paymentId: payment.body.id, purpose: "TOP_UP" },
+    } },
+  });
+  const signature = stripe.webhooks.generateTestHeaderString({ payload, secret: signingSecret });
+  await api.post("/webhooks/stripe")
+    .set("Stripe-Signature", signature)
+    .type("json")
+    .send(payload)
+    .expect(200);
+
+  expect(await store.run((t) => t.get("payments/" + payment.body.id))).toMatchObject({
+    purpose: "TOP_UP", status: "SUCCEEDED", providerId: "pi_topup",
+  });
+  expect(await store.run((t) => t.get("payments/" + payment.body.id))).not.toHaveProperty("billId");
+  expect(await store.run((t) => t.get("accounts/checking"))).toMatchObject({
+    availableMinor: 120000, bookedMinor: 120000,
+  });
+  expect(await store.run((t) => t.get("transactions/" + payment.body.id))).toMatchObject({
+    type: "TOP_UP", amountMinor: 20000, status: "SETTLED",
+  });
 });

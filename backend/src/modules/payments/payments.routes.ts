@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { AppDependencies, Route } from "../../core/http.js";
 import type { Doc } from "../../core/store.js";
 import { page } from "../../shared/pagination.js";
@@ -24,20 +25,20 @@ export function registerPaymentsRoutes(route: Route, d: AppDependencies) {
   route("get", "/payment-intents/by-request/:id", (a, r) =>
     d.bank.security.describe(a, digest([a.uid, "PAYMENT", id.parse(r.params.id)])),
   );
+  route("post", "/topups/intents", (a, r) => {
+    const x = z.object({ accountId: id, amountMinor: z.number().int().positive(), currency: z.literal("VND"), requestId: id }).strict().parse(r.body);
+    return d.payments.prepareTopup(a, x.accountId, x.amountMinor, x.currency, x.requestId);
+  });
+  route("get", "/topup-intents/by-request/:id", (a, r) =>
+    d.bank.security.describe(a, digest([a.uid, "TOP_UP", id.parse(r.params.id)])),
+  );
+  route("post", "/topups", (a, r) => {
+    const x = z.object({ accountId: id, requestId: id }).strict().parse(r.body);
+    return d.payments.createTopup(a, x.accountId, x.requestId);
+  });
+  route("get", "/topups/:id", (a, r) => d.payments.getTopup(a, String(r.params.id)));
   route("post", "/payments/intents", async (a, r) => {
     const x = paymentRequest.parse(r.body);
-    if (d.stripeSandboxMovements) {
-      const legacy = await d.bank.store.run(async (t) => {
-        await d.bank.authorize(t, a);
-        const lock = await t.get("billPaymentLocks/" + x.billId);
-        if (!lock || lock.released === true) return false;
-        const bill = await t.get("bills/" + x.billId);
-        if (bill?.ownerUid !== a.uid || bill.status !== "UNPAID") return false;
-        const intent = await t.get("transactionIntents/" + lock.paymentId);
-        return intent?.actorUid === a.uid && intent.kind === "PAYMENT" && intent.provider !== "STRIPE_TREASURY";
-      });
-      if (!legacy) return d.stripeSandboxMovements.prepare(a, "PAYMENT", x);
-    }
     return d.payments.prepare(a, x.billId, x.requestId);
   });
   route("post", "/payments", async (a, r) => {

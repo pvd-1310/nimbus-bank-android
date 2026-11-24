@@ -18,6 +18,7 @@ app/google-services.json
 *.p12
 *.pem
 service-account*.json
+backend/firebase-admin.json
 .env
 .env.*
 !/.env.example

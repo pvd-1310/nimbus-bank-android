@@ -105,7 +105,7 @@ public final class MoneyRequestFragment extends Fragment {
         });
         binding.statusText.setText(pendingBody == null ? "Đang tải tài khoản…" :
                 "Chưa xác nhận được yêu cầu trước. Gửi lại để kiểm tra cùng mã yêu cầu.");
-        binding.submitButton.setText("Tiếp tục với Stripe Sandbox");
+        binding.submitButton.setText(WITHDRAWAL.equals(operation) ? "Tiếp tục · rút tiền demo" : "Nạp tiền bằng thẻ test");
         binding.demoSettlementButton.setVisibility(View.GONE);
         ((View) binding.accountInput.getParent()).setVisibility(View.GONE);
         ((View) binding.amountInput.getParent()).setVisibility(View.GONE);
@@ -156,7 +156,7 @@ public final class MoneyRequestFragment extends Fragment {
                 if ("CHECKING".equalsIgnoreCase(account.type) && "ACTIVE".equalsIgnoreCase(account.status)
                         && "VND".equalsIgnoreCase(account.currency)) {
                     accountIds.add(account.id);
-                    labels.add(account.id + " · Stripe Sandbox");
+                    labels.add(account.id + " · VND");
                 }
             }
         }
@@ -167,7 +167,7 @@ public final class MoneyRequestFragment extends Fragment {
         if ("Đang tải tài khoản…".contentEquals(binding.statusText.getText())) {
             binding.statusText.setText(accountIds.isEmpty()
                     ? "Cần tài khoản thanh toán đã đồng bộ."
-                    : "Số dư được cập nhật khi Stripe Sandbox xác nhận giao dịch.");
+                    : "Nạp tiền được ghi có sau khi Stripe xác nhận thanh toán; rút tiền là luồng demo.");
         }
         updateControls();
     }
@@ -302,7 +302,9 @@ public final class MoneyRequestFragment extends Fragment {
         binding.accountInput.setEnabled(!retry);
         binding.amountInput.setEnabled(!retry);
         binding.submitButton.setEnabled(uid != null && !sending && (retry || !accountIds.isEmpty()));
-        binding.submitButton.setText(retry && !sending ? "Gửi lại yêu cầu" : "Tiếp tục với Stripe Sandbox");
+        boolean withdrawal = binding.operationInput.getSelectedItemPosition() == 1;
+        binding.submitButton.setText(retry && !sending ? "Gửi lại yêu cầu"
+                : withdrawal ? "Tiếp tục · rút tiền demo" : "Nạp tiền bằng thẻ test");
         binding.historyButton.setEnabled(uid != null && !readingHistory);
     }
 

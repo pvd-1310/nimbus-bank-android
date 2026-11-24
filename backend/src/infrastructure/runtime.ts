@@ -21,6 +21,7 @@ import { FirestoreStore } from "./firestore-store.js";
 
 import { FaceService } from "../modules/security/face.js";
 
+loadEnv({ path: fileURLToPath(new URL("../../.env", import.meta.url)) });
 loadEnv({ path: fileURLToPath(new URL("../../../.env", import.meta.url)) });
 
 function faceProvider() {

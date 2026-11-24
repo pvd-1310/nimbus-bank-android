@@ -13,9 +13,7 @@ const app = createApp({
     return r.auth.createCustomToken(uid);
   },
   provision: async (actor, input) => {
-    const result = await provisionCustomer(actor, input);
-    r.stripeSandboxAccounts?.scheduleProvision(result.accountId);
-    return result;
+    return provisionCustomer(actor, input);
   },
   authenticate: createFirebaseAuthenticator(r.auth),
 });
@@ -24,7 +22,5 @@ const server = app.listen(r.cfg.port, r.cfg.host, () =>
     `Banking API listening on ${r.cfg.host}:${r.cfg.port} (${r.cfg.mode})`,
   ),
 );
-r.stripeSandboxAccounts?.resumePendingProvisioning()
-  .catch(() => console.warn("Could not resume pending Stripe sandbox accounts"));
 for (const signal of ["SIGINT", "SIGTERM"])
   process.on(signal, () => server.close(() => process.exit(0)));

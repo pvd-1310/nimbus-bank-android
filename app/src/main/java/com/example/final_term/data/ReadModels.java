@@ -79,10 +79,12 @@ public final class ReadModels {
         public boolean isOutgoing() {
             return isBillPayment() || "INTERNAL_TRANSFER".equals(type) || "DEBIT".equals(type)
                     || "DEMO_EXTERNAL_TRANSFER".equals(type) || "DEMO_WITHDRAWAL".equals(type)
+                    || "UTILITY_ORDER".equals(type)
                     || "STRIPE_DEBIT".equals(type);
         }
         public boolean isIncoming() {
             return "TRANSFER_RECEIVED".equals(type) || "CREDIT".equals(type) || "DEMO_DEPOSIT".equals(type)
+                    || "TOP_UP".equals(type)
                     || "STRIPE_CREDIT".equals(type);
         }
     }

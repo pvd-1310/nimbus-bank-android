@@ -27,30 +27,33 @@ export function registerRequestsRoutes(route: Route, d: AppDependencies) {
   );
   route("post", "/money-requests/intents", (a, r) => {
     const input = cash.parse(r.body);
-    if (input.currency !== "USD") return d.bank.requests.demoIntent(a, input);
-    check(d.stripeSandboxMovements, "SETUP_REQUIRED", 503);
-    return d.stripeSandboxMovements.prepare(a, "DEMO_MOVEMENT", input);
+    if (input.type === "DEPOSIT") check(false, "TOP_UP_REQUIRES_CARD", 409);
+    check(input.currency === "VND", "CURRENCY_NOT_SUPPORTED", 409);
+    return d.bank.requests.demoIntent(a, input);
   });
   route("post", "/external-transfers", (a, r) => {
     const input = { ...external.parse(r.body), type: "EXTERNAL_TRANSFER" };
-    if (input.currency !== "USD") return d.bank.requests.demoIntent(a, input);
-    check(d.stripeSandboxMovements, "SETUP_REQUIRED", 503);
-    return d.stripeSandboxMovements.prepare(a, "DEMO_MOVEMENT", input);
+    check(input.currency === "VND", "CURRENCY_NOT_SUPPORTED", 409);
+    return d.bank.requests.demoIntent(a, input);
   });
   route("get", "/demo-movements/by-request/:id", (a, r) =>
     d.bank.requests.getDemo(a, String(r.params.id)),
   );
   route("post", "/demo-movements/:id/commit", async (a, r) => {
     const id = String(r.params.id);
-    if ((await d.bank.security.describe(a, id)).provider !== "STRIPE_TREASURY") return d.bank.requests.commitDemo(a, id);
-    check(d.stripeSandboxMovements, "SETUP_REQUIRED", 503);
-    return d.stripeSandboxMovements.commit(a, id, "DEMO_MOVEMENT");
+    if ((await d.bank.security.describe(a, id)).provider === "STRIPE_TREASURY") {
+      check(d.stripeSandboxMovements, "SETUP_REQUIRED", 503);
+      return d.stripeSandboxMovements.commit(a, id, "DEMO_MOVEMENT");
+    }
+    return d.bank.requests.commitDemo(a, id);
   });
   route("post", "/demo-movements/:id/reconcile", async (a, r) => {
     const id = String(r.params.id);
-    if ((await d.bank.security.describe(a, id)).provider !== "STRIPE_TREASURY") return d.bank.requests.reconcileDemo(a, id);
-    check(d.stripeSandboxMovements, "SETUP_REQUIRED", 503);
-    return d.stripeSandboxMovements.commit(a, id, "DEMO_MOVEMENT");
+    if ((await d.bank.security.describe(a, id)).provider === "STRIPE_TREASURY") {
+      check(d.stripeSandboxMovements, "SETUP_REQUIRED", 503);
+      return d.stripeSandboxMovements.commit(a, id, "DEMO_MOVEMENT");
+    }
+    return d.bank.requests.reconcileDemo(a, id);
   });
   route("get", "/money-requests/by-request/:id", (a, r) =>
     d.bank.scoped(a, "moneyRequests", digest([a.uid, "MONEY_REQUEST", id.parse(r.params.id)])),

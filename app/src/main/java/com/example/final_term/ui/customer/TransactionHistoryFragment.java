@@ -139,7 +139,7 @@ public final class TransactionHistoryFragment extends Fragment {
         baseStatus = "Đang tải lịch sử…";
         updatePageControls();
         renderFiltered();
-        String path = "/transactions?limit=25&provider=STRIPE_TREASURY";
+        String path = "/transactions?limit=25";
         if (cursor != null) path += "&cursor=" + android.net.Uri.encode(cursor);
         if (thisMonth) {
             var zone = java.time.ZoneId.systemDefault();
@@ -183,9 +183,7 @@ public final class TransactionHistoryFragment extends Fragment {
         history.observe(getViewLifecycleOwner(), result -> {
             if (generation != loadGeneration || binding == null || result.getData() == null) return;
             rows = new ArrayList<>();
-            for (ReadModels.TransactionSummary row : result.getData()) {
-                if (row.isStripeSandbox()) rows.add(row);
-            }
+            rows.addAll(result.getData());
             baseStatus = "Dữ liệu dự phòng Firestore. Chưa kiểm tra được lịch sử từ backend.";
             renderFiltered();
         });

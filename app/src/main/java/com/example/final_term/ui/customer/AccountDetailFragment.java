@@ -113,9 +113,11 @@ public class AccountDetailFragment extends Fragment {
             binding.titleText.setText(Phase2Presentation.accountTitle(account.type));
             binding.subtitleText.setText(Phase2Presentation.accountSubtitle(account.type));
             loadTerms(account.id, account.type);
-            if (!loadedStripeAccount.equals(account.id)) {
-                loadStripeSandboxAccount(account.id);
-            }
+            currentBalance = account.availableMinor != null ? account.availableMinor : account.balanceMinor;
+            currentCurrency = account.currency;
+            binding.balanceText.setText(ReadSummaryFormatter.formatCurrency(currentBalance, currentCurrency));
+            binding.statusText.setText("Số dư tài khoản Nimbus");
+            binding.stripeSandboxPanel.setVisibility(View.GONE);
             return;
         }
         stripeSandboxRequest++;
@@ -156,7 +158,7 @@ public class AccountDetailFragment extends Fragment {
                         }
                         currentBalance = snapshot.getLong("availableMinor");
                         current.balanceText.setText(ReadSummaryFormatter.formatCurrency(currentBalance, "USD"));
-                        current.statusText.setText("Stripe Sandbox · VND");
+                        current.statusText.setText("Tài khoản thanh toán");
                         current.stripeSandboxPanel.setVisibility(View.VISIBLE);
                         StringBuilder summary = new StringBuilder();
                         long held = snapshot.getLong("outboundPendingMinor");

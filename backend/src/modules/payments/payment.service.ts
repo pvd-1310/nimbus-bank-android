@@ -6,11 +6,14 @@ import { check, key, minor } from "../../shared/errors.js";
 import { type Actor } from "../auth/auth.types.js";
 import type { StripeGateway } from "./stripe.provider.js";
 import { intentDigest } from "../security/intent.js";
+import { drainOutbox } from "../orders/fulfillment.service.js";
 const compatiblePayment = (d: Doc | undefined): Doc | undefined =>
   d
     ? {
         ...d,
-        billId: d.billOrOrderRef ?? d.billId,
+        ...((d.billOrOrderRef ?? d.billId) !== undefined
+          ? { billId: d.billOrOrderRef ?? d.billId }
+          : {}),
         ...((d.providerTxnRef ?? d.providerId)
           ? { providerId: d.providerTxnRef ?? d.providerId }
           : {}),
@@ -123,6 +126,99 @@ export class Payments {
     });
   }
 
+  async prepareTopup(a: Actor, accountId: string, amountMinor: number, currency: string, requestId: string) {
+    check(this.provider, "SETUP_REQUIRED", 503);
+    check(a.role === "CUSTOMER", "FORBIDDEN", 403);
+    key(accountId);
+    key(requestId);
+    minor(amountMinor);
+    check(amountMinor > 0 && currency === "VND", "INVALID_AMOUNT");
+    const id = digest([a.uid, "TOP_UP", requestId]);
+    const payloadDigest = digest([accountId, amountMinor, currency]);
+    return this.bank.store.run(async (t) => {
+      await this.bank.authorize(t, a);
+      const old = await t.get("transactionIntents/" + id);
+      if (old) {
+        check(old.payloadDigest === payloadDigest, "IDEMPOTENCY_CONFLICT", 409);
+        return { id, intentId: id, status: old.status, expiresAt: old.expiresAt, faceRequired: old.faceRequired ?? false };
+      }
+      const account = await this.bank.owned(t, a, accountId);
+      check(account.type === "CHECKING" && account.status === "ACTIVE" && account.currency === "VND", "INVALID_ACCOUNT", 409);
+      check(Number.isSafeInteger(account.availableMinor + amountMinor) && Number.isSafeInteger(account.bookedMinor + amountMinor), "AMOUNT_OVERFLOW", 409);
+      const now = this.bank.now();
+      const intent = {
+        id, kind: "TOP_UP", actorUid: a.uid, requestId, sourceId: accountId,
+        sourceAccountId: accountId, destinationAccountId: accountId,
+        amountMinor, feeMinor: 0, currency, payloadDigest,
+        faceRequired: this.bank.security.requiresFace(currency, amountMinor),
+        securityVersion: 1, status: "CREATED", createdAt: now, expiresAt: now + 300_000,
+      };
+      t.set("transactionIntents/" + id, { ...intent, digest: intentDigest(intent) });
+      this.bank.audit(t, a, "TOP_UP_INTENT", id, requestId);
+      return { id, intentId: id, status: intent.status, expiresAt: intent.expiresAt, faceRequired: intent.faceRequired };
+    });
+  }
+
+  async createTopup(a: Actor, accountId: string, requestId: string) {
+    check(this.provider, "SETUP_REQUIRED", 503);
+    key(accountId);
+    key(requestId);
+    const id = digest([a.uid, "TOP_UP", requestId]);
+    const payment = await this.bank.store.run<Doc>(async (t) => {
+      await this.bank.authorize(t, a);
+      const existing = await t.get("payments/" + id);
+      if (existing) {
+        check(existing.ownerUid === a.uid && existing.purpose === "TOP_UP" && existing.accountId === accountId, "IDEMPOTENCY_CONFLICT", 409);
+        return existing;
+      }
+      const intent = await this.bank.transfers.getIntent(t, a, id);
+      check(intent.kind === "TOP_UP" && intent.sourceAccountId === accountId && intent.status === "CREATED", "INVALID_INTENT", 409);
+      const account = await this.bank.owned(t, a, accountId);
+      check(account.type === "CHECKING" && account.status === "ACTIVE" && account.currency === "VND", "INVALID_ACCOUNT", 409);
+      await this.bank.security.consume(t, intent);
+      const record = {
+        id, ownerUid: a.uid, purpose: "TOP_UP", accountId,
+        amountMinor: intent.amountMinor, currency: intent.currency,
+        status: "CREATED", authorizationDigest: intent.digest, createdAt: this.bank.now(),
+      };
+      t.set("payments/" + id, record);
+      t.set("transactionIntents/" + id, { ...intent, status: "COMMIT_PENDING" });
+      this.bank.audit(t, a, "TOP_UP_PAYMENT_CREATE", id, requestId);
+      return record;
+    });
+    if (payment.status === "SUCCEEDED") return { id, paymentId: id, gateway: "STRIPE", status: "SUCCEEDED" };
+    if (payment.status === "CANCELLED") return { id, paymentId: id, gateway: "STRIPE", status: "FAILED" };
+    check(payment.authorizationDigest, "REAUTHORIZE_REQUIRED", 409);
+    check(payment.providerId || this.bank.now() - payment.createdAt < 23 * 3_600_000, "PAYMENT_RECONCILIATION_REQUIRED", 409);
+    const customerId = await this.getOrCreateStripeCustomer(a.uid, this.provider);
+    const stripeIntent = payment.providerId
+      ? await this.provider.retrieve(payment.providerId)
+      : await this.provider.create(id, payment.amountMinor, payment.currency, customerId, "TOP_UP");
+    check(stripeIntent.metadata.paymentId === id && stripeIntent.metadata.purpose === "TOP_UP", "PROVIDER_MISMATCH", 409);
+    const stripeCustomer = typeof stripeIntent.customer === "string" ? stripeIntent.customer : stripeIntent.customer?.id;
+    check(stripeCustomer === customerId, "PROVIDER_MISMATCH", 409);
+    await this.bank.store.run(async (t) => {
+      const latest = await t.get("payments/" + id);
+      check(latest?.ownerUid === a.uid && latest.purpose === "TOP_UP", "NOT_FOUND", 404);
+      check(!latest.providerId || latest.providerId === stripeIntent.id, "PROVIDER_MISMATCH", 409);
+      t.set("payments/" + id, { ...latest, providerId: stripeIntent.id, status: latest.status === "CREATED" ? "PROCESSING" : latest.status });
+    });
+    return {
+      id, paymentId: id, gateway: "STRIPE", status: "COMMIT_PENDING", clientSecret: stripeIntent.client_secret,
+      customerId,
+      customerSessionClientSecret: await this.provider.createCustomerSession(customerId),
+    };
+  }
+
+  async getTopup(a: Actor, id: string) {
+    return this.bank.store.run(async (t) => {
+      await this.bank.authorize(t, a);
+      const payment = await t.get("payments/" + id);
+      check(payment?.ownerUid === a.uid && payment.purpose === "TOP_UP", "NOT_FOUND", 404);
+      return { id, status: payment.status, amountMinor: payment.amountMinor, currency: payment.currency, accountId: payment.accountId };
+    });
+  }
+
   private checkQuote(bill: Doc) {
     check(bill.quoteExpiresAt == null || this.bank.now() < bill.quoteExpiresAt, "QUOTE_EXPIRED", 410);
   }
@@ -186,6 +282,7 @@ export class Payments {
       const p = {
         id,
         ownerUid: a.uid,
+        purpose: "BILL_PAYMENT",
         billId,
         amountMinor: i.amountMinor,
         currency: i.currency,
@@ -260,11 +357,11 @@ export class Payments {
     const o = event.data.object;
     check(o.livemode === false, "LIVE_MODE_FORBIDDEN");
     key(o.metadata?.paymentId);
-    return this.bank.store.run(async (t) => {
+    const success = event.type === "payment_intent.succeeded";
+    const outcome = await this.bank.store.run(async (t) => {
       const id = o.metadata.paymentId,
         previousEvent = await t.get("webhookEvents/" + event.id),
         p = compatiblePayment(await t.get("payments/" + id));
-      const success = event.type === "payment_intent.succeeded";
       if (previousEvent && (!success || previousEvent.paymentId !== id ||
           previousEvent.type !== event.type || p?.status !== "SUCCEEDED"))
         return { duplicate: true };
@@ -274,30 +371,34 @@ export class Payments {
         p.amountMinor === o.amount && p.currency.toLowerCase() === o.currency,
         "PAYMENT_MISMATCH",
       );
-      const bill = await t.get("bills/" + p.billId);
-      check(
-        bill &&
-          bill.ownerUid === p.ownerUid &&
-          bill.amountMinor === p.amountMinor &&
-          bill.currency === p.currency,
-        "INVOICE_MISMATCH",
-      );
+      const topup = p.purpose === "TOP_UP";
+      check(o.metadata?.purpose === (topup ? "TOP_UP" : "BILL_PAYMENT") || (!topup && !o.metadata?.purpose), "PAYMENT_PURPOSE_MISMATCH", 409);
+      const bill = topup ? undefined : await t.get("bills/" + p.billId);
+      if (topup) {
+        const account = await t.get("accounts/" + p.accountId);
+        check(account && account.ownerUid === p.ownerUid && account.type === "CHECKING" && account.currency === "VND" &&
+          p.currency === "VND", "TOP_UP_ACCOUNT_MISMATCH", 409);
+      } else {
+        check(bill && bill.ownerUid === p.ownerUid && bill.amountMinor === p.amountMinor && bill.currency === p.currency,
+          "INVOICE_MISMATCH");
+      }
       const intent = await t.get("transactionIntents/" + id);
       if (p.authorizationDigest)
         check(intent && intent.digest === p.authorizationDigest && intent.digest === intentDigest(intent), "INVALID_INTENT");
-      if (success && p.status === "SUCCEEDED" && bill.status === "PAID" &&
+      if (success && topup && p.status === "SUCCEEDED" && await t.get("transactions/" + id)) return { duplicate: true };
+      if (success && !topup && p.status === "SUCCEEDED" && bill?.status === "PAID" &&
           bill.paymentId === id && p.providerId === o.id) {
-        await recordBillPayment(
-          t, id, p, intent, previousEvent?.receivedAt ?? p.updatedAt ?? this.bank.now(),
-        );
+          if (!topup) await recordBillPayment(
+            t, id, p, intent, previousEvent?.receivedAt ?? p.updatedAt ?? this.bank.now(),
+          );
       }
       if (previousEvent) return { duplicate: true };
-      const lock = await t.get("billPaymentLocks/" + p.billId);
+      const lock = topup ? undefined : await t.get("billPaymentLocks/" + p.billId);
       if (p.status !== "SUCCEEDED" && p.status !== "CANCELLED") {
         const settledAt = this.bank.now();
         const status = success
           ? "SUCCEEDED"
-          : event.type === "payment_intent.canceled"
+        : event.type === "payment_intent.canceled"
             ? "CANCELLED"
             : "PROCESSING";
         t.set("payments/" + id, {
@@ -310,7 +411,18 @@ export class Payments {
           t.set("transactionIntents/" + id, { ...intent, status: success ? "COMMITTED" : "FAILED" });
         if (status === "CANCELLED" && lock?.paymentId === id)
           t.set("billPaymentLocks/" + p.billId, { ...lock, released: true });
-        if (success) {
+        if (success && topup) {
+          const account = await t.get("accounts/" + p.accountId);
+          check(account && account.ownerUid === p.ownerUid && account.type === "CHECKING" && account.currency === "VND", "TOP_UP_ACCOUNT_MISMATCH", 409);
+          const availableMinor = account.availableMinor + p.amountMinor;
+          const bookedMinor = account.bookedMinor + p.amountMinor;
+          check(Number.isSafeInteger(availableMinor) && Number.isSafeInteger(bookedMinor), "AMOUNT_OVERFLOW");
+          t.set("accounts/" + p.accountId, { ...account, availableMinor, bookedMinor, balanceMinor: bookedMinor, version: (account.version ?? 0) + 1 });
+          t.set("ledgerEntries/" + id + "_credit", { transactionId: id, accountId: p.accountId, signedMinor: p.amountMinor, amountMinor: p.amountMinor, direction: "CREDIT", currency: "VND", postedAt: settledAt });
+          t.set("ledgerEntries/" + id + "_clearing", { transactionId: id, accountId: "STRIPE_CLEARING", signedMinor: -p.amountMinor, amountMinor: p.amountMinor, direction: "DEBIT", currency: "VND", postedAt: settledAt });
+          t.set("transactions/" + id, { ownerUid: p.ownerUid, actorUid: p.ownerUid, requestId: intent?.requestId ?? id, type: "TOP_UP", accountId: p.accountId, sourceAccountId: p.accountId, amountMinor: p.amountMinor, currency: "VND", status: "SETTLED", balanceAfterMinor: bookedMinor, paymentId: id, committedAt: settledAt });
+          this.bank.audit(t, { uid: p.ownerUid, role: "CUSTOMER", permissions: [] }, "TOP_UP_SETTLED", id, intent?.requestId);
+        } else if (success) {
           await recordBillPayment(t, id, p, intent, settledAt);
           t.set("bills/" + p.billId, {
             ...bill,
@@ -340,5 +452,7 @@ export class Payments {
       });
       return { received: true };
     });
+    if (success) await drainOutbox(this.bank.store);
+    return outcome;
   }
 }

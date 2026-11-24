@@ -13,9 +13,8 @@ export function registerAccountsRoutes(route: Route, d: AppDependencies) {
   );
   route("get", "/accounts/:id/stripe-sandbox", async (a, r) => {
     const id = String(r.params.id);
-    if (d.stripeSandboxAccounts) return d.stripeSandboxAccounts.get(a, id);
     await d.bank.accounts.get(a, id);
-    return { status: "unlinked" };
+    return { status: "disabled", balanceSource: "FIREBASE_VND_LEDGER" };
   });
   route("get", "/accounts/:id/savings-estimate", (a, r) =>
     d.bank.accounts.savings(

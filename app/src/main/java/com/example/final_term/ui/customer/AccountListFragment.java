@@ -246,7 +246,6 @@ public final class AccountListFragment extends Fragment {
             if ("CLOSED".equalsIgnoreCase(account.status)) continue;
             if ("CHECKING".equalsIgnoreCase(account.type) && "ACTIVE".equalsIgnoreCase(account.status)) {
                 cardAccounts.add(account);
-                loadStripeCard(account);
             } else if (!"CHECKING".equalsIgnoreCase(account.type)) {
                 otherAccounts.add(account);
             }
@@ -289,12 +288,6 @@ public final class AccountListFragment extends Fragment {
                     if (Math.abs(delta) > dp(44) && cardAccounts.size() > 1) {
                         int next = (selectedIndex + (delta < 0 ? 1 : -1) + cardAccounts.size()) % cardAccounts.size();
                         selectedCardAccountId = cardAccounts.get(next).id;
-                        renderAll();
-                    } else if (cardRequestsFailed.contains(selected.id)) {
-                        cardRequestsFailed.remove(selected.id);
-                        cardRequestsLoaded.remove(selected.id);
-                        cardSnapshots.remove(selected.id);
-                        loadStripeCard(selected);
                         renderAll();
                     }
                     return true;
@@ -367,7 +360,7 @@ public final class AccountListFragment extends Fragment {
     private View createPaymentCard(ReadModels.AccountSummary account) {
         JSONObject snapshot = cardSnapshots.get(account.id);
         JSONObject cardData = snapshot == null ? null : snapshot.optJSONObject("card");
-        boolean loading = cardRequestsInFlight.contains(account.id) || !cardRequestsLoaded.contains(account.id);
+        boolean loading = false;
         String state = snapshot == null ? "" : snapshot.optString("status", "");
         String brand = cardData == null ? "NIMBUS" : cardData.optString("brand", "Thẻ thanh toán").toUpperCase(Locale.ROOT);
         String last4 = cardData == null ? "" : cardData.optString("last4", "");
@@ -414,7 +407,7 @@ public final class AccountListFragment extends Fragment {
         } else {
             String stateMessage = loading || "pending".equalsIgnoreCase(state)
                     ? "Đang phát hành thẻ" : cardRequestsFailed.contains(account.id)
-                    ? "Không tải được thông tin thẻ" : "Chưa có thẻ được phát hành";
+                    ? "Chưa có thẻ đã lưu" : "Chọn thẻ test khi thanh toán";
             TextView cardState = walletText(stateMessage, 14, R.color.white, false);
             cardState.setShadowLayer(dp(2), 0, dp(1), 0x55000000);
             middle.addView(cardState);
@@ -440,9 +433,9 @@ public final class AccountListFragment extends Fragment {
         card.addView(bottom);
 
         String stateLabel = loading ? "Đang tải thông tin thẻ"
-                : cardRequestsFailed.contains(account.id) ? "Chạm để thử tải lại thông tin thẻ"
+                : cardRequestsFailed.contains(account.id) ? "Thẻ test được chọn tại bước thanh toán"
                 : cardData == null ? ("pending".equalsIgnoreCase(state) ? "Thẻ đang được phát hành"
-                : "Chưa có thẻ thanh toán") : formatCardStatus(cardStatus);
+                : "Dùng thẻ test trong Stripe PaymentSheet") : formatCardStatus(cardStatus);
         TextView status = walletText(stateLabel, 12, R.color.ink_muted, false);
         status.setGravity(Gravity.CENTER);
         status.setPadding(0, dp(7), 0, 0);
@@ -535,13 +528,10 @@ public final class AccountListFragment extends Fragment {
                 }
             }
         }
-        if (checking != null) loadWalletBalance(checking);
-        else {
-            walletStripeAccountId = null;
-            walletStripeBalanceMinor = null;
-            walletStripeLoading = false;
-            walletStripeLoaded = false;
-        }
+        walletStripeAccountId = checking == null ? null : checking.id;
+        walletStripeBalanceMinor = checking == null ? null
+                : checking.availableMinor != null ? checking.availableMinor : checking.balanceMinor;
+        walletStripeCurrency = checking == null ? "VND" : checking.currency;
         if (!walletBillsLoaded && !walletBillsLoading) loadWalletBills();
 
         addWalletSectionTitle("Tài khoản thanh toán");
@@ -574,7 +564,7 @@ public final class AccountListFragment extends Fragment {
         Calendar previousStart = (Calendar) weekStart.clone(); previousStart.add(Calendar.DAY_OF_MONTH, -7);
         Calendar nextWeekStart = (Calendar) weekStart.clone(); nextWeekStart.add(Calendar.DAY_OF_MONTH, 7);
         if (transactions != null) for (ReadModels.TransactionSummary transaction : transactions) {
-            if (!transaction.isIncoming() || !("SETTLED".equalsIgnoreCase(transaction.status)
+            if (!"VND".equalsIgnoreCase(transaction.currency) || !transaction.isIncoming() || !("SETTLED".equalsIgnoreCase(transaction.status)
                     || "SUCCEEDED".equalsIgnoreCase(transaction.status)) || transaction.createdAt == null) continue;
             long timestamp = transaction.createdAt.toDate().getTime();
             if (timestamp >= previousStart.getTimeInMillis() && timestamp < weekStart.getTimeInMillis()) {
@@ -1172,7 +1162,7 @@ public final class AccountListFragment extends Fragment {
         tile.addView(title);
 
         TextView balance = new TextView(requireContext());
-        balance.setText("Đang tải số dư Stripe…");
+        balance.setText(ReadSummaryFormatter.formatCurrency(acc.availableMinor != null ? acc.availableMinor : acc.balanceMinor, acc.currency));
         balance.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
         balance.setTextSize(20);
         balance.setPadding(0, dp(4), 0, dp(4));
@@ -1184,27 +1174,7 @@ public final class AccountListFragment extends Fragment {
         sub.setTextSize(12);
         tile.addView(sub);
 
-        var current = binding;
-        String requestedUid = uid;
-        application.getAppContainer().getBackendApiClient()
-                .get("/accounts/" + android.net.Uri.encode(acc.id) + "/stripe-sandbox")
-                .addOnCompleteListener(task -> {
-                    if (binding != current || !java.util.Objects.equals(uid, requestedUid)) return;
-                    try {
-                        if (!task.isSuccessful() || task.getResult().statusCode != 200)
-                            throw new org.json.JSONException("Unavailable");
-                        JSONObject snapshot = new JSONObject(task.getResult().body);
-                        if (snapshot.has("availableMinor")) {
-                            balance.setText(ReadSummaryFormatter.formatCurrency(snapshot.getLong("availableMinor"), "USD"));
-                            sub.setText("Stripe Sandbox · " + acc.id);
-                        } else {
-                            balance.setText("pending".equals(snapshot.optString("status"))
-                                    ? "Đang thiết lập Stripe" : "Chưa liên kết Stripe");
-                        }
-                    } catch (org.json.JSONException error) {
-                        balance.setText("Chưa đọc được số dư Stripe");
-                    }
-                });
+        sub.setText("Sổ cái Nimbus · " + acc.id);
         tile.setOnClickListener(v -> openDetails(v, acc));
         return tile;
     }

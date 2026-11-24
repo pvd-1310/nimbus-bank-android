@@ -41,8 +41,7 @@ export class RequestService {
   private async demoAccount(t: Tx, a: Actor, id: string, currency: string) {
     check(a.role === "CUSTOMER", "FORBIDDEN", 403);
     const account = await this.bank.owned(t, a, id);
-    check(!account.stripeSandboxLinkPath, "STRIPE_SANDBOX_CURRENCY_REQUIRED", 409);
-    check(account.demo === true && account.type === "CHECKING" &&
+    check(account.type === "CHECKING" &&
       account.status === "ACTIVE" && account.currency === currency, "DEMO_ACCOUNT_REQUIRED", 409);
     return account;
   }
@@ -51,6 +50,7 @@ export class RequestService {
     key(input.requestId);
     minor(input.amountMinor);
     check(["DEPOSIT", "WITHDRAWAL", "EXTERNAL_TRANSFER"].includes(input.type), "INVALID_TYPE");
+    check(input.type !== "DEPOSIT", "TOP_UP_REQUIRES_CARD", 409);
     const external = input.type === "EXTERNAL_TRANSFER";
     if (external) check(input.bankCode === "DEMO_BANK" && /^0{9}[12]$/.test(input.beneficiaryAccount),
       "DEMO_BENEFICIARY_REQUIRED");
@@ -139,7 +139,6 @@ export class RequestService {
         return this.demoResult(intent);
 
       const account = await this.bank.owned(t, a, intent.sourceAccountId);
-      check(!account.stripeSandboxLinkPath, "STRIPE_SANDBOX_CURRENCY_REQUIRED", 409);
       const delta = intent.movement === "DEPOSIT" ? intent.amountMinor : -intent.amountMinor;
       const bookedMinor = account.bookedMinor + delta;
       const availableMinor = account.availableMinor + delta;
@@ -149,7 +148,7 @@ export class RequestService {
       const policy = delta < 0 ? await t.get("checkingDetails/" + account.id) : undefined;
       const amountMinor = (usage?.amountMinor ?? 0) + Math.max(0, -delta);
       const failureCode =
-        account.demo !== true || account.type !== "CHECKING" || account.status !== "ACTIVE" ||
+        account.type !== "CHECKING" || account.status !== "ACTIVE" ||
           account.currency !== intent.currency ? "DEMO_ACCOUNT_REQUIRED"
         : intent.movement === "EXTERNAL_TRANSFER" && intent.destinationAccountId === "DEMO_BANK_0000000002"
           ? "DEMO_PROVIDER_REJECTED"

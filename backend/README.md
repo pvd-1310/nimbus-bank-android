@@ -176,29 +176,19 @@ URL upload sống 180 giây, URL đọc theo object version sống 120 giây. Ch
 
 Lên lịch chạy hằng ngày `docker compose exec -T backend npm run purge:verification`. Với backend chạy trực tiếp, build trước rồi chạy `npm run purge:verification` từ thư mục backend. Lệnh xóa tất cả object version và delete marker thuộc ticket hết hạn. Cấp thêm `s3:ListBucketVersions` giới hạn prefix `ekyc/` và `s3:DeleteObjectVersion` chỉ cho job/role dọn dữ liệu. Job có thể chạy lại sau lỗi. Mặc định giữ ảnh của hồ sơ đã có quyết định 90 ngày và giữ ảnh hồ sơ đang review. Ảnh draft đã confirm được giữ 30 ngày, ticket draft bị thay thế/chưa confirm được giữ một ngày rồi có thể chụp/upload lại. Draft cũ thiếu timestamp cần rà soát riêng. Template có TTL mặc định 365 ngày, bị loại khỏi matching ngay khi hết hạn và được xóa ciphertext khi job chạy. Cấu hình vòng đời backup của storage và Firestore riêng theo môi trường.
 
-## Cấu hình Stripe Sandbox
+## Dòng tiền VND và thanh toán Stripe test
 
-Hóa đơn, nạp điện thoại và đơn hàng đều dùng Stripe Sandbox, kể cả khi chạy Firebase Emulator.
+Firestore là nguồn số dư VND chính của app. Số dư checking, lịch sử giao dịch và các bút toán hiển thị trên Android lấy từ sổ này. Chuyển khoản nội bộ ghi nợ tài khoản gửi và ghi có tài khoản nhận trong cùng một Firestore transaction, sau khi backend kiểm tra quyền, trạng thái tài khoản, số dư, hạn mức, OTP và yêu cầu face step-up.
 
-1. Chọn cùng một sandbox cho Android, backend và Stripe CLI. Cấu hình `STRIPE_SECRET_KEY=sk_test_...` và `STRIPE_WEBHOOK_SECRET=whsec_...` trong `.env` ở thư mục gốc. Live keys bị từ chối.
-2. Cấu hình publishable test key `STRIPE_PUBLISHABLE_KEY=pk_test_...` trong `.env` ở thư mục gốc. Đây là key công khai dùng bởi Stripe Android SDK; không đưa secret key vào ứng dụng.
-3. Khởi động webhook listener: `stripe listen --events payment_intent.succeeded,payment_intent.payment_failed,payment_intent.canceled --forward-to http://localhost:3001/webhooks/stripe`. Với backend chạy cổng 3198, đổi URL chuyển tiếp sang `http://localhost:3198/webhooks/stripe`. Lưu signing secret listener in ra làm `STRIPE_WEBHOOK_SECRET`, rồi khởi động lại backend.
-4. Trong app đăng nhập khách hàng, mở Tiện ích & Thanh toán, chọn hóa đơn chưa thanh toán, hoàn tất OTP, nhập thẻ test ở Stripe PaymentSheet. Sau khi PaymentSheet báo hoàn tất, app đợi webhook và chỉ hiển thị biên nhận khi backend chuyển hóa đơn sang `PAID`.
-5. Webhook hợp lệ cập nhật hóa đơn; gọi `npm run worker` để xử lý outbox. Đơn demo được ghi `DEMO_FULFILLED`; đơn thật cần provider riêng. Browser return không xác nhận thanh toán.
+Stripe chỉ thu tiền thẻ ở chế độ test. `POST /topups/intents` tạo intent nạp VND gắn với tài khoản checking; người dùng hoàn thành OTP/face rồi gọi `POST /topups` để nhận PaymentIntent cho Stripe PaymentSheet. Tiền chỉ được ghi có vào Firebase sau webhook có chữ ký `payment_intent.succeeded`, khớp payment ID, mục đích, số tiền, currency, tài khoản và provider ID. PaymentSheet đóng hoặc báo hoàn tất chưa phải bằng chứng ghi có. Stripe VND dùng số nguyên đồng; việc thu VND phụ thuộc currency/capability của Stripe account.
 
-Payment dùng nguồn tiền Stripe, không tự trừ tài khoản nội bộ thêm lần nữa. Webhook phải khớp payment ID, số tiền, currency và provider ID. Stripe CLI `trigger` sự kiện ngẫu nhiên không có metadata payment ID sẽ bị từ chối; cần thanh toán PaymentIntent do backend tạo để kiểm thử toàn luồng. Thẻ test thành công: `4242 4242 4242 4242`, ngày hết hạn bất kỳ trong tương lai, CVC bất kỳ; chỉ dùng trong test mode.
+Hóa đơn điện/nước và đơn hàng tiện ích dùng PaymentIntent thẻ riêng. Webhook thành công đánh dấu hóa đơn đã trả và tạo outbox cho fulfillment; không trừ Firebase wallet lần nữa. Fulfillment hiện vẫn là demo và ghi trạng thái `DEMO_FULFILLED`.
 
-Sau OTP, PaymentSheet cho phép khách hàng chọn lưu thẻ test để dùng lại hoặc xóa thẻ đã lưu. Stripe lưu thông tin thẻ. Backend lưu liên kết tài khoản với Stripe Customer và cấp Customer Session ngắn hạn cho mỗi lần mở PaymentSheet.
+Cấu hình `STRIPE_SECRET_KEY=sk_test_...`, `STRIPE_WEBHOOK_SECRET=whsec_...` và Android `STRIPE_PUBLISHABLE_KEY=pk_test_...` trong file env cục bộ. Không commit các khóa này. Chạy Stripe CLI để chuyển webhook tới đúng port backend đang nghe, ví dụ `stripe listen --events payment_intent.succeeded,payment_intent.payment_failed,payment_intent.canceled --forward-to http://127.0.0.1:3000/webhooks/stripe`; lấy signing secret CLI in ra làm `STRIPE_WEBHOOK_SECRET` rồi khởi động lại backend. Khi port backend khác 3000, thay URL tương ứng. Dùng thẻ test `4242 4242 4242 4242`, ngày hết hạn tương lai và CVC bất kỳ.
 
-Trang chủ và chi tiết tài khoản thanh toán lấy số dư USD từ Stripe Treasury Sandbox. Khi khách hàng mở tài khoản hoặc officer tạo tài khoản thanh toán cho khách hàng, backend liên kết một Stripe Connect account, một Treasury Financial Account và một thẻ ảo Issuing. Tài khoản thanh toán có `stripeSandboxLinkPath` trỏ đến `stripeSandboxAccountLinks/{accountId}` trong Firestore. Backend lưu trạng thái và các ID Stripe tại đó. Luồng áp dụng cho tài khoản `CHECKING` của khách hàng.
+Chuyển liên ngân hàng VND chỉ dùng `DEMO_BANK` và beneficiary demo; backend mô phỏng kết quả và ghi clearing demo, không chuyển tới ngân hàng thật. Rút tiền cũng là luồng demo. Muốn chuyển liên ngân hàng hoặc payout thật phải tích hợp nhà cung cấp có rail chuyển tiền phù hợp.
 
-Chạy `npm run build` rồi `npm run link:stripe-sandbox` trong `backend/` để đếm các tài khoản thanh toán hiện có. Thêm `-- --apply` để liên kết những tài khoản này trong dự án Firebase đang được cấu hình. Chạy lại lệnh để tiếp tục các liên kết đang chờ Stripe kích hoạt.
-
-App hiển thị số dư và lịch sử Stripe bằng VND, theo tỷ giá demo cố định 1 USD = 25.000 ₫. Stripe Treasury vẫn ghi sổ bằng USD. Giá VND trên hóa đơn giữ nguyên, số tiền trừ được làm tròn đến cent gần nhất và được hiển thị ở bước OTP.
-
-Chuyển tiền giữa các tài khoản đã liên kết dùng Treasury Outbound Payments. Số nhận `0000000001` của DEMO_BANK trỏ đến tài khoản demo Stripe `demo_recipient_checking` (có thể cấu hình qua `STRIPE_SANDBOX_DEMO_RECIPIENT`). Nạp tiền dùng test Received Credits. Rút tiền mô phỏng và thanh toán hóa đơn dùng thử thẻ Issuing gắn với tài khoản. Các thao tác đều cần OTP riêng và dùng mã yêu cầu cố định khi thử lại.
-
-Backend đồng bộ lịch sử Treasury vào `transactions` với `provider: STRIPE_TREASURY` sau giao dịch và khi app tải số dư. Firestore giữ bản ghi báo cáo. Tài khoản mới bắt đầu với số dư Stripe Sandbox của chính nó.
+Các số dư/financial accounts Stripe Treasury cũ tách biệt khỏi Firebase và không còn được hiển thị như số dư Nimbus. App không tự provision Stripe Treasury account khi tạo checking mới. Những số dư cũ không được tự động di chuyển hoặc cộng vào Firebase.
 
 ## Kiểm thử và giới hạn
 

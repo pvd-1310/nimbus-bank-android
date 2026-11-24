@@ -42,14 +42,21 @@ export class TransferService {
         };
       }
       const src = await this.bank.owned(t, a, input.sourceAccountId);
-      check(!src.stripeSandboxLinkPath, "STRIPE_SANDBOX_CURRENCY_REQUIRED", 409);
       let destinationAccountId = destinationInput;
       if (/^(?:0[0-9]{9}|\+84[0-9]{9})$/.test(destinationInput)) {
-        const phone = destinationInput.startsWith("0") ? "+84" + destinationInput.slice(1) : destinationInput;
-        const users = await t.list("users", { contactPhone: phone }, { limit: 2 });
+        const localPhone = destinationInput.startsWith("+84") ? "0" + destinationInput.slice(3) : destinationInput;
+        const [canonical, legacy] = await Promise.all([
+          t.list("users", { contactPhone: "+84" + localPhone.slice(1) }, { limit: 2 }),
+          t.list("users", { contactPhone: localPhone }, { limit: 2 }),
+        ]);
+        const users = [...new Map([...canonical, ...legacy].map((user) => [user.id, user])).values()];
         check(users.length === 1, "INVALID_DESTINATION", 404);
-        const accounts = await t.list("accounts", { ownerUid: users[0].id, type: "CHECKING" }, { limit: 2 });
-        check(accounts.length === 1, "INVALID_DESTINATION", 404);
+        const recipient = users[0];
+        check(recipient.role === "CUSTOMER" &&
+          (recipient.status === "ACTIVE" ? recipient.active !== false : recipient.status === undefined && recipient.active === true),
+          "INVALID_DESTINATION", 404);
+        const accounts = await t.list("accounts", { ownerUid: recipient.id, type: "CHECKING", status: "ACTIVE" }, { limit: 2 });
+        check(accounts.length === 1 && accounts[0].currency === "VND", "INVALID_DESTINATION", 404);
         destinationAccountId = accounts[0].id;
       } else key(destinationAccountId);
       const dst = await t.get("accounts/" + destinationAccountId);
@@ -57,7 +64,6 @@ export class TransferService {
         dst && src.id !== destinationAccountId,
         "INVALID_DESTINATION",
       );
-      check(!dst.stripeSandboxLinkPath, "STRIPE_SANDBOX_CURRENCY_REQUIRED", 409);
       check(
         src.status === "ACTIVE" && dst.status === "ACTIVE",
         "ACCOUNT_INACTIVE",
@@ -154,7 +160,6 @@ export class TransferService {
       await this.bank.security.consume(t, i);
       const src = await this.bank.owned(t, a, i.sourceAccountId),
         dst = await t.get("accounts/" + i.destinationAccountId);
-      check(!src.stripeSandboxLinkPath && !dst?.stripeSandboxLinkPath, "STRIPE_SANDBOX_CURRENCY_REQUIRED", 409);
       check(
         dst && src.status === "ACTIVE" && dst.status === "ACTIVE",
         "ACCOUNT_INACTIVE",

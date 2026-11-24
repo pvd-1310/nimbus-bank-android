@@ -709,7 +709,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         binding.checkoutContainer.setVisibility(View.VISIBLE);
         binding.hubMainTitle.setText("Thanh toán dịch vụ");
         binding.hubSubtitle.setVisibility(View.VISIBLE);
-        binding.hubSubtitle.setText("Stripe Sandbox");
+        binding.hubSubtitle.setText("Thanh toán bằng thẻ test");
         binding.checkoutServiceTitle.setText(currentServiceName);
         binding.checkoutReferenceText.setText("Mã hóa đơn / tham chiếu: " + currentReference);
         renderCheckoutStep();
@@ -916,7 +916,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         commitPending = true;
         setBusy(true);
         renderCheckoutStep();
-        checkoutStatus("Đang mở Stripe Sandbox…");
+        checkoutStatus("Đang mở thanh toán thẻ…");
 
         try {
             String body = new JSONObject()
@@ -958,7 +958,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                         String clientSecret = p.optString("clientSecret", "");
                         if (!p.isNull("clientSecret") && !clientSecret.isEmpty()) {
                             if (paymentSheet == null) {
-                                checkoutStatus("Thiếu khóa Stripe Sandbox để tiếp tục thanh toán thẻ.");
+                                checkoutStatus("Thanh toán thẻ chưa được cấu hình.");
                                 return;
                             }
                             PaymentSheet.Configuration.Builder configuration =
@@ -1045,11 +1045,6 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                 authoritativeAmount = intent.optLong("amountMinor", authoritativeAmount);
                 authoritativeFee = intent.optLong("feeMinor", authoritativeFee);
                 authoritativeCurrency = intent.optString("currency", authoritativeCurrency);
-                if ("STRIPE_TREASURY".equals(intent.optString("provider"))) {
-                    binding.checkoutReferenceText.setText("Mã hóa đơn / tham chiếu: " + currentReference
-                            + "\nTài khoản thanh toán: " + intent.optString("sourceId")
-                            + "\nTỷ giá demo 1 USD = 25.000 ₫");
-                }
                 JSONObject tgt = intent.optJSONObject("target");
                 if (tgt != null) authoritativeTarget = tgt.optString("id", authoritativeTarget);
 
@@ -1176,7 +1171,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         binding.checkoutSuccessContainer.setVisibility(View.VISIBLE);
         binding.receiptAmountDisplay.setText(ReadSummaryFormatter.formatCurrency(authoritativeAmount + authoritativeFee, authoritativeCurrency));
         binding.receiptDetailsText.setText("Dịch vụ: " + currentServiceName + "\nTham chiếu: " + currentReference +
-                "\nMã thanh toán: " + intentId + "\nStripe Sandbox đã xác nhận thanh toán.");
+                "\nMã thanh toán: " + intentId + "\nThanh toán thẻ đã được xác nhận.");
         checkoutStatus("");
     }
 
@@ -1213,7 +1208,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     private String errorMessage(BackendApiClient.Response response, String fallback) {
         String code = errorCode(response);
         switch (code) {
-            case "SETUP_REQUIRED": return "Máy chủ chưa được cấu hình Stripe Sandbox.";
+            case "SETUP_REQUIRED": return "Máy chủ chưa được cấu hình thanh toán thẻ.";
             case "INVALID_OTP": return "Mã xác nhận không đúng. Vui lòng kiểm tra lại.";
             case "OTP_EXPIRED": return "Mã xác nhận đã hết hạn (OTP_EXPIRED). Tạo mã mới.";
             case "OTP_LOCKED": return "Đã nhập sai quá 5 lần, giao dịch bị khóa (OTP_LOCKED). Hủy để tạo lại.";

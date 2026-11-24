@@ -42,6 +42,15 @@ Bản này có nhãn Nimbus Bank (Local), package `com.example.final_term.localr
 2. Cấu hình URL backend phù hợp bằng `ANDROID_BACKEND_URL` trong `.env` ở thư mục gốc hoặc truyền `-PbackendBaseUrl=...`. Debug chấp nhận HTTP loopback. Release dùng HTTPS.
 3. Build bình thường với `./gradlew --offline testDebugUnitTest assembleDebug`. Thiết lập Stripe test, Google Routes và OpenAI theo tài liệu backend nếu chạy các đường dẫn provider đã được duyệt.
 
+#### Chạy trên điện thoại Android qua USB (Windows)
+
+1. Bật Developer options và USB debugging, cắm điện thoại, rồi chấp nhận khóa RSA của máy tính. Dùng bản **connected debug** với `app/google-services.json`; Firebase Auth/Firestore kết nối trực tiếp tới Firebase project, không dùng emulator.
+2. Trong `.env` ở thư mục gốc đặt `ANDROID_BACKEND_URL=http://127.0.0.1:3001/`. Gradle nhúng URL này vào APK lúc build, nên **Sync và Run lại** trong Android Studio sau khi sửa.
+3. Khởi động backend theo cách bạn muốn: `docker compose up -d` (API tại cổng 3001), hoặc `docker compose up -d face-api` rồi `cd backend; npm run dev` (cũng tại cổng 3001 theo `backend/.env`). Không chạy đồng thời hai backend trên cùng cổng. Face API chỉ truy cập nội bộ Docker hoặc cổng loopback 8000 cho backend chạy bằng npm.
+4. Từ thư mục gốc chạy `powershell -ExecutionPolicy Bypass -File scripts/connect-android-usb.ps1`. Script chọn điện thoại đã được cấp quyền, thiết lập `adb reverse tcp:3001 tcp:3001` và kiểm tra `/health`. Nếu `adb.exe` chưa nằm trên PATH, truyền `-AdbPath "đường-dẫn-tới-adb.exe"`. Cần chạy lại sau khi rút cáp hoặc khởi động lại điện thoại.
+
+Android gọi toàn bộ API qua cùng URL `127.0.0.1:3001`; Face API được backend gọi từ phía máy tính. Firebase, S3, Stripe và Google Maps/Routes vẫn cần Internet trên điện thoại hoặc máy tính tùy dịch vụ. `/health` chỉ xác nhận HTTP backend; xem `/capabilities` và thử luồng eKYC để kiểm tra provider. Face API cần hai model `det_10g.onnx` và `w600k_r50.onnx` trong `backend/private-face-model/models/buffalo_l/` (thư mục này bị gitignore). Có thể tải gói `buffalo_l.zip` từ [release chính thức của InsightFace](https://github.com/deepinsight/insightface/releases/download/model-zoo/buffalo_l.zip), kiểm tra SHA-256 `80ffe37d8a5940d59a7384c201a2a38d4741f2f3c51eef46ebb28218a7b0ca2f`, rồi chỉ giải nén hai tệp trên. [Model Zoo của InsightFace](https://github.com/deepinsight/insightface/blob/master/model_zoo/README.md) giới hạn model cho nghiên cứu phi thương mại.
+
 ### Backend
 
 Cài Node.js 22 trở lên, rồi chạy các lệnh sau trong `backend/`:
