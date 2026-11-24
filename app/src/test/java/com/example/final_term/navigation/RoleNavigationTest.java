@@ -27,4 +27,12 @@ public class RoleNavigationTest {
         AppUser user = new AppUser("c", "customer.demo@example.com", "PHAN VAN DUONG", UserRole.CUSTOMER, true);
         assertEquals("PHAN VAN DUONG", user.getFullName());
     }
+    @Test public void profileRefreshKeepsTheCurrentScreenButSessionChangesDoNot() {
+        AuthState customer = AuthState.signedIn(new AppUser("c", "", "Before", UserRole.CUSTOMER, true));
+        AuthState updated = AuthState.signedIn(new AppUser("c", "", "After", UserRole.CUSTOMER, true));
+        AuthState officer = AuthState.signedIn(new AppUser("o", "", UserRole.OFFICER, true));
+        assertTrue(viewModel.keepsDestination(customer, updated));
+        assertFalse(viewModel.keepsDestination(customer, officer));
+        assertFalse(viewModel.keepsDestination(customer, AuthState.signedOut()));
+    }
 }

@@ -2,6 +2,8 @@ import type { Express, NextFunction, Request, Response } from "express";
 import { randomUUID } from "node:crypto";
 import { ZodError } from "zod";
 import type { Actor } from "../modules/auth/auth.types.js";
+import type { StripeSandboxAccounts } from "../modules/accounts/stripe-sandbox-accounts.service.js";
+import type { StripeSandboxMovements } from "../modules/accounts/stripe-sandbox-movements.service.js";
 import type { Evidence } from "../modules/ekyc/ekyc.service.js";
 import type { Payments } from "../modules/payments/payment.service.js";
 import { Fault } from "../shared/errors.js";
@@ -14,6 +16,8 @@ export interface AppDependencies {
   bank: Banking;
   evidence: Evidence;
   payments: Payments;
+  stripeSandboxAccounts?: StripeSandboxAccounts;
+  stripeSandboxMovements?: StripeSandboxMovements;
   authenticate: (token: string) => Promise<Actor>;
   provision?: (a: Actor, body: Doc) => Promise<unknown>;
 }

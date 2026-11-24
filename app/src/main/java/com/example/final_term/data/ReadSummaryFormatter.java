@@ -1,10 +1,12 @@
 package com.example.final_term.data;
 
 import java.text.NumberFormat;
+import java.math.BigDecimal;
 import java.util.Locale;
 
 public final class ReadSummaryFormatter {
     private ReadSummaryFormatter() { }
+    public static final long VND_PER_SANDBOX_CENT = 250;
 
     public static String money(long amountMinor) {
         return NumberFormat.getIntegerInstance(new Locale("vi", "VN")).format(amountMinor) + " ₫";
@@ -15,12 +17,17 @@ public final class ReadSummaryFormatter {
     }
 
     public static String transactionTitle(ReadModels.TransactionSummary transaction) {
-        String type = transaction.isBillPayment() ? "Thanh toán hóa đơn" :
+        String type = "STRIPE_CREDIT".equals(transaction.type) ? "Tiền vào Stripe"
+                : "STRIPE_DEBIT".equals(transaction.type) ? "Tiền ra Stripe"
+                : "DEMO_DEPOSIT".equals(transaction.type) ? "Nạp tiền"
+                : "DEMO_WITHDRAWAL".equals(transaction.type) ? "Rút tiền"
+                : "DEMO_EXTERNAL_TRANSFER".equals(transaction.type) ? "Chuyển liên ngân hàng"
+                : transaction.isBillPayment() ? "Thanh toán hóa đơn" :
                 transaction.isOutgoing() ? "Chuyển đi" :
                 transaction.isIncoming() ? "Nhận tiền" : transaction.type;
         String status = "SETTLED".equals(transaction.status) ? "Thành công" :
                 "FAILED".equals(transaction.status) ? "Thất bại" : transaction.status;
-        return type + " · " + status;
+        return type + " · " + ("DEMO_SETTLED".equals(status) ? "Đã ghi sổ mô phỏng" : status);
     }
 
     public static String transactionDetail(ReadModels.TransactionSummary transaction) {
@@ -39,7 +46,7 @@ public final class ReadSummaryFormatter {
             detail.append(amount);
         }
         if (!transaction.accountId.isEmpty()) detail.append("\n").append(transaction.accountId);
-        if ("SETTLED".equals(transaction.status) && transaction.balanceAfterMinor != null) {
+        if (("SETTLED".equals(transaction.status) || "DEMO_SETTLED".equals(transaction.status)) && transaction.balanceAfterMinor != null) {
             detail.append("\nSố dư sau giao dịch ")
                     .append(formatCurrency(transaction.balanceAfterMinor, transaction.currency));
         }
@@ -60,6 +67,10 @@ public final class ReadSummaryFormatter {
     }
 
     public static String formatCurrency(long amountMinor, String currency) {
+        if ("USD".equals(currency)) {
+            return NumberFormat.getIntegerInstance(new Locale("vi", "VN"))
+                    .format(BigDecimal.valueOf(amountMinor).multiply(BigDecimal.valueOf(VND_PER_SANDBOX_CENT))) + " ₫";
+        }
         return "VND".equals(currency) ? money(amountMinor) :
                 (NumberFormat.getIntegerInstance(new Locale("vi", "VN")).format(amountMinor) + " " + currency).trim();
     }

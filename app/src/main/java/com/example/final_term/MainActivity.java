@@ -51,10 +51,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void routeFor(AuthState state) {
+        boolean keepDestination = rootViewModel.keepsDestination(latestAuthState, state);
         latestAuthState = state;
         RootViewModel.RootRoute route = rootViewModel.routeFor(state);
         int current = navController.getCurrentDestination() == null
                 ? R.id.login : navController.getCurrentDestination().getId();
+        if (keepDestination && current != R.id.login) {
+            syncBottomNavigation(current);
+            return;
+        }
         if (route == RootViewModel.RootRoute.CUSTOMER_HOME && current != R.id.customerHome) {
             navController.navigate(R.id.customerHome);
         } else if (route == RootViewModel.RootRoute.ONBOARDING && current != R.id.profile) {

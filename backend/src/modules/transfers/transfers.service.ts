@@ -42,6 +42,7 @@ export class TransferService {
         };
       }
       const src = await this.bank.owned(t, a, input.sourceAccountId);
+      check(!src.stripeSandboxLinkPath, "STRIPE_SANDBOX_CURRENCY_REQUIRED", 409);
       let destinationAccountId = destinationInput;
       if (/^(?:0[0-9]{9}|\+84[0-9]{9})$/.test(destinationInput)) {
         const phone = destinationInput.startsWith("0") ? "+84" + destinationInput.slice(1) : destinationInput;
@@ -56,6 +57,7 @@ export class TransferService {
         dst && src.id !== destinationAccountId,
         "INVALID_DESTINATION",
       );
+      check(!dst.stripeSandboxLinkPath, "STRIPE_SANDBOX_CURRENCY_REQUIRED", 409);
       check(
         src.status === "ACTIVE" && dst.status === "ACTIVE",
         "ACCOUNT_INACTIVE",
@@ -152,6 +154,7 @@ export class TransferService {
       await this.bank.security.consume(t, i);
       const src = await this.bank.owned(t, a, i.sourceAccountId),
         dst = await t.get("accounts/" + i.destinationAccountId);
+      check(!src.stripeSandboxLinkPath && !dst?.stripeSandboxLinkPath, "STRIPE_SANDBOX_CURRENCY_REQUIRED", 409);
       check(
         dst && src.status === "ACTIVE" && dst.status === "ACTIVE",
         "ACCOUNT_INACTIVE",

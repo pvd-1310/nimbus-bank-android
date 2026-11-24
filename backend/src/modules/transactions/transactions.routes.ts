@@ -9,6 +9,7 @@ export function registerTransactionsRoutes(route: Route, d: AppDependencies) {
         accountId: id.optional(),
         type: z.string().max(40).optional(),
         status: z.string().max(40).optional(),
+        provider: z.literal("STRIPE_TREASURY").optional(),
         from: z.coerce.number().int().optional(),
         to: z.coerce.number().int().optional(),
         cursor: z

@@ -7,6 +7,8 @@ import androidx.lifecycle.MutableLiveData;
 import com.google.firebase.Timestamp;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.ListenerRegistration;
+import com.google.firebase.firestore.MetadataChanges;
 import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.QuerySnapshot;
 
@@ -68,26 +70,32 @@ public final class FirestoreReadRepository {
 
     private <T> LiveData<ReadModelResult<List<T>>> observeQuery(
             Query query, SnapshotMapper<T> mapper) {
-        MutableLiveData<ReadModelResult<List<T>>> result = new MutableLiveData<>();
-        result.setValue(ReadModelResult.loading());
-        if (firestore == null) {
-            result.setValue(ReadModelResult.error("Chưa cấu hình Firebase."));
-            return result;
-        }
-        query.addSnapshotListener((snapshot, error) -> {
-            if (error != null || snapshot == null) {
-                result.postValue(ReadModelResult.error("Không thể tải dữ liệu. Vui lòng thử lại."));
-                return;
+        return new MutableLiveData<ReadModelResult<List<T>>>(ReadModelResult.loading()) {
+            private ListenerRegistration registration;
+
+            @Override
+            protected void onActive() {
+                registration = query.addSnapshotListener(MetadataChanges.INCLUDE, (snapshot, error) -> {
+                    if (error != null || snapshot == null) {
+                        postValue(ReadModelResult.error("Không thể tải dữ liệu. Vui lòng thử lại."));
+                        return;
+                    }
+                    List<T> mapped = mapper.map(snapshot);
+                    if (snapshot.getMetadata().isFromCache()) {
+                        postValue(ReadModelResult.cached(mapped,
+                                "Dữ liệu đang ở chế độ đọc offline hoặc chưa đồng bộ mới nhất."));
+                    } else {
+                        postValue(ReadModelResult.success(mapped));
+                    }
+                });
             }
-            List<T> mapped = mapper.map(snapshot);
-            if (snapshot.getMetadata().isFromCache()) {
-                result.postValue(ReadModelResult.cached(mapped,
-                        "Dữ liệu đang ở chế độ đọc offline hoặc chưa đồng bộ mới nhất."));
-            } else {
-                result.postValue(ReadModelResult.success(mapped));
+
+            @Override
+            protected void onInactive() {
+                if (registration != null) registration.remove();
+                registration = null;
             }
-        });
-        return result;
+        };
     }
 
     private <T> LiveData<ReadModelResult<List<T>>> error(String message) {
@@ -102,7 +110,8 @@ public final class FirestoreReadRepository {
             result.add(new ReadModels.AccountSummary(document.getId(),
                     document.getString("type"), document.getString("currency"),
                     longValue(document, "balanceMinor"), document.getString("status"),
-                    document.getString("ownerUid"), document.getLong("availableMinor")));
+                    document.getString("ownerUid"), document.getLong("availableMinor"),
+                    Boolean.TRUE.equals(document.getBoolean("demo"))));
         }
         return result;
     }

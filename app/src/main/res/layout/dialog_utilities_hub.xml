@@ -44,9 +44,9 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
-            android:text="Thanh toán hóa đơn thiết yếu, nạp tiền điện thoại &amp; dịch vụ"
             android:textColor="@color/ink_muted"
-            android:textSize="13sp" />
+            android:textSize="13sp"
+            android:visibility="gone" />
 
         <!-- ============================================== -->
         <!-- VIEW 1: HUB SELECTION CONTAINER               -->
@@ -58,137 +58,154 @@
             android:orientation="vertical"
             android:visibility="visible">
 
-            <!-- Category Tiles Grid -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
                 android:orientation="horizontal">
 
-                <!-- Electricity -->
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:accessibilityHeading="true"
+                    android:text="@string/utility_grid_title"
+                    android:textColor="@color/ink"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/util_see_all"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:text="@string/utility_see_all"
+                    android:textColor="@color/navy" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:baselineAligned="false"
+                android:orientation="horizontal">
+
                 <LinearLayout
                     android:id="@+id/util_electricity"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginEnd="6dp"
-                    android:layout_weight="1"
-                    android:background="@drawable/glass_pill_button"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center"
-                    android:orientation="vertical"
-                    android:padding="12dp">
+                    style="@style/UtilityTile"
+                    android:layout_marginStart="0dp">
 
                     <ImageView
-                        android:layout_width="28dp"
-                        android:layout_height="28dp"
-                        android:contentDescription="Tiền điện"
-                        android:src="@drawable/ic_receipt"
-                        app:tint="@color/navy" />
+                        style="@style/UtilityTileIcon"
+                        android:src="@drawable/ic_utility_electricity" />
 
                     <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:text="Tiền điện"
-                        android:textColor="@color/ink"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
+                        style="@style/UtilityTileLabel"
+                        android:text="@string/utility_electricity" />
                 </LinearLayout>
 
-                <!-- Water -->
                 <LinearLayout
                     android:id="@+id/util_water"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="3dp"
-                    android:layout_marginEnd="3dp"
-                    android:layout_weight="1"
-                    android:background="@drawable/glass_pill_button"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center"
-                    android:orientation="vertical"
-                    android:padding="12dp">
+                    style="@style/UtilityTile">
 
                     <ImageView
-                        android:layout_width="28dp"
-                        android:layout_height="28dp"
-                        android:contentDescription="Tiền nước"
-                        android:src="@drawable/ic_receipt"
-                        app:tint="@color/navy" />
+                        style="@style/UtilityTileIcon"
+                        android:src="@drawable/ic_utility_water" />
 
                     <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:text="Tiền nước"
-                        android:textColor="@color/ink"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
+                        style="@style/UtilityTileLabel"
+                        android:text="@string/utility_water" />
                 </LinearLayout>
 
-                <!-- Mobile Topup -->
                 <LinearLayout
                     android:id="@+id/util_mobile"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="3dp"
-                    android:layout_marginEnd="3dp"
-                    android:layout_weight="1"
-                    android:background="@drawable/glass_pill_button"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center"
-                    android:orientation="vertical"
-                    android:padding="12dp">
+                    style="@style/UtilityTile">
 
                     <ImageView
-                        android:layout_width="28dp"
-                        android:layout_height="28dp"
-                        android:contentDescription="Nạp ĐT"
-                        android:src="@drawable/ic_phone_topup"
-                        app:tint="@color/navy" />
+                        style="@style/UtilityTileIcon"
+                        android:src="@drawable/ic_phone_topup" />
 
                     <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:text="Nạp ĐT"
-                        android:textColor="@color/ink"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
+                        style="@style/UtilityTileLabel"
+                        android:text="@string/utility_mobile" />
                 </LinearLayout>
 
-                <!-- Internet / More Services -->
                 <LinearLayout
-                    android:id="@+id/util_internet"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="6dp"
-                    android:layout_weight="1"
-                    android:background="@drawable/glass_pill_button"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center"
-                    android:orientation="vertical"
-                    android:padding="12dp">
+                    android:id="@+id/util_flight"
+                    style="@style/UtilityTile"
+                    android:layout_marginEnd="0dp">
 
                     <ImageView
-                        android:layout_width="28dp"
-                        android:layout_height="28dp"
-                        android:contentDescription="Internet"
-                        android:src="@drawable/ic_receipt"
-                        app:tint="@color/navy" />
+                        style="@style/UtilityTileIcon"
+                        android:src="@drawable/ic_flight" />
 
                     <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:text="Internet &amp; DV"
-                        android:textColor="@color/ink"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
+                        style="@style/UtilityTileLabel"
+                        android:text="@string/utility_flight" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:baselineAligned="false"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:id="@+id/util_movie"
+                    style="@style/UtilityTile"
+                    android:layout_marginStart="0dp">
+
+                    <ImageView
+                        style="@style/UtilityTileIcon"
+                        android:src="@drawable/ic_utility_movie" />
+
+                    <TextView
+                        style="@style/UtilityTileLabel"
+                        android:text="@string/utility_movie" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/util_hotel"
+                    style="@style/UtilityTile">
+
+                    <ImageView
+                        style="@style/UtilityTileIcon"
+                        android:src="@drawable/ic_utility_hotel" />
+
+                    <TextView
+                        style="@style/UtilityTileLabel"
+                        android:text="@string/utility_hotel" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/util_shopping"
+                    style="@style/UtilityTile">
+
+                    <ImageView
+                        style="@style/UtilityTileIcon"
+                        android:src="@drawable/ic_utility_shopping" />
+
+                    <TextView
+                        style="@style/UtilityTileLabel"
+                        android:text="@string/utility_shopping" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/util_all"
+                    style="@style/UtilityTile"
+                    android:layout_marginEnd="0dp">
+
+                    <ImageView
+                        style="@style/UtilityTileIcon"
+                        android:src="@drawable/ic_utility_all" />
+
+                    <TextView
+                        style="@style/UtilityTileLabel"
+                        android:text="@string/utility_all" />
                 </LinearLayout>
             </LinearLayout>
 
@@ -202,6 +219,25 @@
                 android:textSize="11sp"
                 android:textStyle="bold"
                 android:letterSpacing="0.05" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/pending_order_button"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:backgroundTint="@color/bg_fog"
+                android:text="@string/utility_pending_order"
+                android:textColor="@color/navy"
+                android:visibility="gone" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/order_history_button"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:backgroundTint="@color/bg_fog"
+                android:text="Tra cứu đơn hàng demo"
+                android:textColor="@color/navy" />
 
             <LinearLayout
                 android:id="@+id/bills_list_container"
@@ -246,13 +282,37 @@
                     android:layout_height="48dp"
                     android:layout_marginTop="8dp"
                     android:background="@drawable/input_glass_field"
-                    android:hint="Nhập số điện thoại (VD: 0987654321)"
+                    android:hint="Số điện thoại Việt Nam (10 chữ số)"
                     android:inputType="phone"
                     android:paddingStart="14dp"
                     android:paddingEnd="14dp"
                     android:textColor="@color/ink"
                     android:textColorHint="@color/ink_faint"
                     android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:labelFor="@id/topup_carrier_picker"
+                    android:text="Nhà mạng"
+                    android:textColor="@color/ink_muted"
+                    android:textSize="12sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/topup_carrier_picker"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:gravity="start|center_vertical"
+                    android:text="Chọn nhà mạng"
+                    android:textAllCaps="false"
+                    android:textColor="@color/ink"
+                    app:cornerRadius="12dp"
+                    app:icon="@drawable/ic_chevron_right"
+                    app:iconGravity="end"
+                    app:iconTint="@color/ink_muted"
+                    app:strokeColor="@color/ink_faint" />
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -662,7 +722,7 @@
                     android:layout_height="48dp"
                     android:layout_marginTop="12dp"
                     android:backgroundTint="@color/navy"
-                    android:text="Xác thực mã OTP &amp; Tiếp tục"
+                    android:text="Xác thực OTP và mở Stripe"
                     android:textColor="@color/white"
                     app:cornerRadius="16dp" />
             </LinearLayout>
@@ -702,16 +762,6 @@
                         android:textColor="@color/ink"
                         android:textSize="12sp" />
                 </LinearLayout>
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/checkout_btn_commit_pay"
-                    android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:layout_marginTop="10dp"
-                    android:backgroundTint="@color/navy"
-                    android:text="Xác nhận thanh toán ngay"
-                    android:textColor="@color/white"
-                    app:cornerRadius="16dp" />
 
                 <!-- Recovery Button (GET /intents/:id & GET /payments/:id) -->
                 <com.google.android.material.button.MaterialButton

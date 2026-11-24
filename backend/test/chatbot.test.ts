@@ -1,7 +1,11 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { createChatbot } from "../src/modules/chatbot/chatbot.js";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 it("requires an explicitly enabled provider, key and model", () => {
   expect(createChatbot({ OPENAI_API_KEY: "fixture", OPENAI_MODEL: "fixture" })).toBeUndefined();
@@ -32,6 +36,29 @@ it("ignores unknown or mismatched model actions and handles provider outages", a
   const reply = createChatbot({ CHATBOT_ENABLED: "true", OPENAI_API_KEY: "fixture", OPENAI_MODEL: "fixture" })!;
   expect(await reply("hóa đơn")).toMatchObject({ action: null });
   await expect(reply("hóa đơn")).rejects.toMatchObject({ code: "CHATBOT_UNAVAILABLE" });
+});
+
+it("accepts a valid provider reply that takes more than the old chatbot deadline", async () => {
+  vi.useFakeTimers();
+  vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), ms);
+    return controller.signal;
+  });
+  vi.stubGlobal("fetch", async (_url: string, { signal }: RequestInit) =>
+    new Promise<Response>((resolve, reject) => {
+      signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+      setTimeout(() => resolve(Response.json({
+        status: "completed",
+        output: [{ type: "message", content: [{ type: "output_text", text: "BILLS" }] }],
+      })), 6000);
+    }),
+  );
+  const reply = createChatbot({ CHATBOT_ENABLED: "true", OPENAI_API_KEY: "fixture", OPENAI_MODEL: "fixture" })!;
+  await Promise.all([
+    expect(reply("hóa đơn")).resolves.toMatchObject({ action: "BILLS" }),
+    vi.advanceTimersByTimeAsync(6000),
+  ]);
 });
 
 it("offers explicitly labeled local guidance in emulator mode without contacting a provider", async () => {

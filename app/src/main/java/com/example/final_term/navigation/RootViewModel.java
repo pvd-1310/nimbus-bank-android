@@ -9,6 +9,12 @@ import com.example.final_term.auth.UserRole;
 public final class RootViewModel extends ViewModel {
     public enum RootRoute { LOGIN, CUSTOMER_HOME, OFFICER_HOME, ONBOARDING }
 
+    public boolean keepsDestination(AuthState previous, AuthState next) {
+        RootRoute previousRoute = routeFor(previous);
+        return previousRoute != RootRoute.LOGIN && previousRoute == routeFor(next)
+                && previous.getUser().getUid().equals(next.getUser().getUid());
+    }
+
     @NonNull
     public RootRoute routeFor(AuthState state) {
         if (state == null || state.getStatus() != AuthState.Status.SIGNED_IN || state.getUser() == null) {

@@ -63,7 +63,7 @@ export function createChatbot(env: NodeJS.ProcessEnv) {
     const action = topicFor(message);
     if (!action) return fallback;
     // Only a server-owned topic crosses the provider boundary.
-    const signal = AbortSignal.timeout(3500);
+    const signal = AbortSignal.timeout(10_000);
     try {
       const response = await fetch("https://api.openai.com/v1/responses", {
         method: "POST",

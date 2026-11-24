@@ -28,6 +28,13 @@ import com.example.final_term.databinding.FragmentTransactionHistoryBinding;
 import com.example.final_term.databinding.ItemTransactionRowBinding;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
+import com.google.firebase.Timestamp;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.util.ArrayList;
 import java.util.List;
 
 public final class TransactionHistoryFragment extends Fragment {
@@ -37,6 +44,12 @@ public final class TransactionHistoryFragment extends Fragment {
     private UserRole role;
     private List<ReadModels.TransactionSummary> rows;
     private String baseStatus = "";
+    private boolean thisMonth;
+    private String nextCursor;
+    private boolean pageLoading;
+    private boolean pageError;
+    private int loadGeneration;
+    private androidx.lifecycle.LiveData<ReadModelResult<List<ReadModels.TransactionSummary>>> history;
 
     @Nullable
     @Override
@@ -49,22 +62,30 @@ public final class TransactionHistoryFragment extends Fragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle state) {
         super.onViewCreated(view, state);
         application = (FinalTermApplication) requireActivity().getApplication();
+        thisMonth = state != null ? state.getBoolean("thisMonth")
+                : getArguments() != null && getArguments().getBoolean("thisMonth");
 
         binding.backButton.setOnClickListener(v -> Navigation.findNavController(v).navigateUp());
         binding.retryButton.setOnClickListener(v -> load());
+        binding.loadMoreButton.setOnClickListener(v -> loadPage(nextCursor));
 
         binding.filterIconBtn.setOnClickListener(v -> {
             new MaterialAlertDialogBuilder(requireContext())
-                    .setTitle("Bộ lọc giao dịch")
-                    .setMessage("Bạn có thể lọc theo loại giao dịch (Tất cả, Tiền vào, Tiền ra) và trạng thái (Thành công, Đang chờ, Thất bại) bằng thanh chọn nhanh phía trên.")
-                    .setPositiveButton("Đã hiểu", null)
+                    .setTitle("Thời gian giao dịch")
+                    .setSingleChoiceItems(new String[]{"Mọi thời điểm", "Tháng này"}, thisMonth ? 1 : 0,
+                            (dialog, which) -> {
+                                thisMonth = which == 1;
+                                dialog.dismiss();
+                                if (role == UserRole.CUSTOMER) load();
+                                else renderFiltered();
+                            })
                     .show();
         });
 
         binding.typeFilter.setAdapter(new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_dropdown_item,
                 new String[]{"ALL", "CREDIT", "DEBIT"}));
         binding.statusFilter.setAdapter(new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_dropdown_item,
-                new String[]{"ALL", "SETTLED", "PENDING", "FAILED"}));
+                new String[]{"ALL", "SETTLED", "DEMO_SETTLED", "PENDING", "FAILED"}));
 
         TextWatcher watcher = new TextWatcher() {
             public void beforeTextChanged(CharSequence s, int st, int c, int a) { }
@@ -92,12 +113,89 @@ public final class TransactionHistoryFragment extends Fragment {
 
     private void load() {
         if (uid == null) return;
-        FirestoreReadRepository repository = application.getAppContainer().getReadRepository();
-        if (role == UserRole.OFFICER) {
-            repository.observeAllTransactionsForOfficer().observe(getViewLifecycleOwner(), this::render);
-        } else {
-            repository.observeTransactions(uid).observe(getViewLifecycleOwner(), this::render);
+        if (history != null) {
+            history.removeObservers(getViewLifecycleOwner());
+            history = null;
         }
+        if (role == UserRole.CUSTOMER) {
+            loadPage(null);
+        } else {
+            FirestoreReadRepository repository = application.getAppContainer().getReadRepository();
+            history = repository.observeAllTransactionsForOfficer();
+            history.observe(getViewLifecycleOwner(), this::render);
+        }
+    }
+
+    private void loadPage(String cursor) {
+        if (uid == null || binding == null || (cursor != null && pageLoading)) return;
+        int generation = ++loadGeneration;
+        var current = binding;
+        pageLoading = true;
+        pageError = false;
+        if (cursor == null) {
+            nextCursor = null;
+            rows = null;
+        }
+        baseStatus = "Đang tải lịch sử…";
+        updatePageControls();
+        renderFiltered();
+        String path = "/transactions?limit=25&provider=STRIPE_TREASURY";
+        if (cursor != null) path += "&cursor=" + android.net.Uri.encode(cursor);
+        if (thisMonth) {
+            var zone = java.time.ZoneId.systemDefault();
+            var month = java.time.YearMonth.now(zone);
+            path += "&from=" + month.atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
+                    + "&to=" + (month.plusMonths(1).atDay(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1);
+        }
+        application.getAppContainer().getBackendApiClient().get(path).addOnCompleteListener(task -> {
+            if (binding != current || generation != loadGeneration) return;
+            pageLoading = false;
+            try {
+                if (!task.isSuccessful() || task.getResult().statusCode != 200)
+                    throw new JSONException("Unavailable");
+                JSONObject page = new JSONObject(task.getResult().body);
+                JSONArray items = page.getJSONArray("items");
+                List<ReadModels.TransactionSummary> loaded = rows == null ? new ArrayList<>() : new ArrayList<>(rows);
+                for (int i = 0; i < items.length(); i++) {
+                    JSONObject item = items.getJSONObject(i);
+                    var time = item.isNull("committedAt") ? null : new Timestamp(new java.util.Date(item.getLong("committedAt")));
+                    loaded.add(new ReadModels.TransactionSummary(item.getString("id"), item.optString("accountId"),
+                            item.getString("type"), item.optString("currency"), item.getLong("amountMinor"),
+                            item.getString("status"), time,
+                            item.isNull("failureCode") ? null : item.getString("failureCode"),
+                            item.isNull("balanceAfterMinor") ? null : item.getLong("balanceAfterMinor")));
+                }
+                nextCursor = page.isNull("nextCursor") ? null : page.getString("nextCursor");
+                rows = loaded;
+                baseStatus = rows.isEmpty() ? "Không có giao dịch." : "Lịch sử từ backend";
+            } catch (JSONException error) {
+                pageError = true;
+                baseStatus = cursor == null ? "Không tải được lịch sử." : "Không tải được trang sau. Các dòng cũ có thể đã thay đổi.";
+                if (!task.isSuccessful() && cursor == null) showOfflineHistory(generation);
+            }
+            updatePageControls();
+            renderFiltered();
+        });
+    }
+
+    private void showOfflineHistory(int generation) {
+        history = application.getAppContainer().getReadRepository().observeTransactions(uid);
+        history.observe(getViewLifecycleOwner(), result -> {
+            if (generation != loadGeneration || binding == null || result.getData() == null) return;
+            rows = new ArrayList<>();
+            for (ReadModels.TransactionSummary row : result.getData()) {
+                if (row.isStripeSandbox()) rows.add(row);
+            }
+            baseStatus = "Dữ liệu dự phòng Firestore. Chưa kiểm tra được lịch sử từ backend.";
+            renderFiltered();
+        });
+    }
+
+    private void updatePageControls() {
+        binding.retryButton.setVisibility(pageError && nextCursor == null ? View.VISIBLE : View.GONE);
+        binding.loadMoreButton.setVisibility(nextCursor == null ? View.GONE : View.VISIBLE);
+        binding.loadMoreButton.setEnabled(!pageLoading);
+        binding.loadMoreButton.setText(pageError ? "Thử tải lại trang" : "Tải thêm giao dịch");
     }
 
     private void render(ReadModelResult<List<ReadModels.TransactionSummary>> result) {
@@ -112,22 +210,28 @@ public final class TransactionHistoryFragment extends Fragment {
     private void renderFiltered() {
         if (binding == null) return;
         binding.content.removeAllViews();
-        if (rows == null) return;
+        if (rows == null) { binding.statusText.setText(baseStatus); return; }
 
         String query = binding.searchInput.getText() == null ? "" : binding.searchInput.getText().toString();
         String type = binding.typeFilter.getSelectedItem() == null ? "ALL" : binding.typeFilter.getSelectedItem().toString();
         String status = binding.statusFilter.getSelectedItem() == null ? "ALL" : binding.statusFilter.getSelectedItem().toString();
 
         List<ReadModels.TransactionSummary> filtered = TransactionHistoryFilter.apply(rows, query, type, status);
-        binding.statusText.setText(baseStatus + " · " + filtered.size() + " kết quả");
+        if (thisMonth) {
+            var start = java.time.YearMonth.now().atDay(1).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant();
+            var end = java.time.YearMonth.now().plusMonths(1).atDay(1).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant();
+            filtered.removeIf(tx -> tx.createdAt == null || tx.createdAt.toDate().toInstant().isBefore(start)
+                    || !tx.createdAt.toDate().toInstant().isBefore(end));
+        }
+        binding.statusText.setText(baseStatus + (thisMonth ? " · Tháng này" : "") + " · " + filtered.size() + " kết quả đã tải");
 
         for (ReadModels.TransactionSummary tx : filtered) {
             ItemTransactionRowBinding rowBinding = ItemTransactionRowBinding.inflate(
                     getLayoutInflater(), binding.content, false);
 
             boolean isIncoming = tx.isIncoming();
-            rowBinding.titleText.setText(tx.type != null ? tx.type : (isIncoming ? "Nhận tiền" : "Chuyển tiền"));
-            rowBinding.subtitleText.setText("SETTLED".equals(tx.status) ? "Thành công · " + tx.id : tx.status + " · " + tx.id);
+            rowBinding.titleText.setText(ReadSummaryFormatter.transactionTitle(tx));
+            rowBinding.subtitleText.setText(tx.id);
 
             String amountFormatted = ReadSummaryFormatter.formatCurrency(tx.amountMinor, tx.currency);
             if (isIncoming) {
@@ -158,7 +262,8 @@ public final class TransactionHistoryFragment extends Fragment {
 
         if (filtered.isEmpty()) {
             TextView empty = new TextView(requireContext());
-            empty.setText("Chưa có giao dịch phù hợp bộ lọc.\nLịch sử sẽ xuất hiện khi phát sinh giao dịch mới.");
+            empty.setText(nextCursor == null ? "Chưa có giao dịch phù hợp bộ lọc."
+                    : "Trang đã tải chưa có kết quả phù hợp. Bấm tải thêm để xem trang sau.");
             empty.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
             empty.setPadding(0, 24, 0, 24);
             empty.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
@@ -174,6 +279,12 @@ public final class TransactionHistoryFragment extends Fragment {
             case EMPTY: return "Không có giao dịch.";
             default: return "Lịch sử đã đồng bộ.";
         }
+    }
+
+    @Override
+    public void onSaveInstanceState(@NonNull Bundle state) {
+        super.onSaveInstanceState(state);
+        state.putBoolean("thisMonth", thisMonth);
     }
 
     @Override

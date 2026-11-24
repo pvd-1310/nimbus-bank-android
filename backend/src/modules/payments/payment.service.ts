@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Banking } from "../../core/banking.js";
 import type { Doc, Tx } from "../../core/store.js";
 import { digest } from "../../shared/crypto.js";
@@ -17,8 +18,7 @@ const compatiblePayment = (d: Doc | undefined): Doc | undefined =>
     : undefined;
 
 async function recordBillPayment(t: Tx, id: string, payment: Doc, intent: Doc | undefined, committedAt: number) {
-  const demo = payment.gateway === "SIMULATOR";
-  const path = "transactions/" + (demo ? "simulator_" : "stripe_") + id;
+  const path = "transactions/stripe_" + id;
   if (await t.get(path)) return;
   t.set(path, {
     ownerUid: payment.ownerUid,
@@ -29,8 +29,7 @@ async function recordBillPayment(t: Tx, id: string, payment: Doc, intent: Doc | 
     billId: payment.billId,
     amountMinor: payment.amountMinor,
     currency: payment.currency,
-    status: demo ? "DEMO_SETTLED" : "SETTLED",
-    ...(demo && { demo: true }),
+    status: "SETTLED",
     committedAt,
   });
 }
@@ -41,6 +40,7 @@ export class Payments {
     readonly provider: StripeGateway | undefined,
   ) {}
   async prepare(a: Actor, billId: string, requestId: string) {
+    check(this.provider, "SETUP_REQUIRED", 503);
     key(billId);
     key(requestId);
     return this.bank.store.run(async (t) => {
@@ -54,7 +54,7 @@ export class Payments {
         const payment = compatiblePayment(await t.get("payments/" + lock.paymentId));
         const intent = await t.get("transactionIntents/" + lock.paymentId);
         check(
-          payment?.ownerUid === a.uid && payment.billId === billId &&
+          payment?.ownerUid === a.uid && payment.billId === billId && payment.gateway !== "SIMULATOR" &&
           ["CREATED", "PROCESSING"].includes(payment.status) &&
           intent?.actorUid === a.uid && intent.kind === "PAYMENT" &&
           (intent.billId ?? intent.target?.id) === billId &&
@@ -122,79 +122,29 @@ export class Payments {
       return { id, intentId: id, requestId: paymentRequestId, status: intent.status, expiresAt: intent.expiresAt, faceRequired: intent.faceRequired };
     });
   }
-  async prepareDemo(a: Actor, billId: string, requestId: string) {
-    key(requestId);
-    const id = digest([a.uid, "SIMULATOR_PAYMENT", requestId]);
-    return this.bank.store.run(async (t) => {
-      await this.bank.authorize(t, a);
-      const bill = await this.demoBill(t, a, billId);
-      const previous = await t.get("transactionIntents/" + id);
-      const payloadDigest = digest([billId, bill.amountMinor, bill.currency]);
-      if (bill.status === "UNPAID") await this.checkDemoPaymentLock(t, billId);
-      if (previous) {
-        check(previous.payloadDigest === payloadDigest, "IDEMPOTENCY_CONFLICT", 409);
-        return { id, intentId: id, requestId, status: previous.status, demo: true };
-      }
-      check(bill.status === "UNPAID", "INVALID_STATE");
-      this.checkQuote(bill);
-      minor(bill.amountMinor);
-      const intent = {
-        id, actorUid: a.uid, requestId, billId, payloadDigest, kind: "PAYMENT",
-        sourceId: "SIMULATOR", status: "CREATED", securityVersion: 1,
-        amountMinor: bill.amountMinor, currency: bill.currency, feeMinor: 0,
-        faceRequired: this.bank.security.requiresFace(bill.currency, bill.amountMinor),
-        expiresAt: Math.min(this.bank.now() + 300000, bill.quoteExpiresAt ?? Infinity),
-      };
-      t.set("transactionIntents/" + id, { ...intent, digest: intentDigest(intent) });
-      return { id, intentId: id, requestId, status: intent.status, demo: true };
-    });
-  }
-
-  private async demoBill(t: Tx, a: Actor, billId: string) {
-    key(billId);
-    const bill = await t.get("bills/" + billId);
-    check(a.role === "CUSTOMER" && bill?.ownerUid === a.uid, "FORBIDDEN", 403);
-    check(bill.demo === true, "DEMO_BILL_REQUIRED", 409);
-    return bill;
-  }
 
   private checkQuote(bill: Doc) {
     check(bill.quoteExpiresAt == null || this.bank.now() < bill.quoteExpiresAt, "QUOTE_EXPIRED", 410);
   }
 
-  private async checkDemoPaymentLock(t: Tx, billId: string) {
-    const lock = await t.get("billPaymentLocks/" + billId);
-    check(!lock || lock.released === true, "PAYMENT_IN_PROGRESS", 409);
-  }
+  private async getOrCreateStripeCustomer(uid: string, provider: StripeGateway) {
+    const path = "stripeCustomers/" + digest([uid]);
+    const requestId = randomUUID();
+    const customer = await this.bank.store.run<Doc>(async (t) => {
+      const existing = await t.get(path);
+      if (existing) return existing;
+      t.set(path, { requestId });
+      return { requestId };
+    });
+    if (typeof customer.customerId === "string") return customer.customerId;
 
-  async settleDemo(a: Actor, billId: string, requestId: string) {
-    key(requestId);
-    const id = digest([a.uid, "SIMULATOR_PAYMENT", requestId]);
+    // Concurrent checkouts and retries share the same Stripe idempotency key.
+    const customerId = await provider.createCustomer(customer.requestId);
     return this.bank.store.run(async (t) => {
-      await this.bank.authorize(t, a);
-      const bill = await this.demoBill(t, a, billId);
-      const intent = await this.bank.transfers.getIntent(t, a, id);
-      check(intent.sourceId === "SIMULATOR" && intent.kind === "PAYMENT" &&
-        intent.billId === billId, "INVALID_INTENT");
-      const result = { id, paymentId: id, gateway: "SIMULATOR", status: "SUCCEEDED", demo: true };
-      if (bill.status === "PAID" && bill.paymentId === id && intent.status === "COMMITTED") return result;
-      check(bill.status === "UNPAID", "INVALID_STATE");
-      this.checkQuote(bill);
-      check(bill.amountMinor === intent.amountMinor && bill.currency === intent.currency, "REQUOTE_REQUIRED", 409);
-      await this.checkDemoPaymentLock(t, billId);
-      await this.bank.security.consume(t, intent);
-      const now = this.bank.now();
-      const payment = {
-        ...result, ownerUid: a.uid, billId, amountMinor: intent.amountMinor, currency: intent.currency,
-        authorizationDigest: intent.digest, providerId: "DEMO-" + id, createdAt: now, updatedAt: now,
-      };
-      await recordBillPayment(t, id, payment, intent, now);
-      t.set("payments/" + id, payment);
-      t.set("bills/" + billId, { ...bill, status: "PAID", paymentId: id });
-      t.set("transactionIntents/" + id, { ...intent, status: "COMMITTED" });
-      t.set("outbox/" + id, { paymentId: id, billId, ownerUid: a.uid, status: "PENDING", attempts: 0, createdAt: now });
-      this.bank.audit(t, a, "DEMO_PAYMENT_SETTLED", id, requestId);
-      return result;
+      const existing = await t.get(path);
+      if (typeof existing?.customerId === "string") return existing.customerId;
+      t.set(path, { customerId });
+      return customerId;
     });
   }
 
@@ -208,6 +158,7 @@ export class Payments {
       const existing = compatiblePayment(await t.get("payments/" + id));
       if (existing) {
         check(existing.ownerUid === a.uid, "FORBIDDEN", 403);
+        check(existing.gateway !== "SIMULATOR", "INVALID_STATE", 409);
         check(existing.billId === billId, "IDEMPOTENCY_CONFLICT", 409);
         return existing;
       }
@@ -240,6 +191,7 @@ export class Payments {
         currency: i.currency,
         status: "CREATED",
         authorizationDigest: i.digest,
+        savedCardsEnabled: true,
         createdAt: this.bank.now(),
       };
       t.set("payments/" + id, p);
@@ -254,16 +206,24 @@ export class Payments {
     check(record.authorizationDigest, "REAUTHORIZE_REQUIRED", 409);
     check(record.providerId || this.bank.now() - record.createdAt < 23 * 3_600_000,
       "PAYMENT_RECONCILIATION_REQUIRED", 409);
+    // Older pending payments must keep the Stripe parameters they were created with.
+    const customerId = record.savedCardsEnabled === true
+      ? await this.getOrCreateStripeCustomer(a.uid, this.provider)
+      : undefined;
     const operation = record.providerId ? "retrieve" : "create";
     const result = await (record.providerId
       ? this.provider.retrieve(record.providerId)
-      : this.provider.create(id, record.amountMinor, record.currency)
+      : this.provider.create(id, record.amountMinor, record.currency, customerId)
     ).catch((error: unknown) => {
       const code = typeof error === "object" && error !== null && "code" in error &&
         typeof error.code === "string" ? error.code : undefined;
       console.error("Stripe payment request failed", { paymentId: id, operation, code });
       throw error;
     });
+    if (customerId) {
+      const intentCustomer = typeof result.customer === "string" ? result.customer : result.customer?.id;
+      check(intentCustomer === customerId, "PROVIDER_MISMATCH");
+    }
     await this.bank.store.run(async (t) => {
       const p = compatiblePayment(await t.get("payments/" + id));
       check(p, "NOT_FOUND", 404);
@@ -274,12 +234,16 @@ export class Payments {
         status: p.status === "CREATED" ? "PROCESSING" : p.status,
       });
     });
+    const customerSession = customerId && result.client_secret
+      ? { customerId, customerSessionClientSecret: await this.provider.createCustomerSession(customerId) }
+      : {};
     return {
       id,
       paymentId: id,
       gateway: "STRIPE",
       status: "COMMIT_PENDING",
-      clientSecret: result.clientSecret,
+      clientSecret: result.client_secret,
+      ...customerSession,
     };
   }
   // Only call after the HTTP boundary verifies Stripe's signature.

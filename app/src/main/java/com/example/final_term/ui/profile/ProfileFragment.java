@@ -6,7 +6,6 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.view.LayoutInflater;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
@@ -36,6 +35,7 @@ import java.util.Arrays;
 public final class ProfileFragment extends Fragment {
     private FragmentProfileBinding binding;
     private BackendApiClient apiClient;
+    private boolean profileLoaded;
     private JSONObject currentProfile = new JSONObject();
 
     @Nullable
@@ -80,7 +80,10 @@ public final class ProfileFragment extends Fragment {
                 (requestKey, result) -> fetchEkycStatus());
 
         binding.logoutButton.setOnClickListener(v -> app.getAppContainer().getAuthRepository().signOut());
-        binding.editContactButton.setOnClickListener(v -> showContactEditor());
+        binding.editContactButton.setOnClickListener(v -> {
+            if (profileLoaded) showContactEditor();
+            else loadProfile();
+        });
 
         binding.qrButton.setOnClickListener(v -> new AlertDialog.Builder(requireContext())
                 .setTitle("Mã QR nhận tiền")
@@ -95,17 +98,14 @@ public final class ProfileFragment extends Fragment {
 
         binding.itemCards.setOnClickListener(v -> new AlertDialog.Builder(requireContext())
                 .setTitle("Hạn mức & Bảo mật")
-                .setMessage("Hạn mức giao dịch tối đa: 100.000.000 ₫/ngày.\nPhương thức xác thực: OTP SMS / Biometrics.\n\nĐể nâng hạn mức lên 500.000.000 ₫/ngày, vui lòng đến chi nhánh Nimbus gần nhất.")
+                .setMessage("Hạn mức được backend kiểm tra theo tài khoản. Mã xác nhận hiển thị trong ứng dụng là OTP demo. Giao dịch vượt ngưỡng có thể cần xác minh khuôn mặt demo.")
                 .setPositiveButton("Đóng", null)
                 .show());
 
         binding.itemLanguage.setOnClickListener(v -> Toast.makeText(requireContext(), "Ngôn ngữ hiện tại: Tiếng Việt", Toast.LENGTH_SHORT).show());
 
-        binding.itemAi.setOnClickListener(v -> new AlertDialog.Builder(requireContext())
-                .setTitle("Trợ lý tài chính Nimbus AI")
-                .setMessage("Tính năng trợ lý AI thông minh đang chờ cấu hình backend (Mô hình: DEFERRED tại GET /capabilities).\n\nTrợ lý sẽ sẵn sàng hỗ trợ phân tích chi tiêu cá nhân ngay khi kết nối.")
-                .setPositiveButton("Đóng", null)
-                .show());
+        binding.itemAi.setOnClickListener(v ->
+                new com.example.final_term.ui.customer.ChatbotDialogFragment().show(getChildFragmentManager(), "Chatbot"));
 
         fetchCameraAndCapabilitiesStatus();
     }
@@ -178,8 +178,10 @@ public final class ProfileFragment extends Fragment {
                             fetchEkycStatus();
                             fetchCameraAndCapabilitiesStatus();
                         } else {
-                            int code = task.getResult() == null ? -1 : task.getResult().statusCode;
-                            Toast.makeText(requireContext(), "Không thể thu hồi mẫu khuôn mặt (HTTP " + code + ").", Toast.LENGTH_LONG).show();
+                            String message = task.isSuccessful()
+                                    ? "Không thể thu hồi mẫu khuôn mặt (HTTP " + task.getResult().statusCode + ")."
+                                    : "Chưa kết nối được backend để thu hồi mẫu khuôn mặt. Hãy thử lại.";
+                            Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show();
                         }
                     });
                 })
@@ -187,14 +189,23 @@ public final class ProfileFragment extends Fragment {
     }
 
     private void loadProfile() {
-        if (apiClient == null) return;
+        if (apiClient == null || binding == null) return;
+        var current = binding;
+        profileLoaded = false;
+        current.editContactButton.setEnabled(false);
+        current.editContactButton.setText("Đang tải hồ sơ…");
         apiClient.get("/me").addOnCompleteListener(task -> {
-            if (!isAdded() || binding == null) return;
-            if (task.isSuccessful() && task.getResult() != null && task.getResult().statusCode == 200) {
-                try {
-                    currentProfile = new JSONObject(task.getResult().body);
-                } catch (Exception ignored) { }
+            if (binding != current) return;
+            try {
+                if (!task.isSuccessful() || task.getResult().statusCode != 200)
+                    throw new org.json.JSONException("Unavailable");
+                currentProfile = new JSONObject(task.getResult().body);
+                profileLoaded = true;
+            } catch (org.json.JSONException ignored) {
+                currentProfile = new JSONObject();
             }
+            current.editContactButton.setEnabled(true);
+            current.editContactButton.setText(profileLoaded ? "Cập nhật thông tin liên hệ" : "Không tải được hồ sơ · Thử lại");
         });
     }
 
@@ -242,23 +253,7 @@ public final class ProfileFragment extends Fragment {
                 .create();
         dialog.setCanceledOnTouchOutside(false);
 
-        View.OnTouchListener hideKeyboardListener = (v, event) -> {
-            if (event.getAction() == MotionEvent.ACTION_DOWN) {
-                View focus = dialog.getCurrentFocus();
-                if (focus != null) {
-                    InputMethodManager imm = (InputMethodManager) requireContext().getSystemService(Context.INPUT_METHOD_SERVICE);
-                    if (imm != null) imm.hideSoftInputFromWindow(focus.getWindowToken(), 0);
-                    focus.clearFocus();
-                }
-            }
-            return false;
-        };
-        form.setOnTouchListener(hideKeyboardListener);
-
         dialog.setOnShowListener(ignored -> {
-            if (dialog.getWindow() != null) {
-                dialog.getWindow().getDecorView().setOnTouchListener(hideKeyboardListener);
-            }
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
                 View currentFocus = dialog.getCurrentFocus();
                 if (currentFocus != null) {
@@ -291,13 +286,16 @@ public final class ProfileFragment extends Fragment {
                         dialog.dismiss();
                         loadProfile();
                     } else {
-                        int status = task.getResult() == null ? -1 : task.getResult().statusCode;
-                        String error = "";
-                        try { error = new JSONObject(task.getResult().body).optString("error", ""); }
-                        catch (Exception parseError) { }
-                        Toast.makeText(requireContext(), "CONTACT_PHONE_EXISTS".equals(error)
-                                ? "Số điện thoại liên hệ đã được sử dụng."
-                                : "Không thể cập nhật hồ sơ (HTTP " + status + ").", Toast.LENGTH_LONG).show();
+                        String message = "Không kết nối được backend để cập nhật hồ sơ.";
+                        if (task.isSuccessful()) {
+                            var response = task.getResult();
+                            message = "Không thể cập nhật hồ sơ (HTTP " + response.statusCode + ").";
+                            try {
+                                if ("CONTACT_PHONE_EXISTS".equals(new JSONObject(response.body).optString("error")))
+                                    message = "Số điện thoại liên hệ đã được sử dụng.";
+                            } catch (org.json.JSONException ignoredResponse) { }
+                        }
+                        Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show();
                     }
                 });
             } catch (Exception e) {

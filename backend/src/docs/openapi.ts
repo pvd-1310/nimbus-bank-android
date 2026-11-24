@@ -149,9 +149,6 @@ const endpoints: [string, string, string, unknown?][] = [
   ["get", "/bills", "Owned invoices"],
   ["get", "/bills/lookup/{ref}", "Look up an invoice ID or reference within the caller's invoices"],
   ["get", "/payment-intents/by-request/{id}", "Recover the Stripe checkout intent by request ID"],
-  ["get", "/demo-payment-intents/by-request/{id}", "Recover the simulator checkout intent by request ID"],
-  ["post", "/demo-payments/intents", "Quote an owned demo invoice for OTP and policy-required step-up", payment],
-  ["post", "/demo-payments", "Settle an owned demo invoice after OTP and policy-required step-up", payment],
   [
     "post",
     "/payments/intents",
@@ -169,7 +166,7 @@ const endpoints: [string, string, string, unknown?][] = [
       requestId: id,
       productId: id,
       quantity: { type: "integer", minimum: 1, maximum: 10 },
-      customerDetails: text,
+      customerDetails: { ...text, description: "For TOPUP, enter the recipient phone number as 10 digits starting with 0." },
       expectedAmountMinor: { type: "integer", minimum: 1 },
       expectedCurrency: { type: "string", pattern: "^[A-Z]{3}$" },
     }, ["requestId", "productId", "quantity", "customerDetails"]),

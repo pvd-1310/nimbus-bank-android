@@ -11,6 +11,7 @@ export class TransactionService {
       if (filters.accountId) where.sourceAccountId = filters.accountId;
       if (filters.type) where.type = filters.type;
       if (filters.status) where.status = filters.status;
+      if (filters.provider) where.provider = filters.provider;
       const rows = await t.list("transactions", where, queryOptions(filters));
       return rows
         .filter(

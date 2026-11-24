@@ -24,23 +24,32 @@ export function registerPaymentsRoutes(route: Route, d: AppDependencies) {
   route("get", "/payment-intents/by-request/:id", (a, r) =>
     d.bank.security.describe(a, digest([a.uid, "PAYMENT", id.parse(r.params.id)])),
   );
-  route("get", "/demo-payment-intents/by-request/:id", (a, r) =>
-    d.bank.security.describe(a, digest([a.uid, "SIMULATOR_PAYMENT", id.parse(r.params.id)])),
-  );
-  route("post", "/demo-payments/intents", (a, r) => {
+  route("post", "/payments/intents", async (a, r) => {
     const x = paymentRequest.parse(r.body);
-    return d.payments.prepareDemo(a, x.billId, x.requestId);
-  });
-  route("post", "/demo-payments", (a, r) => {
-    const x = paymentRequest.parse(r.body);
-    return d.payments.settleDemo(a, x.billId, x.requestId);
-  });
-  route("post", "/payments/intents", (a, r) => {
-    const x = paymentRequest.parse(r.body);
+    if (d.stripeSandboxMovements) {
+      const legacy = await d.bank.store.run(async (t) => {
+        await d.bank.authorize(t, a);
+        const lock = await t.get("billPaymentLocks/" + x.billId);
+        if (!lock || lock.released === true) return false;
+        const bill = await t.get("bills/" + x.billId);
+        if (bill?.ownerUid !== a.uid || bill.status !== "UNPAID") return false;
+        const intent = await t.get("transactionIntents/" + lock.paymentId);
+        return intent?.actorUid === a.uid && intent.kind === "PAYMENT" && intent.provider !== "STRIPE_TREASURY";
+      });
+      if (!legacy) return d.stripeSandboxMovements.prepare(a, "PAYMENT", x);
+    }
     return d.payments.prepare(a, x.billId, x.requestId);
   });
-  route("post", "/payments", (a, r) => {
+  route("post", "/payments", async (a, r) => {
     const x = paymentRequest.parse(r.body);
+    if (d.stripeSandboxMovements) {
+      const intentId = digest([a.uid, "PAYMENT", x.requestId]);
+      const intent = await d.bank.security.describe(a, intentId);
+      if (intent.provider === "STRIPE_TREASURY") {
+        check(intent.target?.kind === "BILL" && intent.target.id === x.billId, "IDEMPOTENCY_CONFLICT", 409);
+        return d.stripeSandboxMovements.commit(a, intentId, "PAYMENT");
+      }
+    }
     return d.payments.create(a, x.billId, x.requestId);
   });
   route("get", "/payments/:id", (a, r) =>

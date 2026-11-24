@@ -534,6 +534,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
+                    android:id="@+id/success_headline"
                     android:text="@string/transfer_success_title"
                     android:textColor="@color/ink"
                     android:textSize="22sp"

@@ -31,8 +31,6 @@ import com.example.final_term.data.ReadModelResult;
 import com.example.final_term.data.ReadModels;
 import com.example.final_term.data.ReadSummaryFormatter;
 import com.example.final_term.databinding.FragmentAccountListBinding;
-import com.example.final_term.ui.common.HatchedProgressBar;
-import com.example.final_term.ui.common.SignatureBarChartView;
 import com.example.final_term.ui.utilities.UtilitiesHubDialogFragment;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -52,18 +50,23 @@ public final class AccountListFragment extends Fragment {
     private String uid;
     private UserRole role;
     private List<ReadModels.AccountSummary> accounts;
+    private final List<JSONObject> customers = new ArrayList<>();
+    private String customerCursor;
+    private String directoryStatus = "Đang tải hồ sơ khách hàng…";
+    private boolean directoryLoading;
+    private boolean directoryError;
     private List<ReadModels.NotificationSummary> notifications;
     private List<ReadModels.TransactionSummary> transactions;
     private ReadModelResult.Status accountStatus;
     private String accountMessage;
     private int activeNavItem = R.id.nav_accounts;
-    private boolean isCardLocked = false;
     private String pendingProvisionKey;
     private String pendingProvisionRequestId;
 
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle state) {
+        directoryLoading = false;
         binding = FragmentAccountListBinding.inflate(inflater, container, false);
         return binding.getRoot();
     }
@@ -96,7 +99,8 @@ public final class AccountListFragment extends Fragment {
                         if (item != null && item != activeNavItem) {
                             activeNavItem = item;
                             updateScreenTitle();
-                            renderAll();
+                            if (role == UserRole.OFFICER) load();
+                            else renderAll();
                             if (binding != null && binding.scrollView != null) {
                                 binding.scrollView.scrollTo(0, 0);
                             }
@@ -131,6 +135,7 @@ public final class AccountListFragment extends Fragment {
 
     private void load() {
         if (uid == null) return;
+        if (isCustomerDirectory()) { loadDirectory(null); return; }
         FirestoreReadRepository repository = application.getAppContainer().getReadRepository();
         if (role == UserRole.OFFICER) {
             repository.observeAllAccountsForOfficer().observe(getViewLifecycleOwner(), this::renderAccounts);
@@ -169,22 +174,23 @@ public final class AccountListFragment extends Fragment {
 
     private void renderAll() {
         if (binding == null) return;
+        if (isCustomerDirectory()) {
+            binding.statusText.setText(directoryStatus);
+            binding.retryButton.setVisibility(directoryError ? View.VISIBLE : View.GONE);
+            binding.content.removeAllViews();
+            renderOfficerCustomers();
+            return;
+        }
         binding.statusText.setText(accountStatus == null ? "Đang tải dữ liệu…" : accountStatusMessage());
         binding.retryButton.setVisibility(accountStatus == ReadModelResult.Status.ERROR ? View.VISIBLE : View.GONE);
         binding.content.removeAllViews();
 
         if (role == UserRole.OFFICER) {
-            if (activeNavItem == R.id.nav_wallet) {
-                renderOfficerCustomers();
-            } else {
-                renderOfficerAccounts();
-            }
+            renderOfficerAccounts();
+        } else if (activeNavItem == R.id.nav_wallet) {
+            renderCustomerWallet();
         } else {
-            if (activeNavItem == R.id.nav_wallet) {
-                renderCustomerWallet();
-            } else {
-                renderCustomerCards();
-            }
+            renderCustomerCards();
         }
     }
 
@@ -192,195 +198,58 @@ public final class AccountListFragment extends Fragment {
     // 1. CUSTOMER: TÀI KHOẢN & THẺ (Cards_Screen)
     // ==========================================
     private void renderCustomerCards() {
-        ReadModels.AccountSummary checkingAccount = null;
-        List<ReadModels.AccountSummary> otherAccounts = new ArrayList<>();
-
-        if (accounts != null) {
-            for (ReadModels.AccountSummary acc : accounts) {
-                if ("CHECKING".equalsIgnoreCase(acc.type) && checkingAccount == null) {
-                    checkingAccount = acc;
-                } else {
-                    otherAccounts.add(acc);
-                }
-            }
-            if (checkingAccount == null && !accounts.isEmpty()) {
-                checkingAccount = accounts.get(0);
-                otherAccounts.remove(0);
-            }
-        }
-
-        // Render Primary VISA Card Mockup
-        View cardView = LayoutInflater.from(requireContext()).inflate(R.layout.view_visa_card, binding.content, false);
-        TextView cardBalance = cardView.findViewById(R.id.card_balance_text);
-        TextView cardMaskedNo = cardView.findViewById(R.id.card_masked_number);
-        TextView cardHolder = cardView.findViewById(R.id.card_holder_name);
-        TextView cardStatusBadge = cardView.findViewById(R.id.card_status_badge);
-
-        if (checkingAccount != null) {
-            cardBalance.setText(formatMoney(checkingAccount.balanceMinor, checkingAccount.currency));
-            String last4 = checkingAccount.id.length() > 4 ? checkingAccount.id.substring(checkingAccount.id.length() - 4) : "8901";
-            cardMaskedNo.setText("•••• •••• •••• " + last4);
-            cardHolder.setText("NIMBUS PLATINUM");
-            cardStatusBadge.setText(isCardLocked ? "ĐÃ KHÓA" : checkingAccount.status);
-            cardStatusBadge.setBackgroundTintList(ContextCompat.getColorStateList(requireContext(),
-                    isCardLocked ? R.color.danger_bg : R.color.success_bg));
-        } else {
-            cardBalance.setText("— ₫");
-            cardMaskedNo.setText("•••• •••• •••• 8901");
-            cardHolder.setText("NIMBUS CARD");
-            cardStatusBadge.setText(accountStatus == ReadModelResult.Status.LOADING ? "ĐANG TẢI" : "CHỜ CẤP");
-        }
-        binding.content.addView(cardView);
-
-        // 4 Circular Card Action Buttons (NFC, Hạn mức, Khóa thẻ, Cài đặt)
-        LinearLayout actionsRow = new LinearLayout(requireContext());
-        actionsRow.setOrientation(LinearLayout.HORIZONTAL);
-        actionsRow.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        actionsRow.setPadding(0, dp(18), 0, dp(18));
-
-        actionsRow.addView(createCircularAction("NFC Chạm", R.drawable.ic_nfc, v -> {
-            Toast.makeText(requireContext(), "NFC thanh toán một chạm đã được kích hoạt trên thẻ.", Toast.LENGTH_SHORT).show();
-        }));
-        actionsRow.addView(createCircularAction("Hạn mức", R.drawable.ic_shield, v -> {
-            new MaterialAlertDialogBuilder(requireContext())
-                    .setTitle("Hạn mức thẻ")
-                    .setMessage("Hạn mức thanh toán trực tuyến: 50.000.000 ₫/ngày\nHạn mức rút tiền ATM: 20.000.000 ₫/ngày\n\nBạn có thể điều chỉnh hạn mức tại quầy giao dịch Nimbus Bank.")
-                    .setPositiveButton("Đã hiểu", null)
-                    .show();
-        }));
-        actionsRow.addView(createCircularAction(isCardLocked ? "Mở khóa" : "Khóa thẻ", R.drawable.ic_lock, v -> {
-            isCardLocked = !isCardLocked;
-            Toast.makeText(requireContext(), isCardLocked ? "Đã khóa thẻ tạm thời để bảo mật." : "Đã mở khóa thẻ thành công.", Toast.LENGTH_SHORT).show();
-            renderAll();
-        }));
-        actionsRow.addView(createCircularAction("Cài đặt", R.drawable.ic_settings, v -> {
-            new MaterialAlertDialogBuilder(requireContext())
-                    .setTitle("Cài đặt thẻ")
-                    .setMessage("• Đổi mã PIN thẻ ATM\n• Bật/Tắt thanh toán quốc tế\n• Bật/Tắt thanh toán trực tuyến (E-commerce)")
-                    .setPositiveButton("Đóng", null)
-                    .show();
-        }));
-        binding.content.addView(actionsRow);
-
-        // Full-width button: Chi tiết tài khoản
-        final ReadModels.AccountSummary finalChecking = checkingAccount;
-        MaterialButton detailBtn = new MaterialButton(requireContext());
-        detailBtn.setText("Chi tiết tài khoản");
-        detailBtn.setTextColor(ContextCompat.getColor(requireContext(), R.color.navy));
-        detailBtn.setBackgroundResource(R.drawable.glass_pill_button);
-        detailBtn.setCornerRadius(dp(18));
-        LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52));
-        btnParams.bottomMargin = dp(24);
-        detailBtn.setLayoutParams(btnParams);
-        detailBtn.setOnClickListener(v -> {
-            if (finalChecking != null) {
-                openDetails(v, finalChecking);
-            } else {
-                Toast.makeText(requireContext(), "Chưa có tài khoản thanh toán.", Toast.LENGTH_SHORT).show();
-            }
-        });
-        binding.content.addView(detailBtn);
-
-        // Section: Tài khoản khác (Tiết kiệm, Vay thế chấp)
-        if (!otherAccounts.isEmpty()) {
-            TextView sectionTitle = new TextView(requireContext());
-            sectionTitle.setText("Tài khoản tiết kiệm & Khoản vay");
-            sectionTitle.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
-            sectionTitle.setTextSize(17);
-            sectionTitle.setTypeface(null, android.graphics.Typeface.BOLD);
-            sectionTitle.setPadding(0, 0, 0, dp(12));
-            binding.content.addView(sectionTitle);
-
-            for (ReadModels.AccountSummary acc : otherAccounts) {
-                View tile = createAccountTile(acc);
-                binding.content.addView(tile);
-            }
+        if (accounts == null) return;
+        for (ReadModels.AccountSummary account : accounts) {
+            if (!"CLOSED".equalsIgnoreCase(account.status)) binding.content.addView(createAccountTile(account));
         }
     }
 
-    // ==========================================
-    // 2. CUSTOMER: VÍ & HẠN MỨC (Wallet_Screen)
-    // ==========================================
     private void renderCustomerWallet() {
-        // Monthly Limit Card with Hatched Progress Bar
-        LinearLayout limitCard = new LinearLayout(requireContext());
-        limitCard.setOrientation(LinearLayout.VERTICAL);
-        limitCard.setBackgroundResource(R.drawable.glass_panel_card);
-        limitCard.setElevation(dp(4));
-        limitCard.setPadding(dp(18), dp(18), dp(18), dp(18));
-        LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        cardParams.bottomMargin = dp(18);
-        limitCard.setLayoutParams(cardParams);
-
-        TextView limitHeader = new TextView(requireContext());
-        limitHeader.setText("Hạn mức chi tiêu tháng");
-        limitHeader.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
-        limitHeader.setTextSize(14);
-        limitHeader.setTypeface(null, android.graphics.Typeface.BOLD);
-        limitCard.addView(limitHeader);
-
-        TextView limitValue = new TextView(requireContext());
-        limitValue.setText("6.400.000 / 10.000.000 ₫");
-        limitValue.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
-        limitValue.setTextSize(13);
-        limitValue.setPadding(0, dp(4), 0, 0);
-        limitCard.addView(limitValue);
-
-        HatchedProgressBar bar = new HatchedProgressBar(requireContext());
-        bar.setProgress(0.64f);
-        LinearLayout.LayoutParams barParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(20));
-        barParams.topMargin = dp(12);
-        barParams.bottomMargin = dp(8);
-        bar.setLayoutParams(barParams);
-        limitCard.addView(bar);
-
-        TextView limitNotice = new TextView(requireContext());
-        limitNotice.setText("Đã sử dụng 64% hạn mức tháng. Hạn mức tự động làm mới vào ngày 01.");
-        limitNotice.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
-        limitNotice.setTextSize(11);
-        limitCard.addView(limitNotice);
-
-        binding.content.addView(limitCard);
-
-        // Activity Chart Card
-        LinearLayout chartCard = new LinearLayout(requireContext());
-        chartCard.setOrientation(LinearLayout.VERTICAL);
-        chartCard.setBackgroundResource(R.drawable.glass_panel_card);
-        chartCard.setElevation(dp(4));
-        chartCard.setPadding(dp(18), dp(18), dp(18), dp(18));
-        chartCard.setLayoutParams(cardParams);
-
-        TextView chartTitle = new TextView(requireContext());
-        chartTitle.setText("Thống kê thu nhập & chi tiêu tuần");
-        chartTitle.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
-        chartTitle.setTextSize(14);
-        chartTitle.setTypeface(null, android.graphics.Typeface.BOLD);
-        chartCard.addView(chartTitle);
-
-        SignatureBarChartView chart = new SignatureBarChartView(requireContext());
-        LinearLayout.LayoutParams chartParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(110));
-        chartParams.topMargin = dp(12);
-        chart.setLayoutParams(chartParams);
-        chartCard.addView(chart);
-
-        binding.content.addView(chartCard);
-
-        // Upcoming Payments (Hóa đơn tiền điện, Internet)
-        TextView upcomingHeader = new TextView(requireContext());
-        upcomingHeader.setText("Hóa đơn sắp tới");
-        upcomingHeader.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
-        upcomingHeader.setTextSize(17);
-        upcomingHeader.setTypeface(null, android.graphics.Typeface.BOLD);
-        upcomingHeader.setPadding(0, 0, 0, dp(12));
-        binding.content.addView(upcomingHeader);
-
-        binding.content.addView(createUpcomingBillTile("Hóa đơn tiền điện EVN", "Hạn thanh toán: 28/11/2026", "420.000 ₫"));
-        binding.content.addView(createUpcomingBillTile("Cước Internet VNPT Fiber", "Hạn thanh toán: 30/11/2026", "250.000 ₫"));
+        renderCustomerCards();
+        MaterialButton bills = new MaterialButton(requireContext());
+        bills.setText("Xem hóa đơn và tiện ích");
+        bills.setOnClickListener(v -> new UtilitiesHubDialogFragment().show(getChildFragmentManager(), "UtilitiesHub"));
+        binding.content.addView(bills);
     }
 
-    // ==========================================
-    // 3. OFFICER: KHÁCH HÀNG (Customer Directory)
-    // ==========================================
+    private boolean isCustomerDirectory() {
+        return role == UserRole.OFFICER && activeNavItem == R.id.nav_wallet;
+    }
+
+    private void loadDirectory(String cursor) {
+        if (directoryLoading || binding == null) return;
+        var current = binding;
+        directoryLoading = true;
+        directoryError = false;
+        directoryStatus = "Đang tải hồ sơ khách hàng…";
+        if (cursor == null) {
+            customers.clear();
+            customerCursor = null;
+        }
+        renderAll();
+        String path = "/officer/customers?limit=25"
+                + (cursor == null ? "" : "&cursor=" + android.net.Uri.encode(cursor));
+        application.getAppContainer().getBackendApiClient().get(path).addOnCompleteListener(task -> {
+            if (binding != current) return;
+            directoryLoading = false;
+            try {
+                if (!task.isSuccessful() || task.getResult().statusCode != 200)
+                    throw new org.json.JSONException("Unavailable");
+                JSONObject page = new JSONObject(task.getResult().body);
+                JSONArray items = page.getJSONArray("items");
+                for (int i = 0; i < items.length(); i++) customers.add(items.getJSONObject(i));
+                customerCursor = page.isNull("nextCursor") ? null : page.getString("nextCursor");
+                directoryStatus = customers.isEmpty() ? "Chưa có hồ sơ khách hàng."
+                        : "Hồ sơ đã tải: " + customers.size();
+            } catch (org.json.JSONException error) {
+                directoryError = true;
+                directoryStatus = task.isSuccessful() && task.getResult().statusCode == 403
+                        ? "Bạn chưa có quyền xem hồ sơ khách hàng." : "Không tải được hồ sơ khách hàng.";
+            }
+            renderAll();
+        });
+    }
+
     private void renderOfficerCustomers() {
         MaterialButton addCustomerBtn = new MaterialButton(requireContext());
         addCustomerBtn.setText("+ Cấp mới hồ sơ khách hàng");
@@ -393,56 +262,23 @@ public final class AccountListFragment extends Fragment {
         addCustomerBtn.setOnClickListener(v -> showProvisionCustomerDialog());
         binding.content.addView(addCustomerBtn);
 
-        TextView dirTitle = new TextView(requireContext());
-        dirTitle.setText("Danh sách khách hàng & tài khoản quản lý");
-        dirTitle.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
-        dirTitle.setTextSize(16);
-        dirTitle.setTypeface(null, android.graphics.Typeface.BOLD);
-        dirTitle.setPadding(0, 0, 0, dp(12));
-        binding.content.addView(dirTitle);
-
-        if (accounts != null && !accounts.isEmpty()) {
-            for (ReadModels.AccountSummary acc : accounts) {
-                LinearLayout card = new LinearLayout(requireContext());
-                card.setOrientation(LinearLayout.VERTICAL);
-                card.setBackgroundResource(R.drawable.glass_panel_card);
-                card.setPadding(dp(16), dp(16), dp(16), dp(16));
-                LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-                p.bottomMargin = dp(12);
-                card.setLayoutParams(p);
-
-                String maskedOwner = acc.ownerUid.isEmpty() ? "demo_customer" :
-                        (acc.ownerUid.length() > 6 ? acc.ownerUid.substring(0, 3) + "••••" + acc.ownerUid.substring(acc.ownerUid.length() - 3) : acc.ownerUid);
-
-                TextView ownerText = new TextView(requireContext());
-                ownerText.setText("Khách hàng: " + maskedOwner);
-                ownerText.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
-                ownerText.setTextSize(15);
-                ownerText.setTypeface(null, android.graphics.Typeface.BOLD);
-                card.addView(ownerText);
-
-                TextView detailText = new TextView(requireContext());
-                detailText.setText(Phase2Presentation.accountTitle(acc.type) + " · " + acc.id + "\nSố dư: " + formatMoney(acc.balanceMinor, acc.currency) + " · " + acc.status);
-                detailText.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
-                detailText.setTextSize(13);
-                detailText.setPadding(0, dp(4), 0, dp(8));
-                card.addView(detailText);
-
-                MaterialButton editBtn = new MaterialButton(requireContext());
-                editBtn.setText("Đổi tên hồ sơ khách hàng");
-                editBtn.setTextColor(ContextCompat.getColor(requireContext(), R.color.navy));
-                editBtn.setBackgroundResource(R.drawable.glass_pill_button);
-                editBtn.setCornerRadius(dp(14));
-                editBtn.setOnClickListener(v -> showEditCustomerDialog(acc.ownerUid.isEmpty() ? "demo_customer" : acc.ownerUid));
-                card.addView(editBtn);
-
-                binding.content.addView(card);
-            }
-        } else {
-            TextView empty = new TextView(requireContext());
-            empty.setText("Chưa có danh sách khách hàng từ hệ thống.");
-            empty.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
-            binding.content.addView(empty);
+        for (JSONObject customer : customers) {
+            String id = customer.optString("id");
+            String uid = customer.isNull("uidRef") ? customer.optString("uid", id) : customer.optString("uidRef");
+            String name = customer.optString("fullName", "").trim();
+            MaterialButton row = new MaterialButton(requireContext());
+            row.setText((name.isEmpty() ? customer.optString("customerNo", id) : name)
+                    + " · " + customer.optString("kycStatus", "Chưa có eKYC"));
+            row.setEnabled(!uid.isEmpty());
+            row.setOnClickListener(v -> showEditCustomerDialog(uid));
+            binding.content.addView(row);
+        }
+        if (customerCursor != null) {
+            MaterialButton next = new MaterialButton(requireContext());
+            next.setText("Tải thêm khách hàng");
+            next.setEnabled(!directoryLoading);
+            next.setOnClickListener(v -> loadDirectory(customerCursor));
+            binding.content.addView(next);
         }
     }
 
@@ -463,7 +299,7 @@ public final class AccountListFragment extends Fragment {
                 String maskedOwner = account.ownerUid.isEmpty() ? "" :
                         "Khách hàng: " + (account.ownerUid.length() > 6 ? account.ownerUid.substring(0, 3) + "••••" : account.ownerUid) + "\n";
                 TextView row = addLine(maskedOwner + Phase2Presentation.accountTitle(account.type) + "  •  " + account.status,
-                        formatMoney(account.balanceMinor, account.currency) + "\nMã tài khoản: " + account.id);
+                        "Mã tài khoản: " + account.id);
                 row.setBackgroundResource(R.drawable.glass_panel_card);
                 row.setClickable(true);
                 row.setFocusable(true);
@@ -805,34 +641,6 @@ public final class AccountListFragment extends Fragment {
                 });
     }
 
-    private View createCircularAction(String label, int iconRes, View.OnClickListener listener) {
-        LinearLayout item = new LinearLayout(requireContext());
-        item.setOrientation(LinearLayout.VERTICAL);
-        item.setGravity(android.view.Gravity.CENTER);
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        item.setLayoutParams(p);
-
-        ImageButton btn = new ImageButton(requireContext());
-        btn.setImageResource(iconRes);
-        btn.setColorFilter(ContextCompat.getColor(requireContext(), R.color.navy));
-        btn.setBackgroundResource(R.drawable.circle_action_button);
-        btn.setElevation(dp(3));
-        btn.setPadding(dp(14), dp(14), dp(14), dp(14));
-        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(dp(54), dp(54));
-        btn.setLayoutParams(bp);
-        btn.setOnClickListener(listener);
-        item.addView(btn);
-
-        TextView tv = new TextView(requireContext());
-        tv.setText(label);
-        tv.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
-        tv.setTextSize(11);
-        tv.setPadding(0, dp(6), 0, 0);
-        item.addView(tv);
-
-        return item;
-    }
-
     private View createAccountTile(ReadModels.AccountSummary acc) {
         LinearLayout tile = new LinearLayout(requireContext());
         tile.setOrientation(LinearLayout.VERTICAL);
@@ -852,71 +660,41 @@ public final class AccountListFragment extends Fragment {
         tile.addView(title);
 
         TextView balance = new TextView(requireContext());
-        balance.setText(formatMoney(acc.balanceMinor, acc.currency));
+        balance.setText("Đang tải số dư Stripe…");
         balance.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
         balance.setTextSize(20);
         balance.setPadding(0, dp(4), 0, dp(4));
         tile.addView(balance);
 
         TextView sub = new TextView(requireContext());
-        sub.setText(Phase2Presentation.accountSubtitle(acc.type) + " · " + acc.status);
+        sub.setText(acc.id + " · " + acc.status);
         sub.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
         sub.setTextSize(12);
         tile.addView(sub);
 
+        var current = binding;
+        String requestedUid = uid;
+        application.getAppContainer().getBackendApiClient()
+                .get("/accounts/" + android.net.Uri.encode(acc.id) + "/stripe-sandbox")
+                .addOnCompleteListener(task -> {
+                    if (binding != current || !java.util.Objects.equals(uid, requestedUid)) return;
+                    try {
+                        if (!task.isSuccessful() || task.getResult().statusCode != 200)
+                            throw new org.json.JSONException("Unavailable");
+                        JSONObject snapshot = new JSONObject(task.getResult().body);
+                        if (snapshot.has("availableMinor")) {
+                            balance.setText(ReadSummaryFormatter.formatCurrency(snapshot.getLong("availableMinor"), "USD"));
+                            sub.setText("Stripe Sandbox · " + acc.id);
+                        } else {
+                            balance.setText("pending".equals(snapshot.optString("status"))
+                                    ? "Đang thiết lập Stripe" : "Chưa liên kết Stripe");
+                        }
+                    } catch (org.json.JSONException error) {
+                        balance.setText("Chưa đọc được số dư Stripe");
+                    }
+                });
         tile.setOnClickListener(v -> openDetails(v, acc));
         return tile;
-    }
-
-    private View createUpcomingBillTile(String title, String dueDate, String amount) {
-        LinearLayout row = new LinearLayout(requireContext());
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        row.setBackgroundResource(R.drawable.glass_panel_card);
-        row.setPadding(dp(14), dp(14), dp(14), dp(14));
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        p.bottomMargin = dp(10);
-        row.setLayoutParams(p);
-
-        LinearLayout textCol = new LinearLayout(requireContext());
-        textCol.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout.LayoutParams tcp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        textCol.setLayoutParams(tcp);
-
-        TextView t = new TextView(requireContext());
-        t.setText(title);
-        t.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
-        t.setTextSize(14);
-        t.setTypeface(null, android.graphics.Typeface.BOLD);
-        textCol.addView(t);
-
-        TextView d = new TextView(requireContext());
-        d.setText(dueDate);
-        d.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
-        d.setTextSize(12);
-        textCol.addView(d);
-        row.addView(textCol);
-
-        TextView amt = new TextView(requireContext());
-        amt.setText(amount);
-        amt.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
-        amt.setTextSize(14);
-        amt.setTypeface(null, android.graphics.Typeface.BOLD);
-        amt.setPadding(dp(8), 0, dp(12), 0);
-        row.addView(amt);
-
-        MaterialButton payBtn = new MaterialButton(requireContext());
-        payBtn.setText("Trả");
-        payBtn.setTextColor(ContextCompat.getColor(requireContext(), R.color.white));
-        payBtn.setBackgroundTintList(ContextCompat.getColorStateList(requireContext(), R.color.navy));
-        payBtn.setCornerRadius(dp(12));
-        payBtn.setOnClickListener(v -> {
-            UtilitiesHubDialogFragment dialog = new UtilitiesHubDialogFragment();
-            dialog.show(getChildFragmentManager(), "PayBill");
-        });
-        row.addView(payBtn);
-
-        return row;
     }
 
     private void showNotificationsDialog() {

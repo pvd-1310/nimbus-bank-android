@@ -258,10 +258,10 @@ public final class EkycDialogFragment extends DialogFragment {
             icon = rejected ? R.drawable.ic_close : R.drawable.ic_shield;
             tint = rejected ? R.color.danger : R.color.warning;
         } else if ("VERIFIED".equals(state.reviewStatus())) {
-            headline = state.isDemo() ? "Đã đăng ký khuôn mặt demo" : "Đã xác thực eKYC";
+            headline = state.isDemo() ? "Đã đăng ký khuôn mặt demo" : "Đã hoàn tất đối chiếu ảnh demo";
             detail = state.isDemo()
                     ? "Hệ thống đã kiểm tra ảnh selfie và đăng ký mẫu khuôn mặt. Chưa xác minh CCCD hoặc danh tính pháp lý."
-                    : "Hệ thống đã so khuôn mặt trên mặt trước CCCD với ảnh selfie và xác thực hồ sơ demo.";
+                    : "Hệ thống đã đối chiếu khuôn mặt trên ảnh mặt trước CCCD với ảnh selfie. Đây là so khớp ảnh tĩnh, chưa xác thực giấy tờ, danh tính pháp lý hay liveness.";
             icon = R.drawable.ic_check;
             tint = R.color.success;
         } else {
@@ -331,6 +331,7 @@ public final class EkycDialogFragment extends DialogFragment {
 
         private JSONObject latest;
         private String captureMode = "FULL_ID";
+        private String submissionStatus = "";
         private boolean started;
         private boolean closed;
         private boolean restoredPhotos;
@@ -368,6 +369,16 @@ public final class EkycDialogFragment extends DialogFragment {
                 try {
                     acceptLatest(readLatest(task));
                     profileChanged = true;
+                    if (!"VERIFIED".equals(reviewStatus())) {
+                        if ("STORAGE_SETUP_REQUIRED".equals(submissionStatus)) {
+                            fail("Backend chưa cấu hình kho ảnh eKYC. Có thể xem lại khi dịch vụ sẵn sàng.", "Kiểm tra lại", this::load);
+                            return;
+                        }
+                        if ("FACE_SETUP_REQUIRED".equals(submissionStatus)) {
+                            fail("Backend chưa cấu hình kiểm tra khuôn mặt.", "Kiểm tra lại", this::load);
+                            return;
+                        }
+                    }
                     finishProgress();
                 } catch (IOException | JSONException e) {
                     fail("Không tải được trạng thái hồ sơ. Vui lòng thử lại.", "Thử lại", this::load);
@@ -766,6 +777,7 @@ public final class EkycDialogFragment extends DialogFragment {
         private JSONObject readLatest(Task<BackendApiClient.Response> task) throws IOException, JSONException {
             JSONObject payload = responseJson(task);
             captureMode = payload.optString("captureMode", "FULL_ID");
+            submissionStatus = payload.optString("submissionStatus");
             JSONArray items = payload.getJSONArray("items");
             return items.length() == 0 ? null : readRecord(items.getJSONObject(0));
         }

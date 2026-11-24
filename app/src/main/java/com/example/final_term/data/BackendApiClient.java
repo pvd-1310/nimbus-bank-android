@@ -11,11 +11,13 @@ import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 import java.util.Iterator;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import okhttp3.ConnectionPool;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -23,7 +25,7 @@ import okhttp3.RequestBody;
 import okhttp3.ResponseBody;
 import org.json.JSONObject;
 
-/** Authenticated production REST transport. Money is never mutated locally. */
+/** Authenticated REST transport shared by the local demo and configured builds. */
 public final class BackendApiClient {
     public static final class Response {
         public final int statusCode;
@@ -32,13 +34,26 @@ public final class BackendApiClient {
     }
     private static final MediaType JSON = MediaType.get("application/json");
     private static final String BASE_URL = BuildConfig.BACKEND_BASE_URL.replaceFirst("/+$", "");
-    private final OkHttpClient http = new OkHttpClient.Builder()
+    private final OkHttpClient http = newHttpClient();
+
+    private static OkHttpClient newHttpClient() {
+        var builder = new OkHttpClient.Builder()
             .connectTimeout(5, TimeUnit.SECONDS)
             .readTimeout(5, TimeUnit.SECONDS)
             .writeTimeout(5, TimeUnit.SECONDS)
             .followRedirects(false)
-            .retryOnConnectionFailure(false)
-            .build();
+            .retryOnConnectionFailure(false);
+        if ("10.0.2.2".equals(URI.create(BASE_URL).getHost())) {
+            // Avoid reusing an idle socket through the Android Emulator host bridge.
+            builder.connectionPool(new ConnectionPool(0, 5, TimeUnit.SECONDS));
+        }
+        return builder.build();
+    }
+
+    private final OkHttpClient readHttp = http.newBuilder().retryOnConnectionFailure(true).build();
+    // Allow the backend's 10-second provider deadline plus authentication and database work.
+    private final OkHttpClient chatbotHttp = http.newBuilder()
+            .readTimeout(15, TimeUnit.SECONDS).build();
     private final OkHttpClient cameraHttp = http.newBuilder().callTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS).build();
     private final FirebaseAuth auth;
@@ -124,7 +139,14 @@ public final class BackendApiClient {
                         .header("Authorization", "Bearer " + token)
                         .method(method, jsonBody == null ? null : RequestBody.create(jsonBody, JSON))
                         .build();
-                OkHttpClient client = path.startsWith("/ekyc/") && path.endsWith("/submit") ? cameraHttp : http;
+                OkHttpClient client = http;
+                if ("GET".equals(method)) {
+                    client = readHttp;
+                } else if ("/chatbot".equals(path)) {
+                    client = chatbotHttp;
+                } else if (path.startsWith("/ekyc/") && path.endsWith("/submit")) {
+                    client = cameraHttp;
+                }
                 try (okhttp3.Response response = client.newCall(request).execute()) {
                     ResponseBody body = response.body();
                     return new Response(response.code(), body == null ? "" : body.string());

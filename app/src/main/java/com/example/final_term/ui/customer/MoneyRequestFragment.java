@@ -105,8 +105,21 @@ public final class MoneyRequestFragment extends Fragment {
         });
         binding.statusText.setText(pendingBody == null ? "Đang tải tài khoản…" :
                 "Chưa xác nhận được yêu cầu trước. Gửi lại để kiểm tra cùng mã yêu cầu.");
-        binding.submitButton.setOnClickListener(v -> submit());
-        binding.historyButton.setOnClickListener(v -> openHistory());
+        binding.submitButton.setText("Tiếp tục với Stripe Sandbox");
+        binding.demoSettlementButton.setVisibility(View.GONE);
+        ((View) binding.accountInput.getParent()).setVisibility(View.GONE);
+        ((View) binding.amountInput.getParent()).setVisibility(View.GONE);
+        binding.submitButton.setOnClickListener(v -> {
+            if (pendingBody != null) {
+                submit();
+                return;
+            }
+            Bundle args = new Bundle();
+            args.putString("demoCashOperation", binding.operationInput.getSelectedItemPosition() == 1 ? WITHDRAWAL : DEPOSIT);
+            androidx.navigation.Navigation.findNavController(v).navigate(R.id.transfer, args);
+        });
+        binding.historyButton.setOnClickListener(v ->
+                androidx.navigation.Navigation.findNavController(v).navigate(R.id.transactionHistory));
         updateControls();
         app.getAuthRepository().observeAuthState().observe(getViewLifecycleOwner(), auth -> {
             String currentUid = auth != null && auth.getStatus() == AuthState.Status.SIGNED_IN
@@ -143,25 +156,26 @@ public final class MoneyRequestFragment extends Fragment {
                 if ("CHECKING".equalsIgnoreCase(account.type) && "ACTIVE".equalsIgnoreCase(account.status)
                         && "VND".equalsIgnoreCase(account.currency)) {
                     accountIds.add(account.id);
-                    labels.add(account.id + " · VND");
+                    labels.add(account.id + " · Stripe Sandbox");
                 }
             }
         }
         binding.accountInput.setAdapter(adapter(labels.isEmpty()
-                ? List.of("Không có tài khoản thanh toán VND khả dụng") : labels));
+                ? List.of("Không có tài khoản thanh toán khả dụng") : labels));
         int newIndex = accountIds.indexOf(previousId);
         if (newIndex >= 0) binding.accountInput.setSelection(newIndex);
         if ("Đang tải tài khoản…".contentEquals(binding.statusText.getText())) {
             binding.statusText.setText(accountIds.isEmpty()
-                    ? "Cần tài khoản thanh toán VND đã đồng bộ."
-                    : "Số dư giữ nguyên khi gửi yêu cầu.");
+                    ? "Cần tài khoản thanh toán đã đồng bộ."
+                    : "Số dư được cập nhật khi Stripe Sandbox xác nhận giao dịch.");
         }
         updateControls();
     }
 
     private void submit() {
         if (sending || uid == null) return;
-        if (pendingBody == null) {
+        boolean retry = pendingBody != null;
+        if (!retry) {
             int index = binding.accountInput.getSelectedItemPosition();
             if (index < 0 || index >= accountIds.size()) return;
             String amount = binding.amountInput.getText().toString().trim();
@@ -188,9 +202,26 @@ public final class MoneyRequestFragment extends Fragment {
         String currentUid = uid;
         String requestBody = pendingBody;
         sending = true;
-        binding.statusText.setText("Đang gửi yêu cầu…");
+        binding.statusText.setText(retry ? "Đang tra cứu yêu cầu cũ…" : "Đang gửi yêu cầu…");
         updateControls();
-        api.post(PATH, requestBody).addOnCompleteListener(task -> {
+        com.google.android.gms.tasks.Task<BackendApiClient.Response> submission;
+        if (retry) {
+            try {
+                String requestId = new JSONObject(requestBody).getString("requestId");
+                submission = api.get(PATH + "/by-request/" + requestId).continueWithTask(task -> {
+                    if (!task.isSuccessful()) throw task.getException();
+                    return task.getResult().statusCode == 404 ? api.post(PATH, requestBody)
+                            : com.google.android.gms.tasks.Tasks.forResult(task.getResult());
+                });
+            } catch (JSONException error) {
+                sending = false;
+                clearPending();
+                updateControls();
+                binding.statusText.setText("Không đọc được mã yêu cầu cũ.");
+                return;
+            }
+        } else submission = api.post(PATH, requestBody);
+        submission.addOnCompleteListener(task -> {
             if (binding != currentView || pendingBody != requestBody || !Objects.equals(uid, currentUid)) return;
             sending = false;
             if (task.isSuccessful()) {
@@ -271,7 +302,7 @@ public final class MoneyRequestFragment extends Fragment {
         binding.accountInput.setEnabled(!retry);
         binding.amountInput.setEnabled(!retry);
         binding.submitButton.setEnabled(uid != null && !sending && (retry || !accountIds.isEmpty()));
-        binding.submitButton.setText(retry && !sending ? "Gửi lại yêu cầu" : "Gửi yêu cầu");
+        binding.submitButton.setText(retry && !sending ? "Gửi lại yêu cầu" : "Tiếp tục với Stripe Sandbox");
         binding.historyButton.setEnabled(uid != null && !readingHistory);
     }
 

@@ -11,6 +11,12 @@ export function registerAccountsRoutes(route: Route, d: AppDependencies) {
   route("get", "/accounts/:id/details", (a, r) =>
     d.bank.accounts.details(a, String(r.params.id)),
   );
+  route("get", "/accounts/:id/stripe-sandbox", async (a, r) => {
+    const id = String(r.params.id);
+    if (d.stripeSandboxAccounts) return d.stripeSandboxAccounts.get(a, id);
+    await d.bank.accounts.get(a, id);
+    return { status: "unlinked" };
+  });
   route("get", "/accounts/:id/savings-estimate", (a, r) =>
     d.bank.accounts.savings(
       a,

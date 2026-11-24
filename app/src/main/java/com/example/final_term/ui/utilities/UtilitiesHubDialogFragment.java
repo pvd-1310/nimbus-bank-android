@@ -1,5 +1,6 @@
 package com.example.final_term.ui.utilities;
 
+import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.CountDownTimer;
 import android.os.Handler;
@@ -15,6 +16,7 @@ import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.DialogFragment;
 
+import com.google.android.gms.tasks.Tasks;
 import com.example.final_term.R;
 import com.example.final_term.BuildConfig;
 import com.example.final_term.core.FinalTermApplication;
@@ -30,10 +32,16 @@ import com.stripe.android.paymentsheet.PaymentSheetResultCallback;
 import com.google.android.material.button.MaterialButton;
 
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 public class UtilitiesHubDialogFragment extends DialogFragment {
     private DialogUtilitiesHubBinding binding;
@@ -70,7 +78,11 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     private String authoritativeTarget = "";
 
     private long selectedTopupAmount = 20000;
+    private String selectedTopupCarrier;
+    private String selectedTopupCarrierName;
     private CountDownTimer otpTimer;
+    private boolean preparingPreviously;
+    private String pendingOrder;
 
     private final FaceCamera faceCamera = new FaceCamera(this, this::verifyFace, this::faceError);
 
@@ -102,7 +114,19 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
             authoritativeFee = savedInstanceState.getLong("authoritativeFee");
             authoritativeCurrency = savedInstanceState.getString("authoritativeCurrency", "VND");
             authoritativeTarget = savedInstanceState.getString("authoritativeTarget", "");
+            if (savedInstanceState.getBoolean("simulatedPayment")) {
+                requestId = null;
+                intentId = null;
+                challengeId = null;
+                faceRequired = false;
+                faceVerified = false;
+                commitPending = false;
+            }
+            pendingOrder = savedInstanceState.getString("pendingOrder");
+            preparingPreviously = requestId != null;
             selectedTopupAmount = savedInstanceState.getLong("selectedTopupAmount", 20000);
+            selectedTopupCarrier = savedInstanceState.getString("selectedTopupCarrier");
+            selectedTopupCarrierName = savedInstanceState.getString("selectedTopupCarrierName");
         } else if (getArguments() != null) {
             currentBillId = getArguments().getString("billId");
         }
@@ -125,7 +149,10 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         outState.putLong("authoritativeFee", authoritativeFee);
         outState.putString("authoritativeCurrency", authoritativeCurrency);
         outState.putString("authoritativeTarget", authoritativeTarget);
+        outState.putString("pendingOrder", pendingOrder);
         outState.putLong("selectedTopupAmount", selectedTopupAmount);
+        outState.putString("selectedTopupCarrier", selectedTopupCarrier);
+        outState.putString("selectedTopupCarrierName", selectedTopupCarrierName);
     }
 
     @Nullable
@@ -141,40 +168,37 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         super.onViewCreated(view, savedInstanceState);
         FinalTermApplication app = (FinalTermApplication) requireActivity().getApplication();
         api = app.getAppContainer().getBackendApiClient();
-        if (!BuildConfig.STRIPE_PUBLISHABLE_KEY.isEmpty()) {
+        if (BuildConfig.STRIPE_PUBLISHABLE_KEY.startsWith("pk_test_")) {
             PaymentConfiguration.init(requireContext(), BuildConfig.STRIPE_PUBLISHABLE_KEY);
             paymentSheet = new PaymentSheet.Builder(this::onPaymentSheetResult).build(this);
         }
 
         binding.closeDialogBtn.setOnClickListener(v -> dismiss());
+        binding.utilSeeAll.setOnClickListener(v -> openCatalog());
+        binding.utilAll.setOnClickListener(v -> openCatalog());
+        binding.pendingOrderButton.setOnClickListener(v -> recoverOrder());
+        binding.orderHistoryButton.setOnClickListener(v -> showOrders());
+        binding.pendingOrderButton.setVisibility(pendingOrder == null ? View.GONE : View.VISIBLE);
 
-        // Category clicks
-        binding.utilElectricity.setOnClickListener(v -> {
-            binding.topupFormContainer.setVisibility(View.GONE);
-            binding.lookupTitle.setText("Tra cứu hóa đơn điện (EVN)");
-            binding.customerCodeInput.setHint("Nhập mã khách hàng (VD: PE01000123456)");
-        });
-
-        binding.utilWater.setOnClickListener(v -> {
-            binding.topupFormContainer.setVisibility(View.GONE);
-            binding.lookupTitle.setText("Tra cứu hóa đơn nước sạch (Sawaco)");
-            binding.customerCodeInput.setHint("Nhập mã danh bộ (VD: 0102030405)");
-        });
-
+        binding.utilElectricity.setOnClickListener(v -> showBillLookup(
+                "Tra cứu hóa đơn điện demo", "Mã hóa đơn (ví dụ local_demo_electricity)"));
+        binding.utilWater.setOnClickListener(v -> showBillLookup(
+                "Tra cứu hóa đơn nước demo", "Mã hóa đơn (ví dụ local_demo_water)"));
         binding.utilMobile.setOnClickListener(v -> {
             binding.topupFormContainer.setVisibility(View.VISIBLE);
-            binding.lookupTitle.setText("Nạp tiền điện thoại trực tiếp");
-            binding.customerCodeInput.setHint("Nhập số điện thoại cần nạp");
+            binding.lookupTitle.setText("Nạp điện thoại mô phỏng");
+            binding.customerCodeInput.setHint("Nhập mã hóa đơn để tra cứu");
+            scrollToSection(binding.topupFormContainer);
         });
-
-        binding.utilInternet.setOnClickListener(v -> {
-            binding.topupFormContainer.setVisibility(View.GONE);
-            binding.lookupTitle.setText("Thanh toán cước Internet & Dịch vụ");
-            binding.customerCodeInput.setHint("Nhập mã hợp đồng / mã đơn hàng");
-        });
+        binding.utilFlight.setOnClickListener(v -> openCatalogCategory("FLIGHT"));
+        binding.utilMovie.setOnClickListener(v -> openCatalogCategory("MOVIE"));
+        binding.utilHotel.setOnClickListener(v -> openCatalogCategory("HOTEL"));
+        binding.utilShopping.setOnClickListener(v -> openCatalogCategory("ECOMMERCE"));
 
         // Topup chips
         setupTopupChips();
+        renderTopupCarrier();
+        binding.topupCarrierPicker.setOnClickListener(v -> chooseTopupCarrier());
 
         // Topup proceed button
         binding.btnProceedTopup.setOnClickListener(v -> proceedTopupOrder());
@@ -190,8 +214,14 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         });
         binding.checkoutOtpTimer.setOnClickListener(v -> requestOtp());
         binding.checkoutBtnVerifyOtp.setOnClickListener(v -> verifyOtp());
-        binding.checkoutBtnRecover.setOnClickListener(v -> recoverPaymentAndIntent(true, true));
+        binding.checkoutBtnRecover.setOnClickListener(v -> {
+            if (intentId == null) preparePaymentIntent();
+            else recoverPaymentAndIntent(true, true);
+        });
         binding.receiptBtnDone.setOnClickListener(v -> dismiss());
+
+        if (getArguments() != null && getArguments().getBoolean("openTopup"))
+            binding.utilMobile.performClick();
 
         // Load owned bills from backend
         loadOwnedBills();
@@ -201,18 +231,44 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
             showCheckoutView();
             recoverPaymentAndIntent();
         } else if (currentBillId != null) {
-            startCheckout(currentBillId, currentServiceName, currentReference.isEmpty() ? currentBillId : currentReference);
+            if (requestId != null) {
+                showCheckoutView();
+                preparePaymentIntent();
+            } else lookupBill(currentBillId);
         }
     }
 
+    private void showBillLookup(String title, String hint) {
+        binding.topupFormContainer.setVisibility(View.GONE);
+        binding.lookupTitle.setText(title);
+        binding.customerCodeInput.setHint(hint);
+        scrollToSection(binding.lookupFormContainer);
+    }
+
+    private void scrollToSection(View section) {
+        var scroll = binding.getRoot();
+        scroll.post(() -> {
+            if (binding == null || binding.getRoot() != scroll || !section.isShown()) return;
+            Rect bounds = new Rect();
+            section.getDrawingRect(bounds);
+            scroll.offsetDescendantRectToMyCoords(section, bounds);
+            scroll.smoothScrollTo(0, bounds.top);
+        });
+    }
+
     private void setupTopupChips() {
-        binding.chipTopup20k.setOnClickListener(v -> selectTopupChip(20000, binding.chipTopup20k));
-        binding.chipTopup50k.setOnClickListener(v -> selectTopupChip(50000, binding.chipTopup50k));
-        binding.chipTopup100k.setOnClickListener(v -> selectTopupChip(100000, binding.chipTopup100k));
-        binding.chipTopup200k.setOnClickListener(v -> selectTopupChip(200000, binding.chipTopup200k));
+        long[] amounts = {20000, 50000, 100000, 200000};
+        TextView[] chips = {binding.chipTopup20k, binding.chipTopup50k, binding.chipTopup100k, binding.chipTopup200k};
+        for (int i = 0; i < amounts.length; i++) {
+            long amount = amounts[i];
+            TextView chip = chips[i];
+            chip.setOnClickListener(v -> selectTopupChip(amount, chip));
+            if (amount == selectedTopupAmount) selectTopupChip(amount, chip);
+        }
     }
 
     private void selectTopupChip(long amount, TextView selectedView) {
+        if (busy) return;
         selectedTopupAmount = amount;
         TextView[] chips = {binding.chipTopup20k, binding.chipTopup50k, binding.chipTopup100k, binding.chipTopup200k};
         for (TextView chip : chips) {
@@ -227,6 +283,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     }
 
     private void loadOwnedBills() {
+        binding.billsEmptyOrLoadingText.setVisibility(View.VISIBLE);
         if (api == null) {
             binding.billsEmptyOrLoadingText.setText("Backend API chưa được khởi tạo.");
             return;
@@ -253,13 +310,17 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
             try {
                 JSONObject json = new JSONObject(task.getResult().body);
                 JSONArray items = json.optJSONArray("items");
-                binding.billsListContainer.removeAllViews();
+                for (int item = binding.billsListContainer.getChildCount() - 1; item >= 0; item--) {
+                    View child = binding.billsListContainer.getChildAt(item);
+                    if (child != binding.billsEmptyOrLoadingText) binding.billsListContainer.removeViewAt(item);
+                }
                 int unpaidCount = 0;
                 if (items != null) {
                     for (int i = 0; i < items.length(); i++) {
                         JSONObject bill = items.getJSONObject(i);
                         String status = bill.optString("status", "UNPAID");
-                        if ("UNPAID".equalsIgnoreCase(status)) {
+                        if ("UNPAID".equalsIgnoreCase(status)
+                                && (bill.isNull("quoteExpiresAt") || bill.optLong("quoteExpiresAt") > System.currentTimeMillis())) {
                             unpaidCount++;
                             View billView = createBillItemView(bill);
                             binding.billsListContainer.addView(billView);
@@ -267,11 +328,9 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                     }
                 }
                 if (unpaidCount == 0) {
-                    TextView empty = new TextView(requireContext());
-                    empty.setText("Không có hóa đơn hoặc đơn hàng chưa thanh toán.");
-                    empty.setPadding(12, 12, 12, 12);
-                    empty.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
-                    binding.billsListContainer.addView(empty);
+                    binding.billsEmptyOrLoadingText.setText("Không có hóa đơn hoặc đơn hàng chưa thanh toán.");
+                } else {
+                    binding.billsEmptyOrLoadingText.setVisibility(View.GONE);
                 }
             } catch (Exception e) {
                 binding.billsEmptyOrLoadingText.setText("Không thể phân tích dữ liệu hóa đơn.");
@@ -301,7 +360,9 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         textCol.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f));
 
         TextView title = new TextView(requireContext());
-        title.setText(provider + " - " + invoiceRef);
+        title.setText((bill.optBoolean("demo") ? "[Demo] " : "") + provider + " · " + invoiceRef
+                + (bill.isNull("dueAt") ? "" : " · Hạn " + android.text.format.DateFormat.getDateFormat(requireContext())
+                        .format(new java.util.Date(bill.optLong("dueAt")))));
         title.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
         title.setTextSize(13);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
@@ -322,68 +383,261 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         payBtn.setBackgroundTintList(ContextCompat.getColorStateList(requireContext(), R.color.navy));
         payBtn.setTextColor(ContextCompat.getColor(requireContext(), R.color.white));
         payBtn.setCornerRadius(14);
-        payBtn.setOnClickListener(v -> startCheckout(id, provider, invoiceRef));
+        payBtn.setOnClickListener(v -> startCheckout(bill, ""));
         card.addView(payBtn);
 
         return card;
     }
 
     private void proceedTopupOrder() {
-        String phone = binding.topupPhoneInput.getText() == null ? "" : binding.topupPhoneInput.getText().toString().trim();
-        if (phone.isEmpty()) {
-            binding.topupPhoneInput.setError("Vui lòng nhập số điện thoại");
+        if (pendingOrder != null) {
+            recoverOrder();
             return;
         }
-        setBusy(true);
-        checkoutStatus("Đang tạo đơn nạp tiền điện thoại…");
-        // Fetch catalog to find topup product or fallback
-        api.get("/catalog").addOnCompleteListener(task -> {
-            if (!isAdded() || binding == null) return;
-            String productId = "local_demo_topup";
-            if (task.isSuccessful() && task.getResult() != null && task.getResult().statusCode == 200) {
-                try {
-                    JSONObject cat = new JSONObject(task.getResult().body);
-                    JSONArray items = cat.optJSONArray("items");
-                    if (items != null) {
-                        for (int i = 0; i < items.length(); i++) {
-                            JSONObject item = items.getJSONObject(i);
-                            if ("TOPUP".equalsIgnoreCase(item.optString("serviceType"))) {
-                                productId = item.optString("id");
-                                break;
-                            }
-                        }
-                    }
-                } catch (Exception ignored) { }
+        String phone = binding.topupPhoneInput.getText() == null ? "" : binding.topupPhoneInput.getText().toString().trim();
+        if (!phone.matches("0[0-9]{9}")) {
+            binding.topupPhoneInput.setError("Nhập số điện thoại gồm 10 chữ số, bắt đầu bằng 0.");
+            return;
+        }
+        binding.topupPhoneInput.setError(null);
+        if (selectedTopupCarrier == null) {
+            binding.topupCarrierPicker.setError("Vui lòng chọn nhà mạng.");
+            return;
+        }
+        loadCatalog("TOPUP", products -> {
+            JSONObject product = carriersForAmount(products).get(selectedTopupCarrier);
+            if (product == null) {
+                selectedTopupCarrier = null;
+                selectedTopupCarrierName = null;
+                renderTopupCarrier();
+                binding.topupCarrierPicker.setError("Mệnh giá này không có ở nhà mạng đã chọn.");
+                return;
             }
-            int quantity = (int) Math.max(1, selectedTopupAmount / 20000);
-            try {
-                String reqId = UUID.randomUUID().toString();
-                JSONObject orderBody = new JSONObject()
-                        .put("requestId", reqId)
-                        .put("productId", productId)
-                        .put("quantity", quantity)
-                        .put("customerDetails", "Nạp ĐT " + phone + " · " + ReadSummaryFormatter.money(selectedTopupAmount));
+            createOrderForProduct(product, phone);
+        });
+    }
 
-                api.post("/orders", orderBody.toString()).addOnCompleteListener(orderTask -> {
-                    if (!isAdded() || binding == null) return;
-                    setBusy(false);
-                    if (orderTask.isSuccessful() && orderTask.getResult() != null
-                            && orderTask.getResult().statusCode >= 200 && orderTask.getResult().statusCode < 300) {
-                        try {
-                            JSONObject orderResult = new JSONObject(orderTask.getResult().body);
-                            String billId = orderResult.getString("id");
-                            startCheckout(billId, "Nạp điện thoại (" + phone + ")", "Mã đơn nạp: " + billId);
-                        } catch (Exception e) {
-                            checkoutStatus("Không thể phân tích đơn hàng nạp điện thoại.");
-                        }
-                    } else {
-                        checkoutStatus("Không thể tạo đơn nạp tiền (HTTP " +
-                                (orderTask.getResult() == null ? -1 : orderTask.getResult().statusCode) + ").");
-                    }
-                });
-            } catch (Exception e) {
+    private void chooseTopupCarrier() {
+        loadCatalog("TOPUP", products -> {
+            Map<String, JSONObject> carriers = carriersForAmount(products);
+            if (carriers.isEmpty()) {
+                binding.topupCarrierPicker.setError("Chưa có nhà mạng cho mệnh giá này.");
+                return;
+            }
+            List<String> networks = new ArrayList<>(carriers.keySet());
+            List<String> names = new ArrayList<>();
+            for (String network : networks) names.add(carriers.get(network).optString("name", network));
+            new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+                    .setTitle("Chọn nhà mạng")
+                    .setItems(names.toArray(new String[0]), (dialog, index) -> {
+                        selectedTopupCarrier = networks.get(index);
+                        selectedTopupCarrierName = names.get(index);
+                        renderTopupCarrier();
+                    })
+                    .show();
+        });
+    }
+
+    private Map<String, JSONObject> carriersForAmount(List<JSONObject> products) {
+        Map<String, JSONObject> carriers = new LinkedHashMap<>();
+        for (JSONObject product : products) {
+            String network = product.optString("network");
+            if (!product.isNull("network") && !network.isEmpty() && "VND".equals(product.optString("currency"))
+                    && product.optLong("amountMinor") == selectedTopupAmount) {
+                carriers.putIfAbsent(network, product);
+            }
+        }
+        return carriers;
+    }
+
+    private void renderTopupCarrier() {
+        binding.topupCarrierPicker.setText(selectedTopupCarrierName == null ? "Chọn nhà mạng" : selectedTopupCarrierName);
+        binding.topupCarrierPicker.setError(null);
+    }
+
+    private void openCatalog() {
+        if (busy) return;
+        if (pendingOrder != null) {
+            recoverOrder();
+            return;
+        }
+        CharSequence[] names = {
+                getText(R.string.utility_electricity), getText(R.string.utility_water),
+                getText(R.string.utility_mobile),
+                getText(R.string.utility_flight), getText(R.string.utility_movie),
+                getText(R.string.utility_hotel), getText(R.string.utility_shopping),
+                getText(R.string.utility_internet)
+        };
+        View[] shortcuts = {
+                binding.utilElectricity, binding.utilWater, binding.utilMobile,
+                binding.utilFlight, binding.utilMovie, binding.utilHotel, binding.utilShopping
+        };
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.utility_all)
+                .setItems(names, (dialog, index) -> {
+                    if (index < shortcuts.length) shortcuts[index].performClick();
+                    else showBillLookup("Thanh toán cước Internet & Dịch vụ", "Nhập mã hợp đồng / mã đơn hàng");
+                })
+                .show();
+    }
+
+    private void openCatalogCategory(String category) {
+        if (pendingOrder != null) recoverOrder();
+        else loadCatalog(category, this::showCatalogProducts);
+    }
+
+    private void hubStatus(String message) {
+        binding.lookupResultText.setVisibility(View.VISIBLE);
+        binding.lookupResultText.setText(message);
+    }
+
+    private void loadCatalog(String category, Consumer<List<JSONObject>> onLoaded) {
+        if (busy) return;
+        setBusy(true);
+        hubStatus("Đang tải danh mục mô phỏng…");
+        api.get("/catalog?limit=100&serviceType=" + category).addOnCompleteListener(task -> {
+            if (binding == null || !isAdded()) return;
+            setBusy(false);
+            try {
+                if (!task.isSuccessful() || !ok(task.getResult())) throw new JSONException("Unavailable");
+                JSONArray items = new JSONObject(task.getResult().body).getJSONArray("items");
+                List<JSONObject> products = new ArrayList<>();
+                for (int i = 0; i < items.length(); i++) {
+                    JSONObject item = items.getJSONObject(i);
+                    if (item.optBoolean("demo")) products.add(item);
+                }
+                binding.lookupResultText.setVisibility(View.GONE);
+                onLoaded.accept(products);
+            } catch (JSONException error) {
+                hubStatus("Không tải được danh mục. Vui lòng thử lại.");
+                scrollToSection(binding.lookupFormContainer);
+            }
+        });
+    }
+
+    private void showCatalogProducts(List<JSONObject> products) {
+        if (products.isEmpty()) {
+            hubStatus("Chưa có sản phẩm demo phù hợp.");
+            scrollToSection(binding.lookupFormContainer);
+            return;
+        }
+        List<String> names = new ArrayList<>();
+        for (JSONObject product : products) {
+            names.add(product.optString("name") + " · " + ReadSummaryFormatter.money(product.optLong("amountMinor"))
+                    + " " + product.optString("currency"));
+        }
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+                .setTitle("Chọn sản phẩm demo")
+                .setItems(names.toArray(new String[0]), (dialog, index) ->
+                        createOrderForProduct(products.get(index), null))
+                .show();
+    }
+
+    private void createOrderForProduct(JSONObject item, @Nullable String phone) {
+        if (busy || pendingOrder != null) return;
+        String customerDetails = phone == null ? "Khách mẫu · 1 đơn vị · " + item.optString("name") : phone;
+        try {
+            pendingOrder = new JSONObject()
+                    .put("requestId", UUID.randomUUID().toString())
+                    .put("productId", item.getString("id")).put("quantity", 1)
+                    .put("expectedAmountMinor", item.getLong("amountMinor"))
+                    .put("expectedCurrency", item.getString("currency"))
+                    .put("customerDetails", customerDetails).toString();
+            submitOrder();
+        } catch (JSONException error) {
+            hubStatus("Dữ liệu báo giá không hợp lệ.");
+        }
+    }
+
+    private void recoverOrder() {
+        if (busy || pendingOrder == null) return;
+        setBusy(true);
+        hubStatus("Đang tra cứu đơn cũ…");
+        try {
+            String id = new JSONObject(pendingOrder).getString("requestId");
+            api.get("/orders/by-request/" + id).addOnCompleteListener(task -> {
+                if (binding == null) return;
                 setBusy(false);
-                checkoutStatus("Lỗi cấu trúc dữ liệu đơn nạp tiền.");
+                if (task.isSuccessful() && task.getResult().statusCode == 404) submitOrder();
+                else if (task.isSuccessful() && ok(task.getResult())) openOrderInvoice(task.getResult());
+                else hubStatus("Chưa tra cứu được đơn cũ. Hãy kiểm tra lại.");
+            });
+        } catch (JSONException error) {
+            setBusy(false);
+            clearPendingOrder();
+            hubStatus("Không đọc được mã đơn cũ.");
+        }
+    }
+
+    private void submitOrder() {
+        setBusy(true);
+        binding.pendingOrderButton.setVisibility(View.VISIBLE);
+        hubStatus("Đang tạo đơn demo…");
+        api.post("/orders", pendingOrder).addOnCompleteListener(task -> {
+            if (binding == null) return;
+            setBusy(false);
+            if (task.isSuccessful() && ok(task.getResult())) {
+                openOrderInvoice(task.getResult());
+            } else if (task.isSuccessful() && "INVALID_TOPUP_PHONE".equals(errorCode(task.getResult()))) {
+                clearPendingOrder();
+                binding.utilMobile.performClick();
+                hubStatus("Nhập lại số điện thoại gồm 10 chữ số, bắt đầu bằng 0.");
+            } else if (task.isSuccessful() && task.getResult().statusCode == 409) {
+                clearPendingOrder();
+                hubStatus("Báo giá đã thay đổi. Mở lại danh mục để kiểm tra giá.");
+            } else hubStatus("Chưa xác nhận được đơn. Bấm kiểm tra đơn đang tạo để dùng lại mã cũ.");
+        });
+    }
+
+    private void clearPendingOrder() {
+        pendingOrder = null;
+        binding.pendingOrderButton.setVisibility(View.GONE);
+    }
+
+    private void openOrderInvoice(BackendApiClient.Response response) {
+        try {
+            JSONObject order = new JSONObject(response.body);
+            String id = order.getString("id");
+            String details = order.optString("customerDetails", "");
+            if ("TOPUP".equals(order.optString("serviceType")) && !details.isEmpty()) {
+                details = "Số điện thoại nhận nạp: " + details;
+            }
+            clearPendingOrder();
+            lookupBill(id, details);
+        } catch (JSONException error) {
+            hubStatus("Chưa đọc được mã đơn. Bấm kiểm tra đơn đang tạo.");
+        }
+    }
+
+    private void showOrders() {
+        if (busy) return;
+        setBusy(true);
+        hubStatus("Đang tra cứu đơn hàng…");
+        api.get("/orders?limit=100").addOnCompleteListener(task -> {
+            if (binding == null || !isAdded()) return;
+            setBusy(false);
+            try {
+                if (!task.isSuccessful() || !ok(task.getResult())) throw new JSONException("Unavailable");
+                var items = new JSONObject(task.getResult().body).getJSONArray("items");
+                var rows = new java.util.ArrayList<String>();
+                for (int i = 0; i < items.length(); i++) {
+                    JSONObject order = items.getJSONObject(i);
+                    String id = order.getString("id");
+                    String fulfillment = order.getString("fulfillmentStatus");
+                    rows.add("[Demo] " + order.optString("customerDetails") + "\n" + id + "\n"
+                            + "Thanh toán: " + order.optString("paymentStatus") + " · Thực hiện: " + fulfillment
+                            + (order.isNull("providerReference") ? "" : "\n" + order.optString("providerReference")));
+                }
+                hubStatus(rows.isEmpty() ? "Chưa có đơn hàng demo." : "Đã tải kết quả đơn hàng.");
+                new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+                        .setTitle("Đơn hàng mô phỏng")
+                        .setItems(rows.toArray(new String[0]), (dialog, index) -> {
+                            JSONObject order = items.optJSONObject(index);
+                            if (order != null) lookupBill(order.optString("id"));
+                        })
+                        .setNegativeButton("Đóng", null).show();
+            } catch (JSONException error) {
+                hubStatus("Không tải được đơn hàng. Vui lòng thử lại.");
             }
         });
     }
@@ -394,45 +648,54 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
             binding.customerCodeInput.setError("Vui lòng nhập mã tra cứu");
             return;
         }
-        binding.lookupResultText.setVisibility(View.VISIBLE);
-        binding.lookupResultText.setText("Đang tra cứu từ hệ thống backend…");
-        setBusy(true);
+        lookupBill(code);
+    }
 
-        api.get("/bills").addOnCompleteListener(task -> {
-            if (!isAdded() || binding == null) return;
+    private void lookupBill(String code) {
+        lookupBill(code, "");
+    }
+
+    private void lookupBill(String code, String orderDetails) {
+        if (busy) return;
+        setBusy(true);
+        hubStatus("Đang tra cứu hóa đơn…");
+        api.get("/bills/lookup/" + android.net.Uri.encode(code)).addOnCompleteListener(task -> {
+            if (binding == null || !isAdded()) return;
             setBusy(false);
-            if (task.isSuccessful() && task.getResult() != null && task.getResult().statusCode == 200) {
-                try {
-                    JSONObject json = new JSONObject(task.getResult().body);
-                    JSONArray items = json.optJSONArray("items");
-                    if (items != null) {
-                        for (int i = 0; i < items.length(); i++) {
-                            JSONObject bill = items.getJSONObject(i);
-                            String invoiceRef = bill.optString("invoiceRef", "");
-                            String id = bill.optString("id", "");
-                            if (invoiceRef.equalsIgnoreCase(code) || id.equalsIgnoreCase(code)) {
-                                binding.lookupResultText.setText("Đã tìm thấy hóa đơn: " + invoiceRef + " (" +
-                                        ReadSummaryFormatter.money(bill.optLong("amountMinor", 0)) + " " +
-                                        bill.optString("currency", "VND") + ")");
-                                startCheckout(id, bill.optString("provider", "Hóa đơn dịch vụ"), invoiceRef);
-                                return;
-                            }
-                        }
-                    }
-                } catch (Exception ignored) { }
+            try {
+                if (task.isSuccessful() && task.getResult().statusCode == 404) {
+                    hubStatus("Không tìm thấy hóa đơn thuộc tài khoản này.");
+                    return;
+                }
+                if (!task.isSuccessful() || !ok(task.getResult())) throw new JSONException("Unavailable");
+                JSONObject bill = new JSONObject(task.getResult().body);
+                if (!"UNPAID".equals(bill.getString("status"))) {
+                    hubStatus("Hóa đơn " + bill.optString("invoiceRef") + " · " + bill.getString("status")
+                            + (bill.optBoolean("demo") ? " · Hóa đơn demo" : "")
+                            + "\nMã thanh toán: " + bill.optString("paymentId", "—"));
+                    return;
+                }
+                startCheckout(bill, orderDetails);
+            } catch (JSONException error) {
+                hubStatus("Không tra cứu được hóa đơn. Hãy kiểm tra mã hoặc thử lại.");
             }
-            binding.lookupResultText.setText("Không tìm thấy kỳ hóa đơn chưa thanh toán cho mã: " + code +
-                    "\n(Bạn có thể chọn một trong các hóa đơn chờ thanh toán trong danh sách trên)");
         });
     }
 
     // ============================================================
     // CHECKOUT FLOW
     // ============================================================
-    private void startCheckout(String billId, String serviceTitle, String reference) {
-        currentBillId = billId;
-        currentServiceName = serviceTitle;
-        currentReference = reference;
+    private void startCheckout(JSONObject bill, String orderDetails) {
+        if (busy || binding == null) return;
+        if (!bill.optBoolean("stripePending") && !bill.isNull("quoteExpiresAt")
+                && bill.optLong("quoteExpiresAt") <= System.currentTimeMillis()) {
+            hubStatus("Báo giá đã hết hạn. Nếu đã gửi thanh toán, kiểm tra kết quả của đơn cũ.");
+            return;
+        }
+        currentBillId = bill.optString("id");
+        currentServiceName = bill.optString("serviceType", bill.optString("provider"));
+        if (!orderDetails.isEmpty()) currentServiceName += "\n" + orderDetails;
+        currentReference = bill.optString("invoiceRef", currentBillId);
         if (requestId == null) {
             requestId = UUID.randomUUID().toString();
         }
@@ -445,7 +708,8 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         binding.hubSelectionContainer.setVisibility(View.GONE);
         binding.checkoutContainer.setVisibility(View.VISIBLE);
         binding.hubMainTitle.setText("Thanh toán dịch vụ");
-        binding.hubSubtitle.setText("Xác thực thông tin và hoàn tất giao dịch");
+        binding.hubSubtitle.setVisibility(View.VISIBLE);
+        binding.hubSubtitle.setText("Stripe Sandbox");
         binding.checkoutServiceTitle.setText(currentServiceName);
         binding.checkoutReferenceText.setText("Mã hóa đơn / tham chiếu: " + currentReference);
         renderCheckoutStep();
@@ -459,15 +723,35 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
             JSONObject body = new JSONObject()
                     .put("billId", currentBillId)
                     .put("requestId", requestId);
+            Bundle arguments = getArguments();
+            if (arguments != null) body.put("sourceAccountId", arguments.getString("sourceAccountId"));
 
-            api.post("/payments/intents", body.toString()).addOnCompleteListener(task -> {
+            String prepare = "/payments/intents";
+            String recovery = "/payment-intents/by-request/" + requestId;
+            com.google.android.gms.tasks.Task<BackendApiClient.Response> preparation;
+            if (preparingPreviously) {
+                preparation = api.get(recovery).continueWithTask(task -> {
+                    if (!task.isSuccessful()) throw task.getException();
+                    return task.getResult().statusCode == 404 ? api.post(prepare, body.toString())
+                            : com.google.android.gms.tasks.Tasks.forResult(task.getResult());
+                });
+            } else preparation = api.post(prepare, body.toString());
+            preparingPreviously = true;
+            preparation.addOnCompleteListener(task -> {
                 if (!isAdded() || binding == null) return;
                 setBusy(false);
                 if (!task.isSuccessful()) {
-                    checkoutStatus("Không kết nối được backend để khởi tạo giao dịch.");
+                    binding.checkoutCommitContainer.setVisibility(View.VISIBLE);
+                    binding.checkoutBtnRecover.setVisibility(View.VISIBLE);
+                    binding.checkoutBtnRecover.setText("Tra cứu yêu cầu cũ");
+                    checkoutStatus("Chưa xác nhận yêu cầu. Bấm tra cứu để dùng lại mã cũ.");
                     return;
                 }
                 if (!ok(task.getResult())) {
+                    if ("PAYMENT_IN_PROGRESS".equals(errorCode(task.getResult()))) {
+                        showPaymentConflict();
+                        return;
+                    }
                     checkoutStatus(errorMessage(task.getResult(), "Không thể khởi tạo giao dịch thanh toán"));
                     return;
                 }
@@ -495,23 +779,25 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     private void renderCheckoutStep() {
         if (binding == null) return;
         // Display authoritative price, fee, currency from backend
-        binding.checkoutAmountText.setText(ReadSummaryFormatter.money(authoritativeAmount) + " " + authoritativeCurrency);
-        binding.checkoutFeeText.setText(authoritativeFee == 0 ? "Miễn phí (0 " + authoritativeCurrency + ")" :
-                ReadSummaryFormatter.money(authoritativeFee) + " " + authoritativeCurrency);
-        binding.checkoutTotalText.setText(ReadSummaryFormatter.money(authoritativeAmount + authoritativeFee) + " " + authoritativeCurrency);
+        boolean quoted = authoritativeAmount > 0;
+        binding.checkoutAmountText.setText(quoted ? ReadSummaryFormatter.formatCurrency(authoritativeAmount, authoritativeCurrency) : "—");
+        binding.checkoutFeeText.setText(!quoted ? "—" : authoritativeFee == 0 ? "Miễn phí"
+                : ReadSummaryFormatter.formatCurrency(authoritativeFee, authoritativeCurrency));
+        binding.checkoutTotalText.setText(quoted
+                ? ReadSummaryFormatter.formatCurrency(authoritativeAmount + authoritativeFee, authoritativeCurrency) : "—");
         binding.checkoutIntentIdText.setText("Intent ID: " + (intentId == null ? "Đang tạo..." : intentId));
 
-        boolean needFace = faceRequired && !faceVerified && !commitPending;
+        boolean needFace = quoted && faceRequired && !faceVerified && !commitPending;
         binding.checkoutFaceStepContainer.setVisibility(needFace ? View.VISIBLE : View.GONE);
 
-        boolean canOtp = (!faceRequired || faceVerified) && !commitPending && !completed;
+        boolean canOtp = quoted && intentId != null && (!faceRequired || faceVerified) && !commitPending && !completed;
         binding.checkoutOtpStepContainer.setVisibility(canOtp ? View.VISIBLE : View.GONE);
         binding.checkoutBtnVerifyOtp.setEnabled(!busy && challengeId != null);
 
         binding.checkoutCommitContainer.setVisibility(commitPending ? View.VISIBLE : View.GONE);
         binding.checkoutPendingBanner.setVisibility(commitPending ? View.VISIBLE : View.GONE);
-        binding.checkoutBtnRecover.setVisibility(commitPending ? View.VISIBLE : View.GONE);
-        binding.checkoutBtnCommitPay.setVisibility(View.GONE);
+        binding.checkoutBtnRecover.setVisibility(commitPending && !busy ? View.VISIBLE : View.GONE);
+        binding.checkoutBtnRecover.setText("Tiếp tục / kiểm tra thanh toán");
     }
 
     private void verifyFace(byte[] image) {
@@ -604,7 +890,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
             if (!isAdded() || binding == null) return;
             if (!task.isSuccessful() || task.getResult() == null || task.getResult().statusCode >= 500) {
                 commitPending = true;
-                recoverPaymentAndIntent();
+                recoverPaymentAndIntent(true, true);
             } else if (ok(task.getResult())) {
                 setBusy(false);
                 try {
@@ -615,11 +901,11 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                 } catch (org.json.JSONException ignored) {
                     // Read the intent state if the verification response is incomplete.
                 }
-                recoverPaymentAndIntent();
+                recoverPaymentAndIntent(true, true);
             } else {
                 setBusy(false);
                 String err = errorCode(task.getResult());
-                if ("OTP_USED".equals(err)) recoverPaymentAndIntent();
+                if ("OTP_USED".equals(err)) recoverPaymentAndIntent(true, true);
                 else checkoutStatus(errorMessage(task.getResult(), "Mã xác nhận bị từ chối"));
             }
         });
@@ -627,25 +913,30 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
 
     private void commitPayment() {
         if (busy || completed || currentBillId == null || requestId == null) return;
-        if (paymentSheet == null) {
-            checkoutStatus("Thiếu STRIPE_PUBLISHABLE_KEY (pk_test_...) trong local.properties. Thêm key rồi cài lại bản debug.");
-            return;
-        }
         commitPending = true;
         setBusy(true);
         renderCheckoutStep();
-        checkoutStatus("Đang tiến hành thanh toán & ghi sổ…");
+        checkoutStatus("Đang mở Stripe Sandbox…");
 
         try {
-            JSONObject body = new JSONObject()
+            String body = new JSONObject()
                     .put("billId", currentBillId)
-                    .put("requestId", requestId);
+                    .put("requestId", requestId)
+                    .toString();
 
-            api.post("/payments", body.toString()).addOnCompleteListener(task -> {
+            api.post("/payments", body).continueWithTask(task -> {
+                BackendApiClient.Response response = task.isSuccessful() ? task.getResult() : null;
+                if (response != null && (response.statusCode < 500 || "SETUP_REQUIRED".equals(errorCode(response)))) {
+                    return Tasks.forResult(response);
+                }
+                // Reuse the same request ID if the first Stripe request may have reached the backend.
+                return api.post("/payments", body);
+            }).addOnCompleteListener(task -> {
                 if (!isAdded() || binding == null) return;
                 setBusy(false);
                 if (!task.isSuccessful() || task.getResult() == null || task.getResult().statusCode >= 500) {
-                    checkoutStatus("Chưa có kết quả cuối cùng từ đối tác. Bấm kiểm tra lại (COMMIT_PENDING).");
+                    checkoutStatus(errorMessage(task.isSuccessful() ? task.getResult() : null,
+                            "Chưa có kết quả cuối cùng từ Stripe. Bấm kiểm tra lại"));
                     renderCheckoutStep();
                     return;
                 }
@@ -658,12 +949,27 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                             finishPaymentSuccess();
                             return;
                         }
-                        String clientSecret = p.optString("clientSecret", "");
-                        if (!clientSecret.isEmpty()) {
+                        if ("FAILED".equals(status)) {
+                            commitPending = false;
+                            checkoutStatus("Stripe từ chối thanh toán · " + p.optString("failureCode"));
                             renderCheckoutStep();
-                            checkoutStatus("Nhập thông tin thẻ test trong Stripe để hoàn tất thanh toán.");
-                            paymentSheet.presentWithPaymentIntent(clientSecret,
-                                    new PaymentSheet.Configuration.Builder("Nimbus Bank").build());
+                            return;
+                        }
+                        String clientSecret = p.optString("clientSecret", "");
+                        if (!p.isNull("clientSecret") && !clientSecret.isEmpty()) {
+                            if (paymentSheet == null) {
+                                checkoutStatus("Thiếu khóa Stripe Sandbox để tiếp tục thanh toán thẻ.");
+                                return;
+                            }
+                            PaymentSheet.Configuration.Builder configuration =
+                                    new PaymentSheet.Configuration.Builder("Nimbus Bank");
+                            if (!p.isNull("customerId") && !p.isNull("customerSessionClientSecret")) {
+                                configuration.customer(PaymentSheet.CustomerConfiguration.Companion
+                                        .createWithCustomerSession(p.getString("customerId"),
+                                                p.getString("customerSessionClientSecret")));
+                            }
+                            checkoutStatus("Chọn thẻ đã lưu hoặc nhập thẻ test để thanh toán.");
+                            paymentSheet.presentWithPaymentIntent(clientSecret, configuration.build());
                             return;
                         }
                     } catch (Exception ignored) { }
@@ -673,7 +979,11 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                 }
                 commitPending = false;
                 String code = errorCode(response);
-                if ("PAYMENT_IN_PROGRESS".equals(code) || "INVALID_AMOUNT".equals(code)) {
+                if ("PAYMENT_IN_PROGRESS".equals(code)) {
+                    showPaymentConflict();
+                    return;
+                }
+                if ("INVALID_AMOUNT".equals(code)) {
                     preparePaymentIntent();
                     return;
                 }
@@ -686,6 +996,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
             });
         } catch (Exception e) {
             setBusy(false);
+            renderCheckoutStep();
             checkoutStatus("Không thể tạo yêu cầu ghi sổ thanh toán.");
         }
     }
@@ -696,7 +1007,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         commitPending = true;
         renderCheckoutStep();
         if (result instanceof PaymentSheetResult.Completed) {
-            checkoutStatus("Stripe đã xác nhận thẻ. Đang đợi webhook cập nhật hóa đơn…");
+            checkoutStatus("Đã đóng Stripe PaymentSheet. Đang chờ webhook cập nhật hóa đơn…");
             settlementPollsRemaining = 20;
             recoverPaymentAndIntent();
         } else if (result instanceof PaymentSheetResult.Canceled) {
@@ -734,6 +1045,11 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                 authoritativeAmount = intent.optLong("amountMinor", authoritativeAmount);
                 authoritativeFee = intent.optLong("feeMinor", authoritativeFee);
                 authoritativeCurrency = intent.optString("currency", authoritativeCurrency);
+                if ("STRIPE_TREASURY".equals(intent.optString("provider"))) {
+                    binding.checkoutReferenceText.setText("Mã hóa đơn / tham chiếu: " + currentReference
+                            + "\nTài khoản thanh toán: " + intent.optString("sourceId")
+                            + "\nTỷ giá demo 1 USD = 25.000 ₫");
+                }
                 JSONObject tgt = intent.optJSONObject("target");
                 if (tgt != null) authoritativeTarget = tgt.optString("id", authoritativeTarget);
 
@@ -823,11 +1139,31 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
 
     private void returnToHub() {
         if (binding == null) return;
+        if (otpTimer != null) {
+            otpTimer.cancel();
+            otpTimer = null;
+        }
         binding.checkoutContainer.setVisibility(View.GONE);
         binding.hubSelectionContainer.setVisibility(View.VISIBLE);
         binding.hubMainTitle.setText("Tiện ích & Thanh toán");
-        binding.hubSubtitle.setText("Thanh toán hóa đơn thiết yếu, nạp tiền điện thoại & dịch vụ");
+        currentBillId = null;
+        requestId = null;
+        intentId = null;
+        challengeId = null;
+        faceRequired = false;
+        faceVerified = false;
+        commitPending = false;
+        preparingPreviously = false;
+        authoritativeAmount = 0;
+        authoritativeFee = 0;
+        authoritativeTarget = "";
+        binding.hubSubtitle.setVisibility(View.GONE);
         loadOwnedBills();
+    }
+
+    private void showPaymentConflict() {
+        returnToHub();
+        hubStatus("Hóa đơn đang có giao dịch Stripe test. Chọn lại hóa đơn để kiểm tra kết quả.");
     }
 
     private void finishPaymentSuccess() {
@@ -838,9 +1174,9 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         binding.checkoutOtpStepContainer.setVisibility(View.GONE);
         binding.checkoutCommitContainer.setVisibility(View.GONE);
         binding.checkoutSuccessContainer.setVisibility(View.VISIBLE);
-        binding.receiptAmountDisplay.setText(ReadSummaryFormatter.money(authoritativeAmount + authoritativeFee) + " " + authoritativeCurrency);
+        binding.receiptAmountDisplay.setText(ReadSummaryFormatter.formatCurrency(authoritativeAmount + authoritativeFee, authoritativeCurrency));
         binding.receiptDetailsText.setText("Dịch vụ: " + currentServiceName + "\nTham chiếu: " + currentReference +
-                "\nMã giao dịch: " + intentId + "\nTrạng thái: ĐÃ QUYẾT TOÁN THÀNH CÔNG (SETTLED)");
+                "\nMã thanh toán: " + intentId + "\nStripe Sandbox đã xác nhận thanh toán.");
         checkoutStatus("");
     }
 
@@ -854,10 +1190,12 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         this.busy = busy;
         if (binding != null) {
             binding.btnProceedTopup.setEnabled(!busy);
+            binding.topupCarrierPicker.setEnabled(!busy);
+            binding.pendingOrderButton.setEnabled(!busy);
+            binding.orderHistoryButton.setEnabled(!busy);
             binding.lookupButton.setEnabled(!busy);
             binding.checkoutBtnFace.setEnabled(!busy);
             binding.checkoutBtnVerifyOtp.setEnabled(!busy && challengeId != null);
-            binding.checkoutBtnCommitPay.setEnabled(!busy);
             binding.checkoutBtnRecover.setEnabled(!busy);
         }
     }
@@ -875,6 +1213,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     private String errorMessage(BackendApiClient.Response response, String fallback) {
         String code = errorCode(response);
         switch (code) {
+            case "SETUP_REQUIRED": return "Máy chủ chưa được cấu hình Stripe Sandbox.";
             case "INVALID_OTP": return "Mã xác nhận không đúng. Vui lòng kiểm tra lại.";
             case "OTP_EXPIRED": return "Mã xác nhận đã hết hạn (OTP_EXPIRED). Tạo mã mới.";
             case "OTP_LOCKED": return "Đã nhập sai quá 5 lần, giao dịch bị khóa (OTP_LOCKED). Hủy để tạo lại.";

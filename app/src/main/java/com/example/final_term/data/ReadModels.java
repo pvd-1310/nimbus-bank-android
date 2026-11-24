@@ -15,6 +15,7 @@ public final class ReadModels {
         public final String status;
         public final String ownerUid;
         public final Long availableMinor;
+        public final boolean demo;
 
         public AccountSummary(@NonNull String id, String type, String currency, long balanceMinor, String status) {
             this(id, type, currency, balanceMinor, status, "");
@@ -27,6 +28,11 @@ public final class ReadModels {
 
         public AccountSummary(@NonNull String id, String type, String currency, long balanceMinor,
                               String status, String ownerUid, Long availableMinor) {
+            this(id, type, currency, balanceMinor, status, ownerUid, availableMinor, false);
+        }
+
+        public AccountSummary(@NonNull String id, String type, String currency, long balanceMinor,
+                              String status, String ownerUid, Long availableMinor, boolean demo) {
             this.id = id;
             this.type = type == null ? "UNKNOWN" : type;
             this.currency = currency == null ? "" : currency;
@@ -34,6 +40,7 @@ public final class ReadModels {
             this.status = status == null ? "UNKNOWN" : status;
             this.ownerUid = ownerUid == null ? "" : ownerUid;
             this.availableMinor = availableMinor;
+            this.demo = demo;
         }
     }
 
@@ -68,8 +75,16 @@ public final class ReadModels {
         }
 
         public boolean isBillPayment() { return "BILL_PAYMENT".equals(type); }
-        public boolean isOutgoing() { return isBillPayment() || "INTERNAL_TRANSFER".equals(type) || "DEBIT".equals(type); }
-        public boolean isIncoming() { return "TRANSFER_RECEIVED".equals(type) || "CREDIT".equals(type); }
+        public boolean isStripeSandbox() { return "STRIPE_CREDIT".equals(type) || "STRIPE_DEBIT".equals(type); }
+        public boolean isOutgoing() {
+            return isBillPayment() || "INTERNAL_TRANSFER".equals(type) || "DEBIT".equals(type)
+                    || "DEMO_EXTERNAL_TRANSFER".equals(type) || "DEMO_WITHDRAWAL".equals(type)
+                    || "STRIPE_DEBIT".equals(type);
+        }
+        public boolean isIncoming() {
+            return "TRANSFER_RECEIVED".equals(type) || "CREDIT".equals(type) || "DEMO_DEPOSIT".equals(type)
+                    || "STRIPE_CREDIT".equals(type);
+        }
     }
 
     public static final class NotificationSummary {

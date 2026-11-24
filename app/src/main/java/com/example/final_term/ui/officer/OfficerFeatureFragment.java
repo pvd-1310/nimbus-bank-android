@@ -10,7 +10,6 @@ import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.EditText;
-import android.widget.RadioGroup;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -30,6 +29,7 @@ import com.example.final_term.data.BackendApiClient;
 import com.example.final_term.databinding.FragmentOfficerFeatureBinding;
 
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
@@ -433,47 +433,64 @@ public final class OfficerFeatureFragment extends Fragment {
         });
     }
 
+    private int auditLoadGeneration;
+
     private void renderAuditLogs(BackendApiClient api) {
-        binding.actionButton.setVisibility(View.GONE);
         binding.filterScroll.setVisibility(View.VISIBLE);
         binding.chipAll.setText("Tất cả");
         binding.chipFilter1.setText("Giao dịch");
         binding.chipFilter2.setText("Cập nhật KH");
+        binding.chipAll.setOnClickListener(v -> loadAuditPage(api, "", null));
+        binding.chipFilter1.setOnClickListener(v -> loadAuditPage(api, "TRANSFER_COMMIT", null));
+        binding.chipFilter2.setOnClickListener(v -> loadAuditPage(api, "CUSTOMER_UPDATE", null));
+        loadAuditPage(api, "", null);
+    }
 
-        api.get("/officer/audit").addOnCompleteListener(task -> {
-            if (!isAdded()) return;
-            requireActivity().runOnUiThread(() -> {
-                boolean hasItems = false;
-                if (task.isSuccessful() && task.getResult() != null && task.getResult().statusCode == 200) {
-                    try {
-                        JSONObject json = new JSONObject(task.getResult().body);
-                        JSONArray items = json.optJSONArray("items");
-                        if (items != null && items.length() > 0) {
-                            hasItems = true;
-                            for (int i = 0; i < items.length(); i++) {
-                                JSONObject item = items.getJSONObject(i);
-                                addAuditRow(
-                                        item.optString("action", "TRANSFER"),
-                                        item.optString("actorUid", "system"),
-                                        item.optString("targetUid", "customer"),
-                                        item.optString("createdAt", "Gần đây")
-                                );
-                            }
-                        }
-                    } catch (Exception ignored) {}
+    private void loadAuditPage(BackendApiClient api, String action, String cursor) {
+        var current = binding;
+        int generation = ++auditLoadGeneration;
+        if (cursor == null) current.itemsContainer.removeAllViews();
+        current.statusText.setText("Đang tải audit…");
+        current.actionButton.setVisibility(View.VISIBLE);
+        current.actionButton.setEnabled(false);
+        String path = "/officer/audit?limit=25";
+        if (!action.isEmpty()) path += "&action=" + action;
+        if (cursor != null) path += "&cursor=" + android.net.Uri.encode(cursor);
+        api.get(path).addOnCompleteListener(task -> {
+            if (binding != current || generation != auditLoadGeneration) return;
+            current.actionButton.setEnabled(true);
+            try {
+                if (!task.isSuccessful() || task.getResult().statusCode != 200)
+                    throw new JSONException("Unavailable");
+                JSONObject json = new JSONObject(task.getResult().body);
+                JSONArray items = json.getJSONArray("items");
+                for (int i = 0; i < items.length(); i++) {
+                    JSONObject item = items.getJSONObject(i);
+                    String timestamp = item.has("timestamp") ? new java.util.Date(item.getLong("timestamp")).toString()
+                            : "Chưa có thời gian";
+                    addAuditRow(item.optString("action"), item.optString("actorUid"),
+                            item.optString("resourceId"), timestamp + "\nMã yêu cầu: "
+                                    + item.optString("requestId", "—"), item.optJSONObject("beforeAfterSummary"));
                 }
-
-                if (!hasItems) {
-                    addAuditRow("TRANSFER_COMMIT", "c-user-01", "acc-checking-01", "10:14 · Nạp tiền");
-                    addAuditRow("CUSTOMER_UPDATE", "officer-admin", "c-user-02", "09:30 · Đổi tên");
-                    addAuditRow("RATE_POLICY_UPDATE", "officer-admin", "savings", "08:00 · Lãi suất 5.8%");
-                    addAuditRow("AUTH_LOGIN", "c-user-01", "auth-session", "07:55 · Đăng nhập");
+                current.statusText.setText(items.length() == 0 && cursor == null
+                        ? "Chưa có sự kiện audit cho bộ lọc này." : "Đã tải audit từ backend.");
+                if (!json.isNull("nextCursor")) {
+                    String next = json.getString("nextCursor");
+                    current.actionButton.setText("Tải thêm");
+                    current.actionButton.setOnClickListener(v -> loadAuditPage(api, action, next));
+                } else {
+                    current.actionButton.setVisibility(View.GONE);
                 }
-            });
+            } catch (JSONException error) {
+                current.statusText.setText(task.isSuccessful() && task.getResult().statusCode == 403
+                        ? "Bạn chưa có quyền xem audit." : "Không tải được audit từ backend.");
+                current.actionButton.setText("Thử lại");
+                current.actionButton.setOnClickListener(v -> loadAuditPage(api, action, cursor));
+            }
         });
     }
 
-    private void addAuditRow(String action, String actor, String target, String time) {
+    private void addAuditRow(String action, String actor, String target, String time, JSONObject summary) {
         View row = LayoutInflater.from(requireContext()).inflate(R.layout.item_transaction_row, binding.itemsContainer, false);
         TextView title = row.findViewById(R.id.title_text);
         TextView subtitle = row.findViewById(R.id.subtitle_text);
@@ -486,7 +503,7 @@ public final class OfficerFeatureFragment extends Fragment {
 
         row.setOnClickListener(v -> new AlertDialog.Builder(requireContext())
                 .setTitle("Chi tiết Audit Log")
-                .setMessage("Hành động: " + action + "\nActor: " + actor + "\nTarget: " + target + "\nThời gian: " + time + "\n\nNhật ký này bất biến và lưu vết toàn bộ can thiệp vào cơ sở dữ liệu.")
+                .setMessage("Hành động: " + action + "\nActor: " + actor + "\nTarget: " + target + "\nThời gian: " + time + "")
                 .setPositiveButton("Đóng", null)
                 .show());
 
@@ -498,8 +515,28 @@ public final class OfficerFeatureFragment extends Fragment {
         binding.actionButton.setVisibility(View.VISIBLE);
         binding.actionButton.setText("Cập nhật chính sách lãi suất");
 
-        addRatePolicyCard("Tiết kiệm có kỳ hạn (SAVINGS)", "savings", "5.80% / năm", "580 bps", "Phiên bản: v1", "Hiệu lực: Đang áp dụng");
-        addRatePolicyCard("Vay thế chấp mua nhà (MORTGAGE)", "mortgage", "8.50% / năm", "850 bps", "Phiên bản: v1", "Hiệu lực: Đang áp dụng");
+        var current = binding;
+        current.itemsContainer.removeAllViews();
+        current.statusText.setText("Đang tải chính sách lãi suất…");
+        api.get("/officer/rate-policies?limit=100").addOnCompleteListener(task -> {
+            if (binding != current) return;
+            try {
+                if (!task.isSuccessful() || task.getResult().statusCode != 200)
+                    throw new JSONException("Unavailable");
+                JSONArray items = new JSONObject(task.getResult().body).getJSONArray("items");
+                for (int i = 0; i < items.length(); i++) {
+                    JSONObject policy = items.getJSONObject(i);
+                    int bps = policy.getInt("annualRateBasisPoints");
+                    String product = policy.optString("productId");
+                    addRatePolicyCard(product, policy.optString("id"), bps / 100.0 + "% / năm",
+                            bps + " bps", "Phiên bản " + policy.optInt("version"),
+                            "Hiệu lực từ " + new java.util.Date(policy.optLong("effectiveFrom")));
+                }
+                current.statusText.setText(items.length() == 0 ? "Chưa có chính sách lãi suất." : "Chính sách từ backend.");
+            } catch (JSONException error) {
+                current.statusText.setText("Không tải được chính sách lãi suất.");
+            }
+        });
 
         binding.actionButton.setOnClickListener(v -> showCreateRatePolicyDialog(api));
     }
@@ -528,18 +565,10 @@ public final class OfficerFeatureFragment extends Fragment {
         prodLabel.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
         layout.addView(prodLabel);
 
-        RadioGroup rg = new RadioGroup(requireContext());
-        android.widget.RadioButton rbSavings = new android.widget.RadioButton(requireContext());
-        rbSavings.setText("Tiết kiệm (savings)");
-        rbSavings.setId(View.generateViewId());
-        rbSavings.setChecked(true);
-        rg.addView(rbSavings);
-
-        android.widget.RadioButton rbMortgage = new android.widget.RadioButton(requireContext());
-        rbMortgage.setText("Thế chấp (mortgage)");
-        rbMortgage.setId(View.generateViewId());
-        rg.addView(rbMortgage);
-        layout.addView(rg);
+        EditText product = new EditText(requireContext());
+        product.setHint("Mã sản phẩm trong danh sách");
+        product.setSingleLine(true);
+        layout.addView(product);
 
         TextView rateLabel = new TextView(requireContext());
         rateLabel.setText("Lãi suất năm (%):");
@@ -565,12 +594,17 @@ public final class OfficerFeatureFragment extends Fragment {
                     try {
                         double ratePercent = Double.parseDouble(rateVal);
                         int basisPoints = (int) Math.round(ratePercent * 100);
-                        String selectedProduct = rg.getCheckedRadioButtonId() == rbSavings.getId() ? "savings" : "mortgage";
+                        String selectedProduct = product.getText().toString().trim();
+                        if (selectedProduct.isEmpty() || !Double.isFinite(ratePercent)
+                                || ratePercent < 0 || ratePercent > 100) {
+                            Toast.makeText(requireContext(), "Nhập mã sản phẩm và lãi suất từ 0 đến 100%.", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
 
                         JSONObject req = new JSONObject();
                         req.put("productId", selectedProduct);
                         req.put("annualRateBasisPoints", basisPoints);
-                        req.put("effectiveFrom", System.currentTimeMillis() / 1000);
+                        req.put("effectiveFrom", System.currentTimeMillis() + 60_000L);
 
                         api.post("/officer/rate-policies", req.toString()).addOnCompleteListener(task -> {
                             if (!isAdded()) return;
@@ -579,7 +613,7 @@ public final class OfficerFeatureFragment extends Fragment {
                                     Toast.makeText(requireContext(), "Đã ban hành chính sách lãi suất " + ratePercent + "% cho " + selectedProduct, Toast.LENGTH_LONG).show();
                                     renderRatePolicies(api);
                                 } else {
-                                    Toast.makeText(requireContext(), "Gửi chính sách thành công (Lưu trữ phiên)", Toast.LENGTH_SHORT).show();
+                                    Toast.makeText(requireContext(), "Backend chưa xác nhận cập nhật chính sách", Toast.LENGTH_SHORT).show();
                                 }
                             });
                         });

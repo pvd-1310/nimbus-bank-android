@@ -26,6 +26,19 @@
     <string name="officer_actions">Tác vụ nghiệp vụ</string>
     <string name="coming_soon">Đang chuẩn bị</string>
 
+    <string name="utility_grid_title">Tiện ích cuộc sống</string>
+    <string name="utility_see_all">Xem tất cả</string>
+    <string name="utility_electricity">Tiền điện</string>
+    <string name="utility_water">Tiền nước</string>
+    <string name="utility_mobile">Nạp ĐT</string>
+    <string name="utility_flight">Vé máy bay</string>
+    <string name="utility_movie">Vé xem phim</string>
+    <string name="utility_hotel">Khách sạn</string>
+    <string name="utility_shopping">Mua sắm</string>
+    <string name="utility_all">Tất cả</string>
+    <string name="utility_internet">Internet &amp; Dịch vụ</string>
+    <string name="utility_pending_order">Kiểm tra đơn demo đang tạo</string>
+
     <!-- Navigation Labels -->
     <string name="nav_home">Trang chủ</string>
     <string name="nav_wallet">Ví</string>

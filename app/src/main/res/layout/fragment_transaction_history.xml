@@ -128,6 +128,14 @@
         </ScrollView>
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/load_more_button"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Tải thêm giao dịch"
+            android:visibility="gone" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/retry_button"
             android:layout_width="match_parent"
             android:layout_height="48dp"

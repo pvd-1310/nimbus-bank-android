@@ -51,6 +51,8 @@ export function registerOrdersRoutes(route: Route, d: AppDependencies) {
       }
       const product = await t.get("catalog/" + x.productId);
       check(product?.active && product.demo === true, "PRODUCT_UNAVAILABLE");
+      if (product.serviceType === "TOPUP")
+        check(/^0[0-9]{9}$/.test(x.customerDetails), "INVALID_TOPUP_PHONE");
       const amountMinor = product.amountMinor * x.quantity;
       if (x.expectedAmountMinor !== undefined || x.expectedCurrency !== undefined)
         check(amountMinor === x.expectedAmountMinor && product.currency === x.expectedCurrency, "REQUOTE_REQUIRED", 409);
