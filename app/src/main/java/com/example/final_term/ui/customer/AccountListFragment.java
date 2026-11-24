@@ -12,6 +12,7 @@ import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.HorizontalScrollView;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -32,6 +33,7 @@ import com.example.final_term.data.ReadModels;
 import com.example.final_term.data.ReadSummaryFormatter;
 import com.example.final_term.databinding.FragmentAccountListBinding;
 import com.example.final_term.ui.utilities.UtilitiesHubDialogFragment;
+import com.example.final_term.ui.common.SignatureBarChartView;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
@@ -42,6 +44,9 @@ import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Calendar;
+import java.util.Date;
+import java.text.DateFormat;
 import java.util.UUID;
 
 public final class AccountListFragment extends Fragment {
@@ -62,6 +67,14 @@ public final class AccountListFragment extends Fragment {
     private int activeNavItem = R.id.nav_accounts;
     private String pendingProvisionKey;
     private String pendingProvisionRequestId;
+    private String walletStripeAccountId;
+    private Long walletStripeBalanceMinor;
+    private String walletStripeCurrency = "USD";
+    private boolean walletStripeLoading;
+    private boolean walletStripeLoaded;
+    private boolean walletBillsLoading;
+    private boolean walletBillsLoaded;
+    private final List<JSONObject> walletUpcomingBills = new ArrayList<>();
 
     @Nullable
     @Override
@@ -205,11 +218,202 @@ public final class AccountListFragment extends Fragment {
     }
 
     private void renderCustomerWallet() {
-        renderCustomerCards();
+        ReadModels.AccountSummary checking = null;
+        if (accounts != null) {
+            for (ReadModels.AccountSummary account : accounts) {
+                if ("CHECKING".equalsIgnoreCase(account.type) && "ACTIVE".equalsIgnoreCase(account.status)) {
+                    checking = account;
+                    break;
+                }
+            }
+        }
+        if (checking != null) loadWalletBalance(checking);
+        else {
+            walletStripeAccountId = null;
+            walletStripeBalanceMinor = null;
+            walletStripeLoading = false;
+            walletStripeLoaded = false;
+        }
+        if (!walletBillsLoaded && !walletBillsLoading) loadWalletBills();
+
+        addWalletSectionTitle("Tài khoản thanh toán");
+        LinearLayout balanceCard = walletCard();
+        TextView label = walletText("Số dư khả dụng", 13, R.color.ink_muted, false);
+        balanceCard.addView(label);
+        TextView amount = walletText(checking == null ? "Chưa có tài khoản thanh toán"
+                : walletStripeBalanceMinor == null ? "—"
+                : ReadSummaryFormatter.formatCurrency(walletStripeBalanceMinor, walletStripeCurrency), 27, R.color.ink, true);
+        amount.setPadding(0, dp(8), 0, dp(4));
+        balanceCard.addView(amount);
+        if (checking != null) {
+            TextView accountName = walletText("Tài khoản thanh toán mặc định", 12, R.color.ink_muted, false);
+            balanceCard.addView(accountName);
+        }
+        binding.content.addView(balanceCard);
+
+        addWalletSectionTitle("Hoạt động thu nhập · 7 ngày");
+        LinearLayout activityCard = walletCard();
+        long[] daily = new long[7];
+        long thisWeek = 0;
+        long previousWeek = 0;
+        boolean hasPreviousWeekActivity = false;
+        Calendar today = Calendar.getInstance();
+        today.set(Calendar.HOUR_OF_DAY, 0); today.set(Calendar.MINUTE, 0);
+        today.set(Calendar.SECOND, 0); today.set(Calendar.MILLISECOND, 0);
+        Calendar weekStart = (Calendar) today.clone();
+        int dayOffset = (weekStart.get(Calendar.DAY_OF_WEEK) + 5) % 7;
+        weekStart.add(Calendar.DAY_OF_MONTH, -dayOffset);
+        Calendar previousStart = (Calendar) weekStart.clone(); previousStart.add(Calendar.DAY_OF_MONTH, -7);
+        Calendar nextWeekStart = (Calendar) weekStart.clone(); nextWeekStart.add(Calendar.DAY_OF_MONTH, 7);
+        if (transactions != null) for (ReadModels.TransactionSummary transaction : transactions) {
+            if (!transaction.isIncoming() || !("SETTLED".equalsIgnoreCase(transaction.status)
+                    || "SUCCEEDED".equalsIgnoreCase(transaction.status)) || transaction.createdAt == null) continue;
+            long timestamp = transaction.createdAt.toDate().getTime();
+            if (timestamp >= previousStart.getTimeInMillis() && timestamp < weekStart.getTimeInMillis()) {
+                previousWeek += transaction.amountMinor;
+                hasPreviousWeekActivity = true;
+            } else if (timestamp >= weekStart.getTimeInMillis() && timestamp < nextWeekStart.getTimeInMillis()) {
+                Calendar transactionDay = Calendar.getInstance();
+                transactionDay.setTimeInMillis(timestamp);
+                int index = (transactionDay.get(Calendar.DAY_OF_WEEK) + 5) % 7;
+                daily[index] += transaction.amountMinor;
+                thisWeek += transaction.amountMinor;
+            }
+        }
+        TextView weekTotal = walletText(ReadSummaryFormatter.formatCurrency(thisWeek, "VND"), 19, R.color.ink, true);
+        activityCard.addView(weekTotal);
+        if (hasPreviousWeekActivity && previousWeek > 0) {
+            double change = ((double) thisWeek - previousWeek) * 100d / previousWeek;
+            TextView comparison = walletText(String.format(Locale.getDefault(), "%+.0f%% so với tuần trước", change),
+                    12, change >= 0 ? R.color.navy : R.color.ink_muted, false);
+            comparison.setPadding(0, dp(3), 0, dp(8));
+            activityCard.addView(comparison);
+        }
+        float[] chartValues = new float[7];
+        long maxDaily = 0;
+        for (long value : daily) maxDaily = Math.max(maxDaily, value);
+        if (maxDaily > 0) for (int i = 0; i < daily.length; i++) chartValues[i] = (float) daily[i] / maxDaily;
+        int selectedDay = Math.max(0, Math.min(6, (today.get(Calendar.DAY_OF_WEEK) + 5) % 7));
+        SignatureBarChartView chart = new SignatureBarChartView(requireContext());
+        chart.setValues(chartValues, selectedDay);
+        LinearLayout.LayoutParams chartParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(120));
+        chartParams.topMargin = dp(8);
+        activityCard.addView(chart, chartParams);
+        binding.content.addView(activityCard);
+
+        addWalletSectionTitle("Hóa đơn sắp đến hạn");
+        if (walletUpcomingBills.isEmpty()) {
+            TextView emptyBills = walletText(walletBillsLoading ? "Đang tải hóa đơn…" : "Không có hóa đơn sắp đến hạn.",
+                    13, R.color.ink_muted, false);
+            emptyBills.setPadding(dp(16), dp(8), dp(16), dp(16));
+            binding.content.addView(emptyBills);
+        } else {
+            LinearLayout row = new LinearLayout(requireContext());
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            for (JSONObject bill : walletUpcomingBills) row.addView(createUpcomingBillCard(bill));
+            HorizontalScrollView horizontal = new HorizontalScrollView(requireContext());
+            horizontal.setFillViewport(false);
+            horizontal.setHorizontalScrollBarEnabled(false);
+            horizontal.addView(row);
+            binding.content.addView(horizontal);
+        }
         MaterialButton bills = new MaterialButton(requireContext());
         bills.setText("Xem hóa đơn và tiện ích");
         bills.setOnClickListener(v -> new UtilitiesHubDialogFragment().show(getChildFragmentManager(), "UtilitiesHub"));
-        binding.content.addView(bills);
+        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        buttonParams.topMargin = dp(10);
+        binding.content.addView(bills, buttonParams);
+    }
+
+    private void loadWalletBalance(ReadModels.AccountSummary account) {
+        if (walletStripeLoading || account.id.equals(walletStripeAccountId) && walletStripeLoaded) return;
+        if (!account.id.equals(walletStripeAccountId)) {
+            walletStripeLoaded = false;
+            walletStripeBalanceMinor = null;
+        }
+        walletStripeAccountId = account.id;
+        walletStripeLoading = true;
+        var current = binding;
+        String requestedUid = uid;
+        application.getAppContainer().getBackendApiClient()
+                .get("/accounts/" + android.net.Uri.encode(account.id) + "/stripe-sandbox")
+                .addOnCompleteListener(task -> {
+                    if (binding != current || !java.util.Objects.equals(uid, requestedUid)) return;
+                    walletStripeLoading = false;
+                    walletStripeLoaded = true;
+                    try {
+                        if (!task.isSuccessful() || task.getResult().statusCode != 200) throw new org.json.JSONException("Unavailable");
+                        JSONObject result = new JSONObject(task.getResult().body);
+                        if (result.has("availableMinor")) {
+                            walletStripeBalanceMinor = result.getLong("availableMinor");
+                            walletStripeCurrency = result.optString("currency", "USD").toUpperCase(Locale.ROOT);
+                        }
+                    } catch (Exception ignored) { walletStripeBalanceMinor = null; }
+                    renderAll();
+                });
+    }
+
+    private void loadWalletBills() {
+        walletBillsLoading = true;
+        var current = binding;
+        String requestedUid = uid;
+        application.getAppContainer().getBackendApiClient().get("/bills").addOnCompleteListener(task -> {
+            if (binding != current || !java.util.Objects.equals(uid, requestedUid)) return;
+            walletBillsLoading = false;
+            walletBillsLoaded = true;
+            walletUpcomingBills.clear();
+            try {
+                if (!task.isSuccessful() || task.getResult().statusCode != 200) throw new org.json.JSONException("Unavailable");
+                JSONArray items = new JSONObject(task.getResult().body).optJSONArray("items");
+                long now = System.currentTimeMillis();
+                if (items != null) for (int i = 0; i < items.length(); i++) {
+                    JSONObject bill = items.getJSONObject(i);
+                    long dueAt = bill.optLong("dueAt", 0L);
+                    if ("UNPAID".equalsIgnoreCase(bill.optString("status")) && dueAt > now
+                            && (bill.isNull("quoteExpiresAt") || bill.optLong("quoteExpiresAt") > now)) walletUpcomingBills.add(bill);
+                }
+                walletUpcomingBills.sort((a, b) -> Long.compare(a.optLong("dueAt"), b.optLong("dueAt")));
+            } catch (Exception ignored) { walletUpcomingBills.clear(); }
+            renderAll();
+        });
+    }
+
+    private LinearLayout createUpcomingBillCard(JSONObject bill) {
+        LinearLayout card = walletCard();
+        LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(dp(230), ViewGroup.LayoutParams.WRAP_CONTENT);
+        cardParams.rightMargin = dp(10);
+        card.setLayoutParams(cardParams);
+        TextView provider = walletText(bill.optString("provider", "Hóa đơn"), 14, R.color.ink, true);
+        card.addView(provider);
+        String due = DateFormat.getDateInstance(DateFormat.MEDIUM, new Locale("vi", "VN"))
+                .format(new Date(bill.optLong("dueAt")));
+        TextView dueText = walletText("Đến hạn " + due, 12, R.color.ink_muted, false);
+        dueText.setPadding(0, dp(5), 0, dp(8)); card.addView(dueText);
+        card.addView(walletText(ReadSummaryFormatter.formatCurrency(bill.optLong("amountMinor"), bill.optString("currency", "VND")),
+                16, R.color.ink, true));
+        card.setClickable(true); card.setFocusable(true);
+        card.setOnClickListener(v -> UtilitiesHubDialogFragment.newInstance(bill.optString("id"))
+                .show(getChildFragmentManager(), "UtilitiesHub"));
+        return card;
+    }
+
+    private void addWalletSectionTitle(String title) {
+        TextView view = walletText(title, 16, R.color.ink, true);
+        view.setPadding(dp(2), dp(14), dp(2), dp(9)); binding.content.addView(view);
+    }
+
+    private LinearLayout walletCard() {
+        LinearLayout card = new LinearLayout(requireContext());
+        card.setOrientation(LinearLayout.VERTICAL); card.setBackgroundResource(R.drawable.glass_panel_card);
+        card.setPadding(dp(16), dp(16), dp(16), dp(16));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.bottomMargin = dp(8); card.setLayoutParams(params); return card;
+    }
+
+    private TextView walletText(String value, float size, int color, boolean bold) {
+        TextView text = new TextView(requireContext()); text.setText(value); text.setTextSize(size);
+        text.setTextColor(ContextCompat.getColor(requireContext(), color));
+        if (bold) text.setTypeface(null, android.graphics.Typeface.BOLD); return text;
     }
 
     private boolean isCustomerDirectory() {

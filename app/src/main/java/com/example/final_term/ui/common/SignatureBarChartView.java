@@ -19,8 +19,8 @@ public class SignatureBarChartView extends View {
     private final RectF barRect = new RectF();
 
     private final String[] days = {"T2", "T3", "T4", "T5", "T6", "T7", "CN"};
-    private final float[] heights = {0.35f, 0.55f, 0.40f, 0.85f, 0.60f, 0.45f, 0.30f};
-    private int selectedIndex = 3; // T5 is selected by default
+    private final float[] heights = new float[7];
+    private int selectedIndex = -1;
 
     public SignatureBarChartView(Context context) {
         super(context);
@@ -58,6 +58,16 @@ public class SignatureBarChartView extends View {
             this.selectedIndex = index;
             invalidate();
         }
+    }
+
+    public void setValues(float[] values, int selected) {
+        if (values != null) {
+            for (int i = 0; i < heights.length; i++) {
+                heights[i] = i < values.length ? Math.max(0f, Math.min(1f, values[i])) : 0f;
+            }
+        }
+        selectedIndex = selected >= 0 && selected < days.length ? selected : -1;
+        invalidate();
     }
 
     @Override
