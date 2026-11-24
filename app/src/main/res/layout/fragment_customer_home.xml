@@ -162,18 +162,6 @@
                         android:src="@drawable/ic_arrow_forward" />
                 </LinearLayout>
 
-                <Spinner
-                    android:id="@+id/balance_account_selector"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:background="@drawable/glass_pill_button"
-                    android:contentDescription="Chọn tài khoản xem số dư khả dụng"
-                    android:minHeight="36dp"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
-                    android:visibility="gone" />
-
                 <!-- Balance Display -->
                 <TextView
                     android:id="@+id/balance_text"
@@ -404,10 +392,14 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/chat_button"
-                style="@style/Widget.Material3.Button.TonalButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Trợ lý Nimbus" />
+                android:layout_marginTop="12dp"
+                android:background="@drawable/glass_pill_button"
+                android:text="Trợ lý Nimbus"
+                android:textColor="@color/navy_deep"
+                app:backgroundTint="@null"
+                app:cornerRadius="20dp" />
 
             <!-- Notifications Container for compatibility -->
             <LinearLayout

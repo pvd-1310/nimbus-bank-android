@@ -4,8 +4,6 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -32,14 +30,13 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 public final class CustomerHomeFragment extends Fragment {
     private FragmentCustomerHomeBinding binding;
     private final List<ReadModels.AccountSummary> balanceAccounts = new ArrayList<>();
     private String selectedAccountId;
-    private String stripeActivityFingerprint = "";
+    private String currentBalanceCurrency = "VND";
     private boolean isBalanceHidden = false;
     private Long currentBalanceMinor = null;
     private int balanceRequest;
@@ -58,16 +55,6 @@ public final class CustomerHomeFragment extends Fragment {
             selectedAccountId = state.getString("balanceAccountId");
             isBalanceHidden = state.getBoolean("isBalanceHidden", false);
         }
-
-        binding.balanceAccountSelector.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View item, int position, long id) {
-                showAccountBalance(position);
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) { }
-        });
 
         binding.toggleBalanceButton.setOnClickListener(v -> {
             isBalanceHidden = !isBalanceHidden;
@@ -186,83 +173,81 @@ public final class CustomerHomeFragment extends Fragment {
         if (result.getData() == null) {
             balanceRequest++;
             currentBalanceMinor = null;
-            binding.balanceAccountSelector.setVisibility(View.GONE);
+            binding.accountStatusText.setVisibility(View.GONE);
             binding.balanceText.setText(result.getStatus() == ReadModelResult.Status.LOADING ? "Đang tải…" : "—");
-            binding.accountStatusText.setText(result.getMessage());
-            binding.accountStatusText.setVisibility(View.VISIBLE);
             return;
         }
         for (ReadModels.AccountSummary account : result.getData()) {
             if ("ACTIVE".equalsIgnoreCase(account.status)) balanceAccounts.add(account);
         }
-        balanceAccounts.sort(Comparator
-                .comparing((ReadModels.AccountSummary account) -> !"CHECKING".equalsIgnoreCase(account.type))
-                .thenComparing(account -> account.id));
+        balanceAccounts.sort((left, right) -> {
+            int paymentFirst = Boolean.compare(!"CHECKING".equalsIgnoreCase(left.type),
+                    !"CHECKING".equalsIgnoreCase(right.type));
+            return paymentFirst != 0 ? paymentFirst : left.id.compareTo(right.id);
+        });
 
         if (balanceAccounts.isEmpty()) {
             balanceRequest++;
             currentBalanceMinor = null;
-            binding.balanceAccountSelector.setVisibility(View.GONE);
             binding.balanceText.setText("—");
-            binding.accountStatusText.setText("Chưa có tài khoản hoạt động.");
-            binding.accountStatusText.setVisibility(View.VISIBLE);
+            binding.accountStatusText.setVisibility(View.GONE);
             return;
         }
-        List<String> labels = new ArrayList<>();
-        int selected = 0;
-        for (int i = 0; i < balanceAccounts.size(); i++) {
-            ReadModels.AccountSummary account = balanceAccounts.get(i);
-            labels.add(Phase2Presentation.accountTitle(account.type) + " (••" +
-                    (account.id.length() > 4 ? account.id.substring(account.id.length() - 4) : account.id) + ")");
-            if (account.id.equals(selectedAccountId)) selected = i;
+        ReadModels.AccountSummary paymentAccount = null;
+        for (ReadModels.AccountSummary account : balanceAccounts) {
+            if ("CHECKING".equalsIgnoreCase(account.type)) {
+                paymentAccount = account;
+                break;
+            }
         }
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_item, labels);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        binding.balanceAccountSelector.setAdapter(adapter);
-        binding.balanceAccountSelector.setSelection(selected, false);
-        binding.balanceAccountSelector.setVisibility(balanceAccounts.size() > 1 ? View.VISIBLE : View.GONE);
-        showAccountBalance(selected);
-    }
-
-    private void showAccountBalance(int position) {
-        if (binding == null || position < 0 || position >= balanceAccounts.size()) return;
-        ReadModels.AccountSummary account = balanceAccounts.get(position);
-        selectedAccountId = account.id;
-        loadStripeBalance(account.id);
+        if (paymentAccount == null) {
+            selectedAccountId = null;
+            currentBalanceMinor = null;
+            binding.balanceText.setText("—");
+            binding.accountStatusText.setVisibility(View.GONE);
+            return;
+        }
+        selectedAccountId = paymentAccount.id;
+        currentBalanceMinor = null;
+        currentBalanceCurrency = "USD";
+        binding.accountStatusText.setVisibility(View.GONE);
+        updateBalanceDisplay();
+        loadStripeBalance(paymentAccount.id);
     }
 
     private void loadStripeBalance(String accountId) {
-        var current = binding;
+        FragmentCustomerHomeBinding current = binding;
+        if (current == null) return;
         int request = ++balanceRequest;
         currentBalanceMinor = null;
+        currentBalanceCurrency = "USD";
+        current.accountStatusText.setVisibility(View.GONE);
         updateBalanceDisplay();
-        current.accountStatusText.setText("Đang tải số dư Stripe…");
-        current.accountStatusText.setVisibility(View.VISIBLE);
-        var app = (FinalTermApplication) requireActivity().getApplication();
+        FinalTermApplication app = (FinalTermApplication) requireActivity().getApplication();
         app.getAppContainer().getBackendApiClient()
                 .get("/accounts/" + android.net.Uri.encode(accountId) + "/stripe-sandbox")
                 .addOnCompleteListener(task -> {
                     if (binding != current || request != balanceRequest || !accountId.equals(selectedAccountId)) return;
+                    if (!task.isSuccessful() || task.getResult() == null || task.getResult().statusCode != 200) {
+                        current.accountStatusText.setVisibility(View.GONE);
+                        return;
+                    }
                     try {
-                        if (!task.isSuccessful() || task.getResult().statusCode != 200)
-                            throw new JSONException("Unavailable");
                         JSONObject snapshot = new JSONObject(task.getResult().body);
-                        if (!snapshot.has("availableMinor")) {
-                            current.accountStatusText.setText("unlinked".equals(snapshot.optString("status"))
-                                    ? "Chưa liên kết Stripe Sandbox" : "Đang thiết lập Stripe Sandbox");
-                            if ("pending".equals(snapshot.optString("status"))) {
-                                current.accountStatusText.postDelayed(() -> {
-                                    if (binding == current && isResumed() && request == balanceRequest)
-                                        loadStripeBalance(accountId);
-                                }, 5000);
-                            }
+                        if (snapshot.has("availableMinor")) {
+                            currentBalanceMinor = snapshot.getLong("availableMinor");
+                            currentBalanceCurrency = snapshot.optString("currency", "USD");
+                            updateBalanceDisplay();
                             return;
                         }
-                        currentBalanceMinor = snapshot.getLong("availableMinor");
-                        current.accountStatusText.setText("Stripe Sandbox · VND");
-                        updateBalanceDisplay();
-                    } catch (JSONException error) {
-                        current.accountStatusText.setText("Chưa đọc được số dư Stripe");
+                        if ("pending".equals(snapshot.optString("status"))) {
+                            current.accountStatusText.postDelayed(() -> {
+                                if (binding == current && isResumed() && request == balanceRequest)
+                                    loadStripeBalance(accountId);
+                            }, 5000);
+                        }
+                    } catch (JSONException ignored) {
+                        current.accountStatusText.setVisibility(View.GONE);
                     }
                 });
     }
@@ -270,8 +255,7 @@ public final class CustomerHomeFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        if (binding != null && !balanceAccounts.isEmpty() && selectedAccountId != null)
-            loadStripeBalance(selectedAccountId);
+        if (binding != null && selectedAccountId != null) loadStripeBalance(selectedAccountId);
     }
 
     private void updateBalanceDisplay() {
@@ -284,7 +268,8 @@ public final class CustomerHomeFragment extends Fragment {
             if (currentBalanceMinor == null) {
                 binding.balanceText.setText("—");
             } else {
-                binding.balanceText.setText(ReadSummaryFormatter.formatCurrency(currentBalanceMinor, "USD"));
+                binding.balanceText.setText(ReadSummaryFormatter.formatCurrency(currentBalanceMinor,
+                        currentBalanceCurrency));
             }
         }
     }
@@ -305,17 +290,9 @@ public final class CustomerHomeFragment extends Fragment {
             binding.recentTransactionsContent.addView(status);
         }
         List<ReadModels.TransactionSummary> stripeRows = new ArrayList<>();
-        StringBuilder activity = new StringBuilder();
         for (ReadModels.TransactionSummary row : result.getData()) {
             if (!row.isStripeSandbox()) continue;
             stripeRows.add(row);
-            if (row.accountId.equals(selectedAccountId))
-                activity.append(row.id).append(':').append(row.status).append(';');
-        }
-        String currentActivity = activity.toString();
-        if (!stripeActivityFingerprint.equals(currentActivity)) {
-            stripeActivityFingerprint = currentActivity;
-            if (selectedAccountId != null) loadStripeBalance(selectedAccountId);
         }
         if (stripeRows.isEmpty()) {
             TextView emptyText = new TextView(requireContext());
