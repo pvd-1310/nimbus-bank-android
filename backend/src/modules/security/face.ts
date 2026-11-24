@@ -45,7 +45,6 @@ export class FaceService {
     private similarity: number,
     private margin: number,
     private retentionMs: number,
-    private idSimilarity: number,
   ) {}
 
   async ready() {
@@ -117,22 +116,6 @@ export class FaceService {
         template.expiresAt,
       ]),
     );
-  }
-
-  async enrollMatched(
-    uid: string, requestId: string,
-    frontMime: string, frontImage: Buffer,
-    selfieMime: string, selfieImage: Buffer,
-    now: number,
-  ): Promise<Template> {
-    const portrait = await this.embedding(frontMime, frontImage);
-    const selfie = await this.embedding(selfieMime, selfieImage);
-    check(portrait.version === selfie.version, "FACE_TEMPLATE_OUTDATED", 409);
-    const similarity = selfie.embedding.reduce(
-      (sum, value, index) => sum + value * portrait.embedding[index], 0,
-    );
-    check(similarity >= this.idSimilarity, "FACE_ID_MISMATCH", 422);
-    return this.seal(uid, requestId, selfie, now);
   }
 
   async enroll(uid: string, requestId: string, mime: string, image: Buffer, now: number): Promise<Template> {

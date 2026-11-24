@@ -33,8 +33,7 @@ function faceProvider() {
   const similarity = z.coerce.number().gt(0).lt(1).parse(process.env.FACE_SIMILARITY ?? "0.55");
   const margin = z.coerce.number().gt(0).lt(similarity).parse(process.env.FACE_MIN_MARGIN ?? "0.08");
   const days = z.coerce.number().int().min(1).max(3650).parse(process.env.FACE_RETENTION_DAYS ?? "365");
-  const idSimilarity = z.coerce.number().gt(0).lt(1).parse(process.env.FACE_ID_SIMILARITY ?? "0.40");
-  return new FaceService(url.replace(/\/+$/, ""), Buffer.from(key, "hex"), similarity, margin, days * 86_400_000, idSimilarity);
+  return new FaceService(url.replace(/\/+$/, ""), Buffer.from(key, "hex"), similarity, margin, days * 86_400_000);
 }
 
 export function runtime() {

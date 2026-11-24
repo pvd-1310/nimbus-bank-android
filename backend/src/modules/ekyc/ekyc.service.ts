@@ -59,7 +59,7 @@ const imageFailures = new Set([
   "INVALID_IMAGE", "INVALID_EVIDENCE", "INVALID_MIME", "INVALID_BYTES", "FACE_NOT_FOUND",
   "MULTIPLE_FACES", "FACE_LOW_QUALITY", "FACE_DETECTION_UNCERTAIN", "FACE_TOO_SMALL",
   "FACE_CROPPED", "FACE_LANDMARKS_INVALID", "FACE_EXPOSURE", "FACE_BLURRY",
-  "FACE_EMBEDDING_INVALID", "FACE_ID_MISMATCH",
+  "FACE_EMBEDDING_INVALID",
 ]);
 
 function response(record: EvidenceRecord, officer = false) {
@@ -325,23 +325,15 @@ export class Evidence {
 
     const face = this.bank.options.face;
     const demo = snapshot.mode === "DEMO_SELFIE_ONLY";
-    let enrollment: Awaited<ReturnType<FaceService["enrollMatched"]>> | undefined;
+    let enrollment: Awaited<ReturnType<FaceService["enroll"]>> | undefined;
     let failure: string | undefined;
     try {
       const storage = this.s3();
       check(face && storage.read, "FACE_SETUP_REQUIRED", 503);
       check(snapshot.storageRefs.length === (demo ? 1 : 3)
         && snapshot.storageRefs.every((item) => item.versionId), "EVIDENCE_REQUIRED", 409);
-      if (demo) {
-        const selfie = snapshot.storageRefs[0];
-        enrollment = await face.enroll(a.uid, id, selfie.mime, await storage.read(selfie), this.bank.now());
-      } else {
-        const [front, selfie] = await Promise.all([
-          storage.read(snapshot.storageRefs[0]), storage.read(snapshot.storageRefs[2]),
-        ]);
-        enrollment = await face.enrollMatched(a.uid, id,
-          snapshot.storageRefs[0].mime, front, snapshot.storageRefs[2].mime, selfie, this.bank.now());
-      }
+      const selfie = snapshot.storageRefs[demo ? 0 : 2];
+      enrollment = await face.enroll(a.uid, id, selfie.mime, await storage.read(selfie), this.bank.now());
       check(enrollment, "FACE_SETUP_REQUIRED", 503);
     } catch (error) {
       if (!(error instanceof Fault) || !imageFailures.has(error.code)) throw error;
