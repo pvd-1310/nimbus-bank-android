@@ -24,17 +24,6 @@ export function registerPaymentsRoutes(route: Route, d: AppDependencies) {
   route("get", "/payment-intents/by-request/:id", (a, r) =>
     d.bank.security.describe(a, digest([a.uid, "PAYMENT", id.parse(r.params.id)])),
   );
-  route("get", "/demo-payment-intents/by-request/:id", (a, r) =>
-    d.bank.security.describe(a, digest([a.uid, "SIMULATOR_PAYMENT", id.parse(r.params.id)])),
-  );
-  route("post", "/demo-payments/intents", (a, r) => {
-    const x = paymentRequest.parse(r.body);
-    return d.payments.prepareDemo(a, x.billId, x.requestId);
-  });
-  route("post", "/demo-payments", (a, r) => {
-    const x = paymentRequest.parse(r.body);
-    return d.payments.settleDemo(a, x.billId, x.requestId);
-  });
   route("post", "/payments/intents", (a, r) => {
     const x = paymentRequest.parse(r.body);
     return d.payments.prepare(a, x.billId, x.requestId);

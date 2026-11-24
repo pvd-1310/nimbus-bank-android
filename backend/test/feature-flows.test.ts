@@ -180,3 +180,30 @@ it("keeps order invoice, idempotency and branch routes mounted", async () => {
       .status,
   ).toBe(403);
 });
+
+it("preserves the requested Vietnamese phone number and rejects invalid top-up destinations", async () => {
+  await store.run(async (t) => {
+    t.set("catalog/topup", {
+      active: true, demo: true, serviceType: "TOPUP", amountMinor: 20000, currency: "VND",
+    });
+  });
+  const createOrder = (requestId: string, phone: string) => request(app)
+    .post("/orders")
+    .set("Authorization", auth)
+    .send({ requestId, productId: "topup", quantity: 1, customerDetails: phone });
+
+  const phone = "0312345678";
+  const first = await createOrder("first", phone).expect(200);
+  expect(first.body).toMatchObject({ customerDetails: phone, serviceType: "TOPUP" });
+  const retry = await createOrder("first", phone).expect(200);
+  expect(retry.body.orderId).toBe(first.body.orderId);
+  await createOrder("first", "0700000012").expect(409);
+  const second = await createOrder("second", "0700000012").expect(200);
+  expect(second.body.customerDetails).toBe("0700000012");
+
+  for (const badPhone of ["031234567", "03123456789", "+84312345678", "1312345678", "031234567a"]) {
+    const result = await createOrder("invalid", badPhone).expect(400);
+    expect(result.body.error).toBe("INVALID_TOPUP_PHONE");
+  }
+  expect(await store.run((t) => t.list("bills"))).toHaveLength(2);
+});

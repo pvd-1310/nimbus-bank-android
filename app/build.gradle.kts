@@ -35,7 +35,7 @@ android {
         val stripePublishableKey = providers.gradleProperty("stripePublishableKey").orNull
             ?: localProperties.getProperty("STRIPE_PUBLISHABLE_KEY", "")
         check(stripePublishableKey.isEmpty() || stripePublishableKey.startsWith("pk_test_")) {
-            "Debug Stripe checkout requires a test publishable key (pk_test_...)"
+            "Stripe checkout requires a test publishable key (pk_test_...)"
         }
         val simulatorBackendUrl = if (firebaseDemo) "http://10.0.2.2:3198"
             else configuredBackendUrl ?: "http://10.0.2.2:3001"
@@ -58,8 +58,7 @@ android {
         }
         buildConfigField("boolean", "FIREBASE_DEMO", firebaseDemo.toString())
         buildConfigField("String", "BACKEND_BASE_URL", "\"$simulatorBackendUrl\"")
-        val checkoutKey = if (firebaseDemo) "" else stripePublishableKey
-        buildConfigField("String", "STRIPE_PUBLISHABLE_KEY", "\"$checkoutKey\"")
+        buildConfigField("String", "STRIPE_PUBLISHABLE_KEY", "\"$stripePublishableKey\"")
 
         manifestPlaceholders["bankAppLabel"] = if (firebaseDemo) "Nimbus Bank (Local)" else "@string/app_name"
         manifestPlaceholders["bankAllowBackup"] = (!firebaseDemo).toString()

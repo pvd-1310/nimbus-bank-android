@@ -282,7 +282,7 @@
                     android:layout_height="48dp"
                     android:layout_marginTop="8dp"
                     android:background="@drawable/input_glass_field"
-                    android:hint="Nhập số điện thoại (VD: 0987654321)"
+                    android:hint="Số điện thoại Việt Nam (10 chữ số)"
                     android:inputType="phone"
                     android:paddingStart="14dp"
                     android:paddingEnd="14dp"
@@ -698,7 +698,7 @@
                     android:layout_height="48dp"
                     android:layout_marginTop="12dp"
                     android:backgroundTint="@color/navy"
-                    android:text="Xác thực mã OTP &amp; Tiếp tục"
+                    android:text="Xác thực OTP và mở Stripe"
                     android:textColor="@color/white"
                     app:cornerRadius="16dp" />
             </LinearLayout>
@@ -738,16 +738,6 @@
                         android:textColor="@color/ink"
                         android:textSize="12sp" />
                 </LinearLayout>
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/checkout_btn_commit_pay"
-                    android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:layout_marginTop="10dp"
-                    android:backgroundTint="@color/navy"
-                    android:text="Xác nhận thanh toán ngay"
-                    android:textColor="@color/white"
-                    app:cornerRadius="16dp" />
 
                 <!-- Recovery Button (GET /intents/:id & GET /payments/:id) -->
                 <com.google.android.material.button.MaterialButton

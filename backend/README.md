@@ -174,15 +174,19 @@ URL upload sống 180 giây, URL đọc theo object version sống 120 giây. Ch
 
 Lên lịch chạy hằng ngày `docker compose exec -T backend npm run purge:verification`. Với backend chạy trực tiếp, build trước rồi chạy `npm run purge:verification` từ thư mục backend. Lệnh xóa tất cả object version và delete marker thuộc ticket hết hạn. Cấp thêm `s3:ListBucketVersions` giới hạn prefix `ekyc/` và `s3:DeleteObjectVersion` chỉ cho job/role dọn dữ liệu. Job có thể chạy lại sau lỗi. Mặc định giữ ảnh của hồ sơ đã có quyết định 90 ngày và giữ ảnh hồ sơ đang review. Ảnh draft đã confirm được giữ 30 ngày, ticket draft bị thay thế/chưa confirm được giữ một ngày rồi có thể chụp/upload lại. Draft cũ thiếu timestamp cần rà soát riêng. Template có TTL mặc định 365 ngày, bị loại khỏi matching ngay khi hết hạn và được xóa ciphertext khi job chạy. Cấu hình vòng đời backup của storage và Firestore riêng theo môi trường.
 
-## Mốc cấu hình Stripe
+## Cấu hình Stripe Sandbox
 
-1. Dùng Stripe sandbox/test mode; cấu hình `STRIPE_SECRET_KEY=sk_test_...` và `STRIPE_WEBHOOK_SECRET=whsec_...` trong `backend/.env`. Live keys bị từ chối.
+Hóa đơn, nạp điện thoại và đơn hàng đều dùng Stripe Sandbox, kể cả khi chạy Firebase Emulator.
+
+1. Chọn cùng một sandbox cho Android, backend và Stripe CLI. Cấu hình `STRIPE_SECRET_KEY=sk_test_...` và `STRIPE_WEBHOOK_SECRET=whsec_...` trong `backend/.env`. Live keys bị từ chối.
 2. Cấu hình publishable test key `STRIPE_PUBLISHABLE_KEY=pk_test_...` trong `local.properties` ở thư mục gốc Android. Đây là key công khai dùng bởi Stripe Android SDK; không đưa secret key vào ứng dụng.
-3. Khởi động webhook listener: `stripe listen --events payment_intent.succeeded,payment_intent.payment_failed,payment_intent.canceled --forward-to http://localhost:3001/webhooks/stripe`. Lưu signing secret listener in ra làm `STRIPE_WEBHOOK_SECRET`, rồi khởi động lại backend.
+3. Khởi động webhook listener: `stripe listen --events payment_intent.succeeded,payment_intent.payment_failed,payment_intent.canceled --forward-to http://localhost:3001/webhooks/stripe`. Với backend chạy cổng 3198, đổi URL chuyển tiếp sang `http://localhost:3198/webhooks/stripe`. Lưu signing secret listener in ra làm `STRIPE_WEBHOOK_SECRET`, rồi khởi động lại backend.
 4. Trong app đăng nhập khách hàng, mở Tiện ích & Thanh toán, chọn hóa đơn chưa thanh toán, hoàn tất OTP, nhập thẻ test ở Stripe PaymentSheet. Sau khi PaymentSheet báo hoàn tất, app đợi webhook và chỉ hiển thị biên nhận khi backend chuyển hóa đơn sang `PAID`.
 5. Webhook hợp lệ cập nhật hóa đơn; gọi `npm run worker` để xử lý outbox. Đơn demo được ghi `DEMO_FULFILLED`; đơn thật cần provider riêng. Browser return không xác nhận thanh toán.
 
 Payment dùng nguồn tiền Stripe, không tự trừ tài khoản nội bộ thêm lần nữa. Webhook phải khớp payment ID, số tiền, currency và provider ID. Stripe CLI `trigger` sự kiện ngẫu nhiên không có metadata payment ID sẽ bị từ chối; cần thanh toán PaymentIntent do backend tạo để kiểm thử toàn luồng. Thẻ test thành công: `4242 4242 4242 4242`, ngày hết hạn bất kỳ trong tương lai, CVC bất kỳ; chỉ dùng trong test mode.
+
+Sau OTP, PaymentSheet cho phép khách hàng chọn lưu thẻ test để dùng lại hoặc xóa thẻ đã lưu. Stripe lưu thông tin thẻ. Backend lưu liên kết tài khoản với Stripe Customer và cấp Customer Session ngắn hạn cho mỗi lần mở PaymentSheet.
 
 ## Kiểm thử và giới hạn
 
@@ -214,13 +218,13 @@ Dùng một Android Emulator API 26 trở lên và project emulator `demo-mobile
 CI=true FIREBASE_CLI_DISABLE_TELEMETRY=1 FIREBASE_SKIP_UPDATE_CHECK=true   firebase --config firebase.backend-test.json emulators:start   --project demo-mobile-banking --only auth,firestore
 ```
 
-Từ một shell riêng, cung cấp các biến này cho tiến trình backend và seed. Nhập mật khẩu demo thông qua môi trường hoặc trình quản lý bí mật, không đặt mật khẩu trên dòng lệnh. Các giá trị trống ghi đè cấu hình dịch vụ ngoài trong tệp local cho phiên shell này.
+Từ một shell riêng, cung cấp các biến này cho tiến trình backend và seed. Nhập mật khẩu demo thông qua môi trường hoặc trình quản lý bí mật, không đặt mật khẩu trên dòng lệnh. Các giá trị trống tắt S3, Face API và Google Routes cho phiên shell này. Để thử thanh toán, thiết lập Stripe Sandbox theo mục trên trước khi khởi động backend.
 
 ```sh
 export APP_MODE=emulator FIREBASE_PROJECT_ID=demo-mobile-banking
 export FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:19099 FIRESTORE_EMULATOR_HOST=127.0.0.1:18080
 export HOST=127.0.0.1 PORT=3198 DEMO_NAMESPACE=local_demo
-export CHATBOT_ENABLED=false CHATBOT_LOCAL_DEMO=true GOOGLE_ROUTES_API_KEY= STRIPE_SECRET_KEY= STRIPE_WEBHOOK_SECRET=
+export CHATBOT_ENABLED=false CHATBOT_LOCAL_DEMO=true GOOGLE_ROUTES_API_KEY=
 export S3_BUCKET= FACE_API_BASE_URL=
 export OTP_SECRET="$(openssl rand -hex 32)"
 # Cung cấp DEMO_PASSWORD trước khi chạy --apply.
@@ -235,7 +239,7 @@ npm --prefix backend start
 npm --prefix backend run worker
 ```
 
-Lệnh xử lý outbox cập nhật fulfillment của đơn demo. Màn tra cứu hiển thị trạng thái thanh toán, trạng thái thực hiện và mã demo. Tài khoản giả lập có cờ `demo: true`; các API mô phỏng từ chối tài khoản hoặc hóa đơn ngoài phạm vi đó. Kiểm thử liên ngân hàng dùng `DEMO_BANK` với `0000000001` (chấp nhận) hoặc `0000000002` (từ chối). Sau OTP và step-up nếu cần, đợi ít nhất 5 giây và bấm kiểm tra để đối soát. Mã OTP demo chỉ hiện trong ứng dụng, không phải 2FA độc lập.
+Lệnh xử lý outbox cập nhật fulfillment của đơn demo. Màn tra cứu hiển thị trạng thái thanh toán, trạng thái thực hiện và mã demo. Tài khoản giả lập có cờ `demo: true`; các API mô phỏng chuyển khoản và nạp/rút kiểm tra phạm vi tài khoản. Kiểm thử liên ngân hàng dùng `DEMO_BANK` với `0000000001` (chấp nhận) hoặc `0000000002` (từ chối). Sau OTP và step-up nếu cần, đợi ít nhất 5 giây và bấm kiểm tra để đối soát. Mã OTP demo chỉ hiện trong ứng dụng, không phải 2FA độc lập.
 
 ## Chatbot tùy chọn
 

@@ -19,7 +19,7 @@ Firestore có SDK cho Android; không cần đi qua backend để đọc mọi d
 | Đăng nhập và tài khoản | Đăng nhập Firebase theo vai trò, cập nhật hồ sơ theo quyền, đối chiếu ảnh eKYC demo, xem checking, lãi dự kiến savings, lịch mortgage và lịch sử. |
 | Chuyển tiền và nạp/rút | Chuyển nội bộ ghi sổ nguyên tử. Nạp/rút có yêu cầu riêng và luồng settlement mô phỏng. Chuyển liên ngân hàng dùng DEMO_BANK và tài khoản mẫu. OTP hiển thị trong app là demo. |
 | Nhân viên | Tạo hồ sơ khách hàng, cập nhật có lý do, đọc audit phân trang, xem bằng chứng eKYC theo quyền và ban hành chính sách lãi suất. |
-| Thanh toán và tiện ích | Hóa đơn, nạp điện thoại, vé, phòng và hàng mẫu có quote/đơn demo. Có thanh toán mô phỏng và Stripe PaymentSheet test với kết quả quyết toán từ backend. |
+| Thanh toán và tiện ích | Hóa đơn, nạp điện thoại, vé, phòng và hàng mẫu có quote/đơn demo. Mọi khoản thanh toán dịch vụ dùng Stripe Sandbox qua PaymentSheet. Backend xác nhận kết quả qua webhook. |
 | Chi nhánh và chatbot | Danh sách chi nhánh hoạt động khi thiếu Maps hoặc vị trí. Google Routes so tuyến đi bộ trong tập đã truy vấn. Chatbot tùy chọn mở các màn cho phép. |
 
 Xem [đối chiếu PDF và checklist duyệt](docs/final-project-assessment.md).
@@ -34,7 +34,7 @@ Yêu cầu Android SDK compile API 37 và thiết bị chạy API 26 trở lên.
 ./gradlew --offline testDebugUnitTest assembleDebug -PfirebaseDemo=true
 ```
 
-Bản này có nhãn Nimbus Bank (Local), package `com.example.final_term.localreview` và dùng Firebase app tên riêng với project `demo-mobile-banking`. Có thể cài đồng thời với package Android thông thường. Cấu hình Google Services, Maps và Stripe của môi trường connected không được đưa vào bản demo. Xem [chạy backend và seed demo cục bộ](backend/README.md#demo-cục-bộ-từ-android-emulator).
+Bản này có nhãn Nimbus Bank (Local), package `com.example.final_term.localreview` và dùng Firebase app tên riêng với project `demo-mobile-banking`. Có thể cài đồng thời với package Android thông thường. Bản demo dùng Firebase Emulator và hỗ trợ Stripe Sandbox với khóa công khai `pk_test_...`. Xem [chạy backend và seed demo cục bộ](backend/README.md#demo-cục-bộ-từ-android-emulator).
 
 ### Android với Firebase project thử nghiệm
 
