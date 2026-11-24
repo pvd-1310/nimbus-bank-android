@@ -1,5 +1,6 @@
 package com.example.final_term.ui.utilities;
 
+import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.CountDownTimer;
 import android.os.Handler;
@@ -165,35 +166,27 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                 stripeBackendReady = false;
             }
         });
-        binding.demoCatalogButton.setOnClickListener(v -> openCatalog());
+        binding.utilSeeAll.setOnClickListener(v -> openCatalog());
+        binding.utilAll.setOnClickListener(v -> openCatalog());
+        binding.pendingOrderButton.setOnClickListener(v -> recoverOrder());
         binding.orderHistoryButton.setOnClickListener(v -> showOrders());
-        if (pendingOrder != null) binding.demoCatalogButton.setText("Kiểm tra đơn demo đang tạo");
+        binding.pendingOrderButton.setVisibility(pendingOrder == null ? View.GONE : View.VISIBLE);
         binding.topupPhoneInput.setHint("Số điện thoại demo 0900000000");
 
-        // Category clicks
-        binding.utilElectricity.setOnClickListener(v -> {
-            binding.topupFormContainer.setVisibility(View.GONE);
-            binding.lookupTitle.setText("Tra cứu hóa đơn điện demo");
-            binding.customerCodeInput.setHint("Mã hóa đơn (ví dụ local_demo_electricity)");
-        });
-
-        binding.utilWater.setOnClickListener(v -> {
-            binding.topupFormContainer.setVisibility(View.GONE);
-            binding.lookupTitle.setText("Tra cứu hóa đơn nước demo");
-            binding.customerCodeInput.setHint("Mã hóa đơn (ví dụ local_demo_water)");
-        });
-
+        binding.utilElectricity.setOnClickListener(v -> showBillLookup(
+                "Tra cứu hóa đơn điện demo", "Mã hóa đơn (ví dụ local_demo_electricity)"));
+        binding.utilWater.setOnClickListener(v -> showBillLookup(
+                "Tra cứu hóa đơn nước demo", "Mã hóa đơn (ví dụ local_demo_water)"));
         binding.utilMobile.setOnClickListener(v -> {
             binding.topupFormContainer.setVisibility(View.VISIBLE);
             binding.lookupTitle.setText("Nạp điện thoại mô phỏng");
             binding.customerCodeInput.setHint("Nhập mã hóa đơn để tra cứu");
+            scrollToSection(binding.topupFormContainer);
         });
-
-        binding.utilInternet.setOnClickListener(v -> {
-            binding.topupFormContainer.setVisibility(View.GONE);
-            binding.lookupTitle.setText("Thanh toán cước Internet & Dịch vụ");
-            binding.customerCodeInput.setHint("Nhập mã hợp đồng / mã đơn hàng");
-        });
+        binding.utilFlight.setOnClickListener(v -> openCatalogCategory("FLIGHT"));
+        binding.utilMovie.setOnClickListener(v -> openCatalogCategory("MOVIE"));
+        binding.utilHotel.setOnClickListener(v -> openCatalogCategory("HOTEL"));
+        binding.utilShopping.setOnClickListener(v -> openCatalogCategory("ECOMMERCE"));
 
         // Topup chips
         setupTopupChips();
@@ -236,6 +229,24 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         }
     }
 
+    private void showBillLookup(String title, String hint) {
+        binding.topupFormContainer.setVisibility(View.GONE);
+        binding.lookupTitle.setText(title);
+        binding.customerCodeInput.setHint(hint);
+        scrollToSection(binding.lookupFormContainer);
+    }
+
+    private void scrollToSection(View section) {
+        var scroll = binding.getRoot();
+        scroll.post(() -> {
+            if (binding == null || binding.getRoot() != scroll || !section.isShown()) return;
+            Rect bounds = new Rect();
+            section.getDrawingRect(bounds);
+            scroll.offsetDescendantRectToMyCoords(section, bounds);
+            scroll.smoothScrollTo(0, bounds.top);
+        });
+    }
+
     private void setupTopupChips() {
         binding.chipTopup20k.setOnClickListener(v -> selectTopupChip(20000, binding.chipTopup20k));
         binding.chipTopup50k.setOnClickListener(v -> selectTopupChip(50000, binding.chipTopup50k));
@@ -258,6 +269,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     }
 
     private void loadOwnedBills() {
+        binding.billsEmptyOrLoadingText.setVisibility(View.VISIBLE);
         if (api == null) {
             binding.billsEmptyOrLoadingText.setText("Backend API chưa được khởi tạo.");
             return;
@@ -284,7 +296,6 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
             try {
                 JSONObject json = new JSONObject(task.getResult().body);
                 JSONArray items = json.optJSONArray("items");
-                binding.billsEmptyOrLoadingText.setText("");
                 for (int item = binding.billsListContainer.getChildCount() - 1; item >= 0; item--) {
                     View child = binding.billsListContainer.getChildAt(item);
                     if (child != binding.billsEmptyOrLoadingText) binding.billsListContainer.removeViewAt(item);
@@ -303,11 +314,9 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                     }
                 }
                 if (unpaidCount == 0) {
-                    TextView empty = new TextView(requireContext());
-                    empty.setText("Không có hóa đơn hoặc đơn hàng chưa thanh toán.");
-                    empty.setPadding(12, 12, 12, 12);
-                    empty.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
-                    binding.billsListContainer.addView(empty);
+                    binding.billsEmptyOrLoadingText.setText("Không có hóa đơn hoặc đơn hàng chưa thanh toán.");
+                } else {
+                    binding.billsEmptyOrLoadingText.setVisibility(View.GONE);
                 }
             } catch (Exception e) {
                 binding.billsEmptyOrLoadingText.setText("Không thể phân tích dữ liệu hóa đơn.");
@@ -380,16 +389,34 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     }
 
     private void openCatalog() {
+        if (busy) return;
         if (pendingOrder != null) {
             recoverOrder();
             return;
         }
-        String[] names = {"Vé máy bay", "Vé phim", "Khách sạn", "Mua hàng"};
-        String[] categories = {"FLIGHT", "MOVIE", "HOTEL", "ECOMMERCE"};
+        CharSequence[] names = {
+                getText(R.string.utility_electricity), getText(R.string.utility_water),
+                getText(R.string.utility_mobile),
+                getText(R.string.utility_flight), getText(R.string.utility_movie),
+                getText(R.string.utility_hotel), getText(R.string.utility_shopping),
+                getText(R.string.utility_internet)
+        };
+        View[] shortcuts = {
+                binding.utilElectricity, binding.utilWater, binding.utilMobile,
+                binding.utilFlight, binding.utilMovie, binding.utilHotel, binding.utilShopping
+        };
         new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
-                .setTitle("Danh mục mô phỏng")
-                .setItems(names, (dialog, index) -> loadCatalog(categories[index], 0))
+                .setTitle(R.string.utility_all)
+                .setItems(names, (dialog, index) -> {
+                    if (index < shortcuts.length) shortcuts[index].performClick();
+                    else showBillLookup("Thanh toán cước Internet & Dịch vụ", "Nhập mã hợp đồng / mã đơn hàng");
+                })
                 .show();
+    }
+
+    private void openCatalogCategory(String category) {
+        if (pendingOrder != null) recoverOrder();
+        else loadCatalog(category, 0);
     }
 
     private void hubStatus(String message) {
@@ -419,6 +446,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                 }
                 if (options.isEmpty()) {
                     hubStatus("Chưa có sản phẩm demo phù hợp.");
+                    scrollToSection(binding.lookupFormContainer);
                     return;
                 }
                 hubStatus("Chọn sản phẩm demo để xem giá.");
@@ -429,6 +457,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                         .show();
             } catch (JSONException error) {
                 hubStatus("Không tải được danh mục. Vui lòng thử lại.");
+                scrollToSection(binding.lookupFormContainer);
             }
         });
     }
@@ -470,14 +499,14 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
             });
         } catch (JSONException error) {
             setBusy(false);
-            pendingOrder = null;
+            clearPendingOrder();
             hubStatus("Không đọc được mã đơn cũ.");
         }
     }
 
     private void submitOrder() {
         setBusy(true);
-        binding.demoCatalogButton.setText("Kiểm tra đơn demo đang tạo");
+        binding.pendingOrderButton.setVisibility(View.VISIBLE);
         hubStatus("Đang tạo đơn demo…");
         api.post("/orders", pendingOrder).addOnCompleteListener(task -> {
             if (binding == null) return;
@@ -493,7 +522,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
 
     private void clearPendingOrder() {
         pendingOrder = null;
-        binding.demoCatalogButton.setText("Vé, phòng và mua hàng demo");
+        binding.pendingOrderButton.setVisibility(View.GONE);
     }
 
     private void openOrderInvoice(BackendApiClient.Response response) {
@@ -629,6 +658,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         binding.hubSelectionContainer.setVisibility(View.GONE);
         binding.checkoutContainer.setVisibility(View.VISIBLE);
         binding.hubMainTitle.setText("Thanh toán dịch vụ");
+        binding.hubSubtitle.setVisibility(View.VISIBLE);
         binding.hubSubtitle.setText(simulatedPayment ? "Mô phỏng, chỉ dùng dữ liệu demo" : "Stripe test mode");
         binding.checkoutServiceTitle.setText(currentServiceName);
         binding.checkoutReferenceText.setText("Mã hóa đơn / tham chiếu: " + currentReference);
@@ -1051,7 +1081,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         authoritativeAmount = 0;
         authoritativeFee = 0;
         authoritativeTarget = "";
-        binding.hubSubtitle.setText("Thanh toán hóa đơn thiết yếu, nạp tiền điện thoại & dịch vụ");
+        binding.hubSubtitle.setVisibility(View.GONE);
         loadOwnedBills();
     }
 
@@ -1086,7 +1116,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         this.busy = busy;
         if (binding != null) {
             binding.btnProceedTopup.setEnabled(!busy);
-            binding.demoCatalogButton.setEnabled(!busy);
+            binding.pendingOrderButton.setEnabled(!busy);
             binding.orderHistoryButton.setEnabled(!busy);
             binding.lookupButton.setEnabled(!busy);
             binding.checkoutBtnFace.setEnabled(!busy);

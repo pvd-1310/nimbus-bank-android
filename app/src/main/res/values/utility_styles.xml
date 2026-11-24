@@ -1,0 +1,37 @@
+<resources>
+    <style name="UtilityTile">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_marginStart">4dp</item>
+        <item name="android:layout_marginEnd">4dp</item>
+        <item name="android:minHeight">90dp</item>
+        <item name="android:paddingHorizontal">3dp</item>
+        <item name="android:paddingVertical">8dp</item>
+        <item name="android:background">@drawable/utility_tile</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:screenReaderFocusable">true</item>
+        <item name="android:gravity">center</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
+    <style name="UtilityTileIcon">
+        <item name="android:layout_width">38dp</item>
+        <item name="android:layout_height">38dp</item>
+        <item name="android:background">@drawable/utility_icon_circle</item>
+        <item name="android:padding">8dp</item>
+        <item name="android:importantForAccessibility">no</item>
+    </style>
+
+    <style name="UtilityTileLabel">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">4dp</item>
+        <item name="android:minLines">2</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+</resources>
