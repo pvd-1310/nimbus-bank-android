@@ -25,7 +25,6 @@ import com.example.final_term.data.ReadSummaryFormatter;
 import com.example.final_term.databinding.FragmentCustomerHomeBinding;
 import com.example.final_term.databinding.ItemTransactionRowBinding;
 import com.example.final_term.ui.quickactions.QuickActionsBottomSheet;
-import com.example.final_term.ui.utilities.UtilitiesHubDialogFragment;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.util.ArrayList;
@@ -121,13 +120,11 @@ public final class CustomerHomeFragment extends Fragment {
         });
 
         binding.quickPayment.setOnClickListener(v -> {
-            UtilitiesHubDialogFragment dialog = new UtilitiesHubDialogFragment();
             Bundle arguments = new Bundle();
             ReadModels.AccountSummary account = getSelectedAccount();
             if (account != null && "CHECKING".equals(account.type))
                 arguments.putString("sourceAccountId", account.id);
-            dialog.setArguments(arguments);
-            dialog.show(getChildFragmentManager(), "UtilitiesHub");
+            Navigation.findNavController(v).navigate(R.id.utilitiesHub, arguments);
         });
 
         binding.quickQr.setOnClickListener(v -> {

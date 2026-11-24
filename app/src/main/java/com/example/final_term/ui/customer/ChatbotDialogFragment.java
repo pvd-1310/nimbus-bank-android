@@ -17,7 +17,6 @@ import androidx.navigation.fragment.NavHostFragment;
 
 import com.example.final_term.R;
 import com.example.final_term.core.FinalTermApplication;
-import com.example.final_term.ui.utilities.UtilitiesHubDialogFragment;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import org.json.JSONException;
@@ -167,29 +166,23 @@ public final class ChatbotDialogFragment extends DialogFragment {
         button.setText(label);
         button.setVisibility(View.VISIBLE);
         button.setOnClickListener(v -> {
-            if ("TOPUP".equals(action) || "BILLS".equals(action)) {
-                var utilities = new UtilitiesHubDialogFragment();
-                Bundle args = new Bundle();
-                args.putBoolean("openTopup", "TOPUP".equals(action));
-                utilities.setArguments(args);
-                utilities.show(getParentFragmentManager(), "UtilitiesHub");
-            } else {
-                NavController nav = NavHostFragment.findNavController(requireParentFragment());
-                switch (action) {
-                    case "HISTORY": {
-                        Bundle args = new Bundle();
-                        args.putBoolean("thisMonth", true);
-                        nav.navigate(R.id.transactionHistory, args);
-                        break;
-                    }
-                    case "TRANSFER": nav.navigate(R.id.transfer); break;
-                    case "BRANCHES": nav.navigate(R.id.branchLocator); break;
-                    case "DEPOSIT": {
-                        Bundle args = new Bundle();
-                        args.putString("operation", "DEPOSIT");
-                        nav.navigate(R.id.moneyRequest, args);
-                        break;
-                    }
+            NavController nav = NavHostFragment.findNavController(requireParentFragment());
+            switch (action) {
+                case "TOPUP": nav.navigate(R.id.mobileTopup); break;
+                case "BILLS": nav.navigate(R.id.utilitiesHub); break;
+                case "HISTORY": {
+                    Bundle args = new Bundle();
+                    args.putBoolean("thisMonth", true);
+                    nav.navigate(R.id.transactionHistory, args);
+                    break;
+                }
+                case "TRANSFER": nav.navigate(R.id.transfer); break;
+                case "BRANCHES": nav.navigate(R.id.branchLocator); break;
+                case "DEPOSIT": {
+                    Bundle args = new Bundle();
+                    args.putString("operation", "DEPOSIT");
+                    nav.navigate(R.id.moneyRequest, args);
+                    break;
                 }
             }
             dismiss();

@@ -10,6 +10,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.text.Editable;
+import android.text.TextWatcher;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -83,6 +85,9 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     private CountDownTimer otpTimer;
     private boolean preparingPreviously;
     private String pendingOrder;
+    private String activeCatalogCategory = "FLIGHT";
+    private int catalogRequestVersion;
+    private boolean checkoutOnly;
 
     private final FaceCamera faceCamera = new FaceCamera(this, this::verifyFace, this::faceError);
 
@@ -96,11 +101,52 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         return fragment;
     }
 
+    public static UtilitiesHubDialogFragment newCategoryInstance(String category) {
+        UtilitiesHubDialogFragment fragment = new UtilitiesHubDialogFragment();
+        Bundle args = new Bundle();
+        args.putString("openCategory", category);
+        fragment.setArguments(args);
+        return fragment;
+    }
+
+    public static UtilitiesHubDialogFragment newTopupInstance() {
+        UtilitiesHubDialogFragment fragment = new UtilitiesHubDialogFragment();
+        Bundle args = new Bundle();
+        args.putBoolean("openTopup", true);
+        fragment.setArguments(args);
+        return fragment;
+    }
+
+    public static UtilitiesHubDialogFragment newCheckoutInstance(String billId, @Nullable String sourceAccountId) {
+        UtilitiesHubDialogFragment fragment = new UtilitiesHubDialogFragment();
+        Bundle args = new Bundle();
+        args.putString("billId", billId);
+        args.putString("sourceAccountId", sourceAccountId);
+        args.putBoolean("checkoutOnly", true);
+        fragment.setArguments(args);
+        return fragment;
+    }
+
+    public static UtilitiesHubDialogFragment newOrderCheckoutInstance(String category, String productId,
+                                                                       @Nullable String customerDetails,
+                                                                       @Nullable String sourceAccountId) {
+        UtilitiesHubDialogFragment fragment = new UtilitiesHubDialogFragment();
+        Bundle args = new Bundle();
+        args.putString("orderCategory", category);
+        args.putString("productId", productId);
+        args.putString("orderCustomerDetails", customerDetails);
+        args.putString("sourceAccountId", sourceAccountId);
+        args.putBoolean("checkoutOnly", true);
+        fragment.setArguments(args);
+        return fragment;
+    }
+
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         faceCamera.restore(savedInstanceState);
         if (savedInstanceState != null) {
+            checkoutOnly = savedInstanceState.getBoolean("checkoutOnly");
             currentBillId = savedInstanceState.getString("currentBillId");
             currentServiceName = savedInstanceState.getString("currentServiceName", "Hóa đơn dịch vụ");
             currentReference = savedInstanceState.getString("currentReference", "");
@@ -129,6 +175,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
             selectedTopupCarrierName = savedInstanceState.getString("selectedTopupCarrierName");
         } else if (getArguments() != null) {
             currentBillId = getArguments().getString("billId");
+            checkoutOnly = getArguments().getBoolean("checkoutOnly", false);
         }
     }
 
@@ -137,6 +184,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         super.onSaveInstanceState(outState);
         faceCamera.save(outState);
         outState.putString("currentBillId", currentBillId);
+        outState.putBoolean("checkoutOnly", checkoutOnly);
         outState.putString("currentServiceName", currentServiceName);
         outState.putString("currentReference", currentReference);
         outState.putString("requestId", requestId);
@@ -174,20 +222,20 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         }
 
         binding.closeDialogBtn.setOnClickListener(v -> dismiss());
-        binding.utilSeeAll.setOnClickListener(v -> openCatalog());
+        binding.utilityBackButton.setOnClickListener(v -> returnToUtilities());
+        setupUtilitySearch();
         binding.utilAll.setOnClickListener(v -> openCatalog());
         binding.pendingOrderButton.setOnClickListener(v -> recoverOrder());
         binding.orderHistoryButton.setOnClickListener(v -> showOrders());
         binding.pendingOrderButton.setVisibility(pendingOrder == null ? View.GONE : View.VISIBLE);
 
         binding.utilElectricity.setOnClickListener(v -> showBillLookup(
-                "Tra cứu hóa đơn điện", "Mã hóa đơn điện"));
+                "Tiền điện", "Mã khách hàng điện"));
         binding.utilWater.setOnClickListener(v -> showBillLookup(
-                "Tra cứu hóa đơn nước", "Mã hóa đơn nước"));
+                "Tiền nước", "Mã khách hàng nước"));
         binding.utilMobile.setOnClickListener(v -> {
+            showUtilityDetail("Nạp điện thoại");
             binding.topupFormContainer.setVisibility(View.VISIBLE);
-            binding.lookupTitle.setText("Nạp tiền điện thoại");
-            binding.customerCodeInput.setHint("Nhập mã hóa đơn để tra cứu");
             scrollToSection(binding.topupFormContainer);
         });
         binding.utilFlight.setOnClickListener(v -> openCatalogCategory("FLIGHT"));
@@ -220,16 +268,30 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         });
         binding.receiptBtnDone.setOnClickListener(v -> dismiss());
 
-        if (getArguments() != null && getArguments().getBoolean("openTopup"))
-            binding.utilMobile.performClick();
+        if (checkoutOnly) {
+            binding.hubSelectionContainer.setVisibility(View.GONE);
+            binding.checkoutContainer.setVisibility(View.VISIBLE);
+            binding.hubMainTitle.setText("Thanh toán");
+            checkoutStatus("Đang chuẩn bị thông tin thanh toán...");
+        }
 
-        // Load owned bills from backend
-        loadOwnedBills();
+        if (getArguments() != null) {
+            if (getArguments().getBoolean("openTopup")) binding.utilMobile.performClick();
+            String openCategory = getArguments().getString("openCategory");
+            if (openCategory != null) openCatalogCategory(openCategory);
+        }
+
+        if (!checkoutOnly) loadOwnedBills();
 
         // If restoring in middle of checkout
+        String orderCategory = getArguments() == null ? null : getArguments().getString("orderCategory");
+        String productId = getArguments() == null ? null : getArguments().getString("productId");
         if (intentId != null) {
             showCheckoutView();
             recoverPaymentAndIntent();
+        } else if (orderCategory != null && productId != null) {
+            if (pendingOrder != null) recoverOrder();
+            else createCheckoutOrder(orderCategory, productId, getArguments().getString("orderCustomerDetails"));
         } else if (currentBillId != null) {
             if (requestId != null) {
                 showCheckoutView();
@@ -239,10 +301,72 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     }
 
     private void showBillLookup(String title, String hint) {
+        showUtilityDetail(title);
         binding.topupFormContainer.setVisibility(View.GONE);
-        binding.lookupTitle.setText(title);
+        binding.lookupFormContainer.setVisibility(View.VISIBLE);
+        binding.lookupTitle.setText("Nhập mã khách hàng");
         binding.customerCodeInput.setHint(hint);
+        binding.customerCodeInput.setText("");
+        binding.hubStatusText.setVisibility(View.GONE);
+        binding.lookupResultText.setVisibility(View.GONE);
         scrollToSection(binding.lookupFormContainer);
+    }
+
+    private void showUtilityDetail(String title) {
+        binding.hubMainTitle.setText(title);
+        binding.utilityBackButton.setVisibility(View.VISIBLE);
+        binding.utilitySearchContainer.setVisibility(View.GONE);
+        binding.utilityIntroCard.setVisibility(View.GONE);
+        binding.utilityGridHeading.setVisibility(View.GONE);
+        binding.utilityGridRowOne.setVisibility(View.GONE);
+        binding.utilityGridRowTwo.setVisibility(View.GONE);
+        binding.utilityBillsHeading.setVisibility(View.GONE);
+        binding.pendingOrderButton.setVisibility(View.GONE);
+        binding.orderHistoryButton.setVisibility(View.GONE);
+        binding.billsListContainer.setVisibility(View.GONE);
+    }
+
+    private void returnToUtilities() {
+        catalogRequestVersion++;
+        binding.hubMainTitle.setText("Tiện ích & Thanh toán");
+        binding.utilityBackButton.setVisibility(View.GONE);
+        binding.utilitySearchContainer.setVisibility(View.VISIBLE);
+        binding.utilityIntroCard.setVisibility(View.VISIBLE);
+        binding.utilityGridHeading.setVisibility(View.VISIBLE);
+        binding.utilityGridRowOne.setVisibility(View.VISIBLE);
+        binding.utilityGridRowTwo.setVisibility(View.VISIBLE);
+        binding.utilityBillsHeading.setVisibility(View.VISIBLE);
+        binding.pendingOrderButton.setVisibility(pendingOrder == null ? View.GONE : View.VISIBLE);
+        binding.orderHistoryButton.setVisibility(View.VISIBLE);
+        binding.billsListContainer.setVisibility(View.VISIBLE);
+        binding.topupFormContainer.setVisibility(View.GONE);
+        binding.lookupFormContainer.setVisibility(View.GONE);
+        binding.lookupResultText.setVisibility(View.GONE);
+        binding.hubStatusText.setVisibility(View.GONE);
+        binding.utilitySearchInput.setText("");
+        loadOwnedBills();
+    }
+
+    private void setupUtilitySearch() {
+        binding.utilitySearchInput.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                String query = s.toString().trim().toLowerCase(Locale.ROOT);
+                filterUtilityTile(binding.utilElectricity, "điện electricity", query);
+                filterUtilityTile(binding.utilWater, "nước water", query);
+                filterUtilityTile(binding.utilMobile, "nạp điện thoại nạp đt mobile topup", query);
+                filterUtilityTile(binding.utilFlight, "vé máy bay flight", query);
+                filterUtilityTile(binding.utilMovie, "vé phim movie", query);
+                filterUtilityTile(binding.utilHotel, "khách sạn hotel", query);
+                filterUtilityTile(binding.utilShopping, "mua sắm ecommerce", query);
+                filterUtilityTile(binding.utilAll, "khác tất cả", query);
+            }
+            @Override public void afterTextChanged(Editable s) { }
+        });
+    }
+
+    private void filterUtilityTile(View tile, String terms, String query) {
+        tile.setVisibility(query.isEmpty() || terms.contains(query) ? View.VISIBLE : View.GONE);
     }
 
     private void scrollToSection(View section) {
@@ -336,24 +460,39 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         String invoiceRef = bill.optString("invoiceRef", id);
         long amountMinor = bill.optLong("amountMinor", 0);
         String currency = bill.optString("currency", "VND");
-        String provider = bill.optString("provider", "Dịch vụ");
+        String serviceType = bill.optString("serviceType", "");
 
         LinearLayout card = new LinearLayout(requireContext());
         card.setOrientation(LinearLayout.HORIZONTAL);
         card.setBackgroundResource(R.drawable.glass_panel_card);
-        card.setPadding(14, 14, 14, 14);
+        card.setPadding(dp(14), dp(14), dp(14), dp(14));
         card.setGravity(android.view.Gravity.CENTER_VERTICAL);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.bottomMargin = 8;
+        params.bottomMargin = dp(8);
         card.setLayoutParams(params);
+
+        android.widget.ImageView icon = new android.widget.ImageView(requireContext());
+        int iconResource = "ELECTRICITY".equalsIgnoreCase(serviceType)
+                ? R.drawable.ic_utility_electricity
+                : "WATER".equalsIgnoreCase(serviceType) ? R.drawable.ic_utility_water
+                : "TOPUP".equalsIgnoreCase(serviceType) ? R.drawable.ic_phone_topup
+                : R.drawable.ic_receipt;
+        icon.setImageResource(iconResource);
+        icon.setPadding(10, 10, 10, 10);
+        icon.setBackgroundResource(R.drawable.circle_action_button);
+        icon.setColorFilter(ContextCompat.getColor(requireContext(), R.color.navy));
+        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(40), dp(40));
+        iconParams.setMarginEnd(dp(12));
+        card.addView(icon, iconParams);
 
         LinearLayout textCol = new LinearLayout(requireContext());
         textCol.setOrientation(LinearLayout.VERTICAL);
         textCol.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f));
 
         TextView title = new TextView(requireContext());
-        title.setText(provider + " · " + invoiceRef
+        title.setText(serviceLabel(serviceType.isEmpty() ? "Dịch vụ" : serviceType)
+                + " · " + invoiceRef
                 + (bill.isNull("dueAt") ? "" : " · Hạn " + android.text.format.DateFormat.getDateFormat(requireContext())
                         .format(new java.util.Date(bill.optLong("dueAt")))));
         title.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
@@ -380,6 +519,10 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         card.addView(payBtn);
 
         return card;
+    }
+
+    private int dp(float value) {
+        return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
     }
 
     private void proceedTopupOrder() {
@@ -475,13 +618,53 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     }
 
     private void openCatalogCategory(String category) {
+        activeCatalogCategory = category;
+        int requestVersion = ++catalogRequestVersion;
+        showUtilityDetail(catalogTitle(category));
+        hubStatus("Đang tải lựa chọn...");
         if (pendingOrder != null) recoverOrder();
-        else loadCatalog(category, this::showCatalogProducts);
+        else loadCatalog(category, products -> {
+            if (requestVersion == catalogRequestVersion && binding.utilityBackButton.getVisibility() == View.VISIBLE) {
+                showCatalogProducts(products);
+            }
+        });
+    }
+
+    private String catalogTitle(String category) {
+        switch (category) {
+            case "FLIGHT": return "Vé máy bay";
+            case "MOVIE": return "Vé xem phim";
+            case "HOTEL": return "Khách sạn";
+            default: return "Mua sắm";
+        }
     }
 
     private void hubStatus(String message) {
-        binding.lookupResultText.setVisibility(View.VISIBLE);
-        binding.lookupResultText.setText(message);
+        if (checkoutOnly && binding.hubSelectionContainer.getVisibility() != View.VISIBLE) {
+            checkoutStatus(message);
+            return;
+        }
+        binding.hubStatusText.setVisibility(View.VISIBLE);
+        binding.hubStatusText.setText(message);
+    }
+
+    private void createCheckoutOrder(String category, String productId, @Nullable String customerDetails) {
+        checkoutStatus("Đang tải thông tin dịch vụ...");
+        loadCatalog(category, products -> {
+            JSONObject selected = null;
+            for (JSONObject product : products) {
+                if (productId.equals(product.optString("id"))) {
+                    selected = product;
+                    break;
+                }
+            }
+            if (selected == null) {
+                checkoutStatus("Dịch vụ này hiện không còn khả dụng. Quay lại và chọn dịch vụ khác.");
+                return;
+            }
+            if ("TOPUP".equals(category)) createOrderForProduct(selected, customerDetails);
+            else createOrderForProduct(selected, null);
+        });
     }
 
     private void loadCatalog(String category, Consumer<List<JSONObject>> onLoaded) {
@@ -500,10 +683,10 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                     if (item.optBoolean("demo")) products.add(item);
                 }
                 binding.lookupResultText.setVisibility(View.GONE);
+                binding.hubStatusText.setVisibility(View.GONE);
                 onLoaded.accept(products);
             } catch (JSONException error) {
                 hubStatus("Không tải được danh mục. Vui lòng thử lại.");
-                scrollToSection(binding.lookupFormContainer);
             }
         });
     }
@@ -511,24 +694,63 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     private void showCatalogProducts(List<JSONObject> products) {
         if (products.isEmpty()) {
             hubStatus("Chưa có sản phẩm phù hợp.");
-            scrollToSection(binding.lookupFormContainer);
             return;
         }
-        List<String> names = new ArrayList<>();
+        android.widget.ScrollView listScroll = new android.widget.ScrollView(requireContext());
+        LinearLayout list = new LinearLayout(requireContext());
+        list.setOrientation(LinearLayout.VERTICAL);
+        List<View> optionCards = new ArrayList<>();
+        int inset = (int) (16 * getResources().getDisplayMetrics().density);
+        list.setPadding(inset, inset / 2, inset, inset / 2);
+        listScroll.addView(list);
         for (JSONObject product : products) {
-            names.add(product.optString("name") + " · " + ReadSummaryFormatter.money(product.optLong("amountMinor"))
-                    + " " + product.optString("currency"));
+            LinearLayout card = new LinearLayout(requireContext());
+            card.setOrientation(LinearLayout.VERTICAL);
+            card.setFocusable(true);
+            card.setClickable(true);
+            card.setBackgroundResource(R.drawable.glass_panel_card);
+            card.setPadding(inset, inset, inset, inset);
+            LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            cardParams.bottomMargin = inset / 2;
+            card.setLayoutParams(cardParams);
+
+            TextView name = new TextView(requireContext());
+            name.setText(product.optString("name", "Dịch vụ"));
+            name.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
+            name.setTextSize(15);
+            name.setTypeface(null, android.graphics.Typeface.BOLD);
+            card.addView(name);
+
+            TextView amount = new TextView(requireContext());
+            amount.setText(ReadSummaryFormatter.money(product.optLong("amountMinor"))
+                    + " " + product.optString("currency", "VND"));
+            amount.setTextColor(ContextCompat.getColor(requireContext(), R.color.navy));
+            amount.setTextSize(14);
+            LinearLayout.LayoutParams amountParams = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            amountParams.topMargin = inset / 3;
+            card.addView(amount, amountParams);
+            list.addView(card);
+            optionCards.add(card);
         }
-        new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
-                .setTitle("Chọn sản phẩm")
-                .setItems(names.toArray(new String[0]), (dialog, index) ->
-                        createOrderForProduct(products.get(index), null))
+        androidx.appcompat.app.AlertDialog chooser = new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+                .setTitle(catalogTitle(activeCatalogCategory))
+                .setView(listScroll)
+                .setNegativeButton("Đóng", null)
                 .show();
+        for (int i = 0; i < optionCards.size(); i++) {
+            final JSONObject product = products.get(i);
+            optionCards.get(i).setOnClickListener(v -> {
+                chooser.dismiss();
+                createOrderForProduct(product, null);
+            });
+        }
     }
 
     private void createOrderForProduct(JSONObject item, @Nullable String phone) {
         if (busy || pendingOrder != null) return;
-        String customerDetails = phone == null ? "Khách mẫu · 1 đơn vị · " + item.optString("name") : phone;
+        String customerDetails = phone == null ? "Dịch vụ trải nghiệm · " + item.optString("name") : phone;
         try {
             pendingOrder = new JSONObject()
                     .put("requestId", UUID.randomUUID().toString())
@@ -684,7 +906,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
             return;
         }
         currentBillId = bill.optString("id");
-        currentServiceName = bill.optString("serviceType", bill.optString("provider"));
+        currentServiceName = serviceLabel(bill.optString("serviceType", bill.optString("provider")));
         if (!orderDetails.isEmpty()) currentServiceName += "\n" + orderDetails;
         currentReference = bill.optString("invoiceRef", currentBillId);
         if (requestId == null) {
@@ -704,6 +926,19 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         binding.checkoutServiceTitle.setText(currentServiceName);
         binding.checkoutReferenceText.setText("Mã hóa đơn / tham chiếu: " + currentReference);
         renderCheckoutStep();
+    }
+
+    private String serviceLabel(String value) {
+        switch (value.toUpperCase(Locale.ROOT)) {
+            case "ELECTRICITY": return "Hóa đơn tiền điện";
+            case "WATER": return "Hóa đơn tiền nước";
+            case "TOPUP": return "Nạp điện thoại";
+            case "FLIGHT": return "Vé máy bay";
+            case "MOVIE": return "Vé xem phim";
+            case "HOTEL": return "Đặt khách sạn";
+            case "ECOMMERCE": return "Mua sắm";
+            default: return value;
+        }
     }
 
     private void preparePaymentIntent() {
@@ -1102,7 +1337,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     private void cancelIntentForEdit() {
         if (busy || commitPending) return;
         if (intentId == null) {
-            returnToHub();
+            if (checkoutOnly) dismiss(); else returnToHub();
             return;
         }
         setBusy(true);
@@ -1125,6 +1360,11 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
 
     private void returnToHub() {
         if (binding == null) return;
+        if (checkoutOnly) {
+            dismiss();
+            return;
+        }
+        catalogRequestVersion++;
         if (otpTimer != null) {
             otpTimer.cancel();
             otpTimer = null;
@@ -1132,6 +1372,20 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         binding.checkoutContainer.setVisibility(View.GONE);
         binding.hubSelectionContainer.setVisibility(View.VISIBLE);
         binding.hubMainTitle.setText("Tiện ích & Thanh toán");
+        binding.utilityBackButton.setVisibility(View.GONE);
+        binding.utilitySearchContainer.setVisibility(View.VISIBLE);
+        binding.utilityIntroCard.setVisibility(View.VISIBLE);
+        binding.utilityGridHeading.setVisibility(View.VISIBLE);
+        binding.utilityGridRowOne.setVisibility(View.VISIBLE);
+        binding.utilityGridRowTwo.setVisibility(View.VISIBLE);
+        binding.utilityBillsHeading.setVisibility(View.VISIBLE);
+        binding.pendingOrderButton.setVisibility(pendingOrder == null ? View.GONE : View.VISIBLE);
+        binding.orderHistoryButton.setVisibility(View.VISIBLE);
+        binding.billsListContainer.setVisibility(View.VISIBLE);
+        binding.topupFormContainer.setVisibility(View.GONE);
+        binding.lookupFormContainer.setVisibility(View.GONE);
+        binding.hubStatusText.setVisibility(View.GONE);
+        binding.utilitySearchInput.setText("");
         currentBillId = null;
         requestId = null;
         intentId = null;
@@ -1245,7 +1499,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         if (getDialog() != null && getDialog().getWindow() != null) {
             getDialog().getWindow().setLayout(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
+                    ViewGroup.LayoutParams.MATCH_PARENT
             );
             getDialog().getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         }

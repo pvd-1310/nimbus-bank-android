@@ -2,12 +2,12 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
+    android:layout_height="match_parent"
     android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="match_parent"
         android:background="@drawable/utilities_dialog_surface"
         android:orientation="vertical"
         android:padding="20dp">
@@ -28,6 +28,18 @@
                 android:textColor="@color/ink"
                 android:textSize="20sp"
                 android:textStyle="bold" />
+
+            <ImageButton
+                android:id="@+id/utility_back_button"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/circle_action_button"
+                android:contentDescription="Quay lại danh sách tiện ích"
+                android:padding="9dp"
+                android:src="@drawable/ic_chevron_right"
+                android:rotation="180"
+                android:visibility="gone" />
 
             <ImageButton
                 android:id="@+id/close_dialog_btn"
@@ -59,6 +71,92 @@
             android:visibility="visible">
 
             <LinearLayout
+                android:id="@+id/utility_search_container"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/input_glass_field"
+                android:gravity="center_vertical"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:contentDescription=""
+                    android:src="@drawable/ic_search"
+                    app:tint="@color/ink_muted" />
+
+                <EditText
+                    android:id="@+id/utility_search_input"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:background="@android:color/transparent"
+                    android:hint="Tìm dịch vụ, hóa đơn..."
+                    android:imeOptions="actionSearch"
+                    android:inputType="text"
+                    android:singleLine="true"
+                    android:textColor="@color/ink"
+                    android:textColorHint="@color/ink_faint"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/hub_status_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:paddingHorizontal="8dp"
+                android:textColor="@color/ink_muted"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/utility_intro_card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/glass_panel_card"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Tiện ích cuộc sống"
+                        android:textColor="@color/ink"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Thanh toán hóa đơn và dịch vụ trong một nơi."
+                        android:textColor="@color/ink_muted"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="@drawable/circle_action_button"
+                    android:padding="9dp"
+                    android:src="@drawable/ic_receipt"
+                    app:tint="@color/navy" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/utility_grid_heading"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
@@ -75,17 +173,18 @@
                     android:textSize="17sp"
                     android:textStyle="bold" />
 
-                <com.google.android.material.button.MaterialButton
+                <TextView
                     android:id="@+id/util_see_all"
-                    style="@style/Widget.Material3.Button.TextButton"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:minHeight="48dp"
-                    android:text="@string/utility_see_all"
-                    android:textColor="@color/navy" />
+                    android:padding="8dp"
+                    android:text="8 dịch vụ"
+                    android:textColor="@color/ink_muted"
+                    android:textSize="12sp" />
             </LinearLayout>
 
             <LinearLayout
+                android:id="@+id/utility_grid_row_one"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
@@ -148,6 +247,7 @@
             </LinearLayout>
 
             <LinearLayout
+                android:id="@+id/utility_grid_row_two"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
@@ -211,10 +311,11 @@
 
             <!-- Bills Section: Owned Unpaid Invoices -->
             <TextView
+                android:id="@+id/utility_bills_heading"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:text="HÓA ĐƠN &amp; ĐƠN HÀNG CHỜ THANH TOÁN"
+                android:text="HÓA ĐƠN CỦA BẠN"
                 android:textColor="@color/ink_muted"
                 android:textSize="11sp"
                 android:textStyle="bold"
@@ -271,7 +372,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Nạp tiền điện thoại trực tiếp (Mobile Top-up)"
+                    android:text="Số điện thoại cần nạp"
                     android:textColor="@color/ink"
                     android:textSize="14sp"
                     android:textStyle="bold" />
@@ -400,7 +501,8 @@
                 android:layout_marginTop="14dp"
                 android:background="@drawable/glass_panel_card"
                 android:orientation="vertical"
-                android:padding="14dp">
+                android:padding="14dp"
+                android:visibility="gone">
 
                 <TextView
                     android:id="@+id/lookup_title"
@@ -655,7 +757,7 @@
                     android:layout_marginTop="4dp"
                     android:background="@drawable/badge_status_neutral"
                     android:padding="8dp"
-                    android:text="Mã xác nhận hiển thị trên màn hình này."
+                    android:text="Nhập mã OTP để xác nhận giao dịch."
                     android:textColor="@color/ink"
                     android:textSize="12sp"
                     android:textStyle="bold" />
@@ -671,7 +773,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Mã của bạn: "
+                        android:text="Mã OTP: "
                         android:textColor="@color/ink_muted"
                         android:textSize="14sp" />
 
@@ -758,7 +860,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:text="Giao dịch đang chờ cổng thanh toán xác nhận settlement. Số tiền chưa bị trừ nếu chưa có kết quả cuối cùng."
+                        android:text="Thanh toán đang được xác nhận. Số dư chỉ thay đổi khi giao dịch hoàn tất."
                         android:textColor="@color/ink"
                         android:textSize="12sp" />
                 </LinearLayout>
@@ -812,7 +914,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:text="Thanh toán thành công (Settled)"
+                    android:text="Thanh toán thành công"
                     android:textColor="@color/success"
                     android:textSize="18sp"
                     android:textStyle="bold" />
@@ -833,7 +935,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:gravity="center"
-                    android:text="Giao dịch đã được hệ thống xác nhận settlement."
+                    android:text="Giao dịch đã được xác nhận và hoàn tất."
                     android:textColor="@color/ink_muted"
                     android:textSize="13sp" />
 

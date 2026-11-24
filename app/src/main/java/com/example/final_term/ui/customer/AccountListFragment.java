@@ -36,7 +36,6 @@ import com.example.final_term.data.ReadModelResult;
 import com.example.final_term.data.ReadModels;
 import com.example.final_term.data.ReadSummaryFormatter;
 import com.example.final_term.databinding.FragmentAccountListBinding;
-import com.example.final_term.ui.utilities.UtilitiesHubDialogFragment;
 import com.example.final_term.ui.common.SignatureBarChartView;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -615,7 +614,7 @@ public final class AccountListFragment extends Fragment {
         }
         MaterialButton bills = new MaterialButton(requireContext());
         bills.setText("Xem hóa đơn và tiện ích");
-        bills.setOnClickListener(v -> new UtilitiesHubDialogFragment().show(getChildFragmentManager(), "UtilitiesHub"));
+        bills.setOnClickListener(v -> androidx.navigation.Navigation.findNavController(v).navigate(R.id.utilitiesHub));
         LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         buttonParams.topMargin = dp(10);
         binding.content.addView(bills, buttonParams);
@@ -660,8 +659,15 @@ public final class AccountListFragment extends Fragment {
         card.addView(walletText(ReadSummaryFormatter.formatCurrency(bill.optLong("amountMinor"), bill.optString("currency", "VND")),
                 16, R.color.ink, true));
         card.setClickable(true); card.setFocusable(true);
-        card.setOnClickListener(v -> UtilitiesHubDialogFragment.newInstance(bill.optString("id"))
-                .show(getChildFragmentManager(), "UtilitiesHub"));
+        card.setOnClickListener(v -> {
+            String serviceType = bill.optString("serviceType", "ELECTRICITY");
+            Bundle args = new Bundle();
+            args.putString("billId", bill.optString("id"));
+            args.putString("serviceType", serviceType);
+            int destination = "WATER".equalsIgnoreCase(serviceType) ? R.id.waterBill
+                    : "ELECTRICITY".equalsIgnoreCase(serviceType) ? R.id.electricityBill : R.id.otherUtilities;
+            androidx.navigation.Navigation.findNavController(v).navigate(destination, args);
+        });
         return card;
     }
 

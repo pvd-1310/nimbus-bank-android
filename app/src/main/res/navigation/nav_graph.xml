@@ -15,6 +15,56 @@
         android:name="com.example.final_term.ui.customer.CustomerHomeFragment"
         android:label="@string/customer_home_title" />
     <fragment
+        android:id="@+id/utilitiesHub"
+        android:name="com.example.final_term.ui.utilities.UtilitiesHubFragment"
+        android:label="Tiện ích &amp; Dịch vụ" />
+    <fragment
+        android:id="@+id/electricityBill"
+        android:name="com.example.final_term.ui.utilities.BillPaymentFragment"
+        android:label="Thanh toán tiền điện">
+        <argument android:name="serviceType" app:argType="string" android:defaultValue="ELECTRICITY" />
+    </fragment>
+    <fragment
+        android:id="@+id/waterBill"
+        android:name="com.example.final_term.ui.utilities.BillPaymentFragment"
+        android:label="Thanh toán tiền nước">
+        <argument android:name="serviceType" app:argType="string" android:defaultValue="WATER" />
+    </fragment>
+    <fragment
+        android:id="@+id/mobileTopup"
+        android:name="com.example.final_term.ui.utilities.MobileTopupFragment"
+        android:label="Nạp điện thoại" />
+    <fragment
+        android:id="@+id/flightBooking"
+        android:name="com.example.final_term.ui.utilities.UtilityCatalogFragment"
+        android:label="Đặt vé máy bay">
+        <argument android:name="serviceType" app:argType="string" android:defaultValue="FLIGHT" />
+    </fragment>
+    <fragment
+        android:id="@+id/movieTickets"
+        android:name="com.example.final_term.ui.utilities.UtilityCatalogFragment"
+        android:label="Vé xem phim">
+        <argument android:name="serviceType" app:argType="string" android:defaultValue="MOVIE" />
+    </fragment>
+    <fragment
+        android:id="@+id/hotelBooking"
+        android:name="com.example.final_term.ui.utilities.UtilityCatalogFragment"
+        android:label="Đặt khách sạn">
+        <argument android:name="serviceType" app:argType="string" android:defaultValue="HOTEL" />
+    </fragment>
+    <fragment
+        android:id="@+id/onlineShopping"
+        android:name="com.example.final_term.ui.utilities.UtilityCatalogFragment"
+        android:label="Mua sắm">
+        <argument android:name="serviceType" app:argType="string" android:defaultValue="ECOMMERCE" />
+    </fragment>
+    <fragment
+        android:id="@+id/otherUtilities"
+        android:name="com.example.final_term.ui.utilities.BillPaymentFragment"
+        android:label="Hóa đơn dịch vụ">
+        <argument android:name="serviceType" app:argType="string" android:defaultValue="OTHER" />
+    </fragment>
+    <fragment
         android:id="@+id/officerHome"
         android:name="com.example.final_term.ui.officer.OfficerHomeFragment"
         android:label="@string/officer_home_title" />
