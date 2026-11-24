@@ -7,12 +7,16 @@ import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Gravity;
+import android.graphics.drawable.GradientDrawable;
+import android.view.ViewOutlineProvider;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.HorizontalScrollView;
+import android.widget.FrameLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -46,6 +50,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.text.DateFormat;
 import java.util.UUID;
 
@@ -75,6 +83,12 @@ public final class AccountListFragment extends Fragment {
     private boolean walletBillsLoading;
     private boolean walletBillsLoaded;
     private final List<JSONObject> walletUpcomingBills = new ArrayList<>();
+    private final Map<String, JSONObject> cardSnapshots = new HashMap<>();
+    private final Set<String> cardRequestsInFlight = new HashSet<>();
+    private final Set<String> cardRequestsLoaded = new HashSet<>();
+    private final Set<String> cardRequestsFailed = new HashSet<>();
+    private String selectedCardAccountId;
+    private float cardSwipeStartX;
 
     @Nullable
     @Override
@@ -130,7 +144,15 @@ public final class AccountListFragment extends Fragment {
         application.getAppContainer().getAuthRepository().observeAuthState()
                 .observe(getViewLifecycleOwner(), authState -> {
                     if (authState != null && authState.getStatus() == AuthState.Status.SIGNED_IN && authState.getUser() != null) {
-                        uid = authState.getUser().getUid();
+                        String signedInUid = authState.getUser().getUid();
+                        if (!java.util.Objects.equals(uid, signedInUid)) {
+                            cardSnapshots.clear();
+                            cardRequestsInFlight.clear();
+                            cardRequestsLoaded.clear();
+                            cardRequestsFailed.clear();
+                            selectedCardAccountId = null;
+                        }
+                        uid = signedInUid;
                         role = authState.getUser().getRole();
                         updateScreenTitle();
                         load();
@@ -142,7 +164,7 @@ public final class AccountListFragment extends Fragment {
         if (role == UserRole.OFFICER) {
             binding.titleText.setText(activeNavItem == R.id.nav_wallet ? "Khách hàng" : "Duyệt & Tài khoản");
         } else {
-            binding.titleText.setText(activeNavItem == R.id.nav_wallet ? "Ví" : "Tài khoản & Thẻ");
+            binding.titleText.setText(activeNavItem == R.id.nav_wallet ? "Ví" : "Thẻ");
         }
     }
 
@@ -211,10 +233,296 @@ public final class AccountListFragment extends Fragment {
     // 1. CUSTOMER: TÀI KHOẢN & THẺ (Cards_Screen)
     // ==========================================
     private void renderCustomerCards() {
-        if (accounts == null) return;
-        for (ReadModels.AccountSummary account : accounts) {
-            if (!"CLOSED".equalsIgnoreCase(account.status)) binding.content.addView(createAccountTile(account));
+        if (accounts == null) {
+            TextView loading = walletText("Đang tải thẻ…", 14, R.color.ink_muted, false);
+            loading.setGravity(Gravity.CENTER);
+            loading.setPadding(0, dp(36), 0, dp(36));
+            binding.content.addView(loading);
+            return;
         }
+        List<ReadModels.AccountSummary> cardAccounts = new ArrayList<>();
+        List<ReadModels.AccountSummary> otherAccounts = new ArrayList<>();
+        for (ReadModels.AccountSummary account : accounts) {
+            if ("CLOSED".equalsIgnoreCase(account.status)) continue;
+            if ("CHECKING".equalsIgnoreCase(account.type) && "ACTIVE".equalsIgnoreCase(account.status)) {
+                cardAccounts.add(account);
+                loadStripeCard(account);
+            } else if (!"CHECKING".equalsIgnoreCase(account.type)) {
+                otherAccounts.add(account);
+            }
+        }
+
+        if (cardAccounts.isEmpty()) {
+            LinearLayout empty = walletCard();
+            empty.addView(walletText("Chưa có thẻ thanh toán", 18, R.color.ink, true));
+            TextView hint = walletText("Thẻ sẽ xuất hiện tại đây khi tài khoản thanh toán được kích hoạt.",
+                    13, R.color.ink_muted, false);
+            hint.setPadding(0, dp(8), 0, 0);
+            empty.addView(hint);
+            binding.content.addView(empty);
+        } else {
+            int selectedIndex = findSelectedCardIndex(cardAccounts);
+            ReadModels.AccountSummary selected = cardAccounts.get(selectedIndex);
+            selectedCardAccountId = selected.id;
+            FrameLayout stack = new FrameLayout(requireContext());
+            stack.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(380)));
+            if (cardAccounts.size() > 1) {
+                View leftPeek = createCardBackplate(false);
+                FrameLayout.LayoutParams leftParams = new FrameLayout.LayoutParams(dp(216), dp(330), Gravity.CENTER_VERTICAL | Gravity.START);
+                leftParams.leftMargin = dp(8);
+                stack.addView(leftPeek, leftParams);
+                View rightPeek = createCardBackplate(true);
+                FrameLayout.LayoutParams rightParams = new FrameLayout.LayoutParams(dp(216), dp(330), Gravity.CENTER_VERTICAL | Gravity.END);
+                rightParams.rightMargin = dp(8);
+                stack.addView(rightPeek, rightParams);
+            }
+            View card = createPaymentCard(selected);
+            FrameLayout.LayoutParams cardParams = new FrameLayout.LayoutParams(dp(244), dp(356), Gravity.CENTER);
+            stack.addView(card, cardParams);
+            stack.setOnTouchListener((view, event) -> {
+                if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                    cardSwipeStartX = event.getX();
+                    return true;
+                }
+                if (event.getAction() == MotionEvent.ACTION_UP) {
+                    float delta = event.getX() - cardSwipeStartX;
+                    if (Math.abs(delta) > dp(44) && cardAccounts.size() > 1) {
+                        int next = (selectedIndex + (delta < 0 ? 1 : -1) + cardAccounts.size()) % cardAccounts.size();
+                        selectedCardAccountId = cardAccounts.get(next).id;
+                        renderAll();
+                    } else if (cardRequestsFailed.contains(selected.id)) {
+                        cardRequestsFailed.remove(selected.id);
+                        cardRequestsLoaded.remove(selected.id);
+                        cardSnapshots.remove(selected.id);
+                        loadStripeCard(selected);
+                        renderAll();
+                    }
+                    return true;
+                }
+                return true;
+            });
+            binding.content.addView(stack);
+            if (cardAccounts.size() > 1) binding.content.addView(createCardPagination(cardAccounts, selectedIndex));
+
+            MaterialButton details = new MaterialButton(requireContext());
+            details.setText("Chi tiết thẻ  ›");
+            details.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
+            details.setBackgroundTintList(ContextCompat.getColorStateList(requireContext(), R.color.glass));
+            details.setCornerRadius(dp(26));
+            details.setOnClickListener(v -> openDetails(v, selected));
+            LinearLayout.LayoutParams detailsParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52));
+            detailsParams.setMargins(dp(4), dp(8), dp(4), dp(18));
+            binding.content.addView(details, detailsParams);
+        }
+
+        if (!otherAccounts.isEmpty()) {
+            TextView title = walletText("Tài khoản khác", 16, R.color.ink, true);
+            title.setPadding(dp(2), dp(8), dp(2), dp(10));
+            binding.content.addView(title);
+            for (ReadModels.AccountSummary account : otherAccounts) binding.content.addView(createOtherAccountRow(account));
+        }
+    }
+
+    private void loadStripeCard(ReadModels.AccountSummary account) {
+        if (cardRequestsLoaded.contains(account.id) || !cardRequestsInFlight.add(account.id)) return;
+        var current = binding;
+        String requestedUid = uid;
+        application.getAppContainer().getBackendApiClient()
+                .get("/accounts/" + android.net.Uri.encode(account.id) + "/stripe-sandbox")
+                .addOnCompleteListener(task -> {
+                    cardRequestsInFlight.remove(account.id);
+                    if (binding != current || !java.util.Objects.equals(uid, requestedUid)) return;
+                    cardRequestsLoaded.add(account.id);
+                    try {
+                        if (task.isSuccessful() && task.getResult() != null && task.getResult().statusCode == 200) {
+                            cardSnapshots.put(account.id, new JSONObject(task.getResult().body));
+                        } else {
+                            cardRequestsFailed.add(account.id);
+                        }
+                    } catch (Exception ignored) {
+                        cardRequestsFailed.add(account.id);
+                    }
+                    renderAll();
+                });
+    }
+
+    private int findSelectedCardIndex(List<ReadModels.AccountSummary> accountsForCards) {
+        if (selectedCardAccountId != null) {
+            for (int i = 0; i < accountsForCards.size(); i++) {
+                if (selectedCardAccountId.equals(accountsForCards.get(i).id)) return i;
+            }
+        }
+        return 0;
+    }
+
+    private View createCardBackplate(boolean right) {
+        View plate = new View(requireContext());
+        plate.setBackground(cardDrawable(0x99B9C4DC, 0x668D9CC0));
+        plate.setAlpha(right ? 0.62f : 0.48f);
+        plate.setRotation(right ? 7f : -7f);
+        plate.setElevation(dp(5));
+        return plate;
+    }
+
+    private View createPaymentCard(ReadModels.AccountSummary account) {
+        JSONObject snapshot = cardSnapshots.get(account.id);
+        JSONObject cardData = snapshot == null ? null : snapshot.optJSONObject("card");
+        boolean loading = cardRequestsInFlight.contains(account.id) || !cardRequestsLoaded.contains(account.id);
+        String state = snapshot == null ? "" : snapshot.optString("status", "");
+        String brand = cardData == null ? "NIMBUS" : cardData.optString("brand", "Thẻ thanh toán").toUpperCase(Locale.ROOT);
+        String last4 = cardData == null ? "" : cardData.optString("last4", "");
+        String cardStatus = cardData == null ? "" : cardData.optString("status", "");
+
+        LinearLayout card = new LinearLayout(requireContext());
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setGravity(Gravity.TOP);
+        card.setPadding(dp(20), dp(22), dp(20), dp(20));
+        card.setBackground(cardDrawable(0xFF5E7096, 0xFFE4E9F2));
+        card.setElevation(dp(18));
+        card.setContentDescription("Thẻ thanh toán Nimbus" + (last4.isEmpty() ? "" : " kết thúc bằng " + last4));
+        if (android.os.Build.VERSION.SDK_INT >= 21) card.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
+
+        LinearLayout top = new LinearLayout(requireContext());
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        FrameLayout chip = new FrameLayout(requireContext());
+        GradientDrawable chipShape = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                new int[]{0xFFFCE9B8, 0xFFE8C581, 0xFF9E7B34});
+        chipShape.setCornerRadius(dp(7));
+        chipShape.setStroke(dp(1), 0x99FFFFFF);
+        chip.setBackground(chipShape);
+        FrameLayout.LayoutParams vertical = new FrameLayout.LayoutParams(dp(1), ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER);
+        vertical.leftMargin = dp(14);
+        View chipDivider = new View(requireContext()); chipDivider.setBackgroundColor(0x665E4105); chip.addView(chipDivider, vertical);
+        LinearLayout.LayoutParams chipParams = new LinearLayout.LayoutParams(dp(42), dp(32));
+        top.addView(chip, chipParams);
+        TextView brandText = walletText(brand, 16, R.color.white, true);
+        brandText.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        brandText.setShadowLayer(dp(2), 0, dp(1), 0x66000000);
+        LinearLayout.LayoutParams brandParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        top.addView(brandText, brandParams);
+        card.addView(top);
+
+        LinearLayout middle = new LinearLayout(requireContext());
+        middle.setOrientation(LinearLayout.VERTICAL);
+        middle.setGravity(Gravity.CENTER_VERTICAL);
+        middle.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        if (!last4.isEmpty()) {
+            TextView number = walletText("••••  ••••  ••••  " + last4, 16, R.color.white, true);
+            number.setLetterSpacing(0.06f);
+            number.setShadowLayer(dp(2), 0, dp(1), 0x55000000);
+            middle.addView(number);
+        } else {
+            String stateMessage = loading || "pending".equalsIgnoreCase(state)
+                    ? "Đang phát hành thẻ" : cardRequestsFailed.contains(account.id)
+                    ? "Không tải được thông tin thẻ" : "Chưa có thẻ được phát hành";
+            TextView cardState = walletText(stateMessage, 14, R.color.white, false);
+            cardState.setShadowLayer(dp(2), 0, dp(1), 0x55000000);
+            middle.addView(cardState);
+        }
+        card.addView(middle);
+
+        LinearLayout bottom = new LinearLayout(requireContext());
+        bottom.setGravity(Gravity.BOTTOM | Gravity.CENTER_VERTICAL);
+        LinearLayout wordmark = new LinearLayout(requireContext());
+        wordmark.setOrientation(LinearLayout.VERTICAL);
+        TextView name = walletText("nimbus", 22, R.color.white, false);
+        name.setLetterSpacing(-0.03f);
+        TextView subtitle = walletText("THẺ THANH TOÁN", 9, R.color.white, true);
+        subtitle.setAlpha(0.78f);
+        wordmark.addView(name); wordmark.addView(subtitle); bottom.addView(wordmark);
+        ImageView contactless = new ImageView(requireContext());
+        contactless.setImageResource(R.drawable.ic_nav_payment);
+        contactless.setColorFilter(ContextCompat.getColor(requireContext(), R.color.white));
+        LinearLayout.LayoutParams contactParams = new LinearLayout.LayoutParams(dp(25), dp(25));
+        contactParams.gravity = Gravity.BOTTOM;
+        contactParams.leftMargin = dp(8);
+        bottom.addView(contactless, contactParams);
+        card.addView(bottom);
+
+        String stateLabel = loading ? "Đang tải thông tin thẻ"
+                : cardRequestsFailed.contains(account.id) ? "Chạm để thử tải lại thông tin thẻ"
+                : cardData == null ? ("pending".equalsIgnoreCase(state) ? "Thẻ đang được phát hành"
+                : "Chưa có thẻ thanh toán") : formatCardStatus(cardStatus);
+        TextView status = walletText(stateLabel, 12, R.color.ink_muted, false);
+        status.setGravity(Gravity.CENTER);
+        status.setPadding(0, dp(7), 0, 0);
+        card.addView(status);
+        return card;
+    }
+
+    private GradientDrawable cardDrawable(int startColor, int endColor) {
+        GradientDrawable drawable = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                new int[]{startColor, 0xFF8D9CC0, 0xFFB9C4DC, endColor, 0xFFF8FAFC});
+        drawable.setCornerRadius(dp(28));
+        drawable.setStroke(dp(1), 0xCCFFFFFF);
+        return drawable;
+    }
+
+    private String formatCardStatus(String status) {
+        if ("active".equalsIgnoreCase(status)) return "Thẻ đang hoạt động";
+        if ("inactive".equalsIgnoreCase(status)) return "Thẻ chưa kích hoạt";
+        if ("canceled".equalsIgnoreCase(status) || "cancelled".equalsIgnoreCase(status)) return "Thẻ đã hủy";
+        if ("pending".equalsIgnoreCase(status)) return "Thẻ đang được phát hành";
+        if ("paused".equalsIgnoreCase(status)) return "Thẻ tạm ngưng";
+        return "Trạng thái thẻ chưa khả dụng";
+    }
+
+    private View createCardPagination(List<ReadModels.AccountSummary> cardAccounts, int selectedIndex) {
+        LinearLayout dots = new LinearLayout(requireContext());
+        dots.setGravity(Gravity.CENTER);
+        dots.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(24));
+        params.bottomMargin = dp(8);
+        dots.setLayoutParams(params);
+        for (int i = 0; i < cardAccounts.size(); i++) {
+            final int index = i;
+            View dot = new View(requireContext());
+            GradientDrawable shape = new GradientDrawable();
+            shape.setShape(GradientDrawable.OVAL);
+            shape.setColor(i == selectedIndex ? ContextCompat.getColor(requireContext(), R.color.white)
+                    : 0x99FFFFFF);
+            if (i == selectedIndex) shape.setStroke(dp(1), 0x33777777);
+            dot.setBackground(shape);
+            dot.setContentDescription("Thẻ " + (i + 1) + " trên " + cardAccounts.size());
+            dot.setFocusable(true);
+            dot.setClickable(true);
+            dot.setOnClickListener(v -> { selectedCardAccountId = cardAccounts.get(index).id; renderAll(); });
+            LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(i == selectedIndex ? dp(24) : dp(8), dp(8));
+            dotParams.setMargins(dp(4), 0, dp(4), 0);
+            dots.addView(dot, dotParams);
+        }
+        return dots;
+    }
+
+    private View createOtherAccountRow(ReadModels.AccountSummary account) {
+        LinearLayout row = new LinearLayout(requireContext());
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(16), dp(14), dp(16), dp(14));
+        row.setBackgroundResource(R.drawable.glass_panel_card);
+        row.setClickable(true);
+        row.setFocusable(true);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.bottomMargin = dp(10);
+        row.setLayoutParams(params);
+        LinearLayout text = new LinearLayout(requireContext());
+        text.setOrientation(LinearLayout.VERTICAL);
+        text.addView(walletText(Phase2Presentation.accountTitle(account.type), 14, R.color.ink, true));
+        TextView state = walletText(accountStatusLabel(account.status), 12, R.color.ink_muted, false);
+        state.setPadding(0, dp(4), 0, 0); text.addView(state);
+        row.addView(text, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        ImageView arrow = new ImageView(requireContext());
+        arrow.setImageResource(R.drawable.ic_chevron_right);
+        row.addView(arrow, new LinearLayout.LayoutParams(dp(20), dp(20)));
+        row.setOnClickListener(v -> openDetails(v, account));
+        return row;
+    }
+
+    private String accountStatusLabel(String status) {
+        if ("ACTIVE".equalsIgnoreCase(status)) return "Đang hoạt động";
+        if ("PENDING".equalsIgnoreCase(status)) return "Đang xử lý";
+        if ("INACTIVE".equalsIgnoreCase(status)) return "Chưa kích hoạt";
+        if ("CLOSED".equalsIgnoreCase(status)) return "Đã đóng";
+        return "Cần kiểm tra trạng thái";
     }
 
     private void renderCustomerWallet() {
