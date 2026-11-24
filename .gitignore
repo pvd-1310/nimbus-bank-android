@@ -20,6 +20,7 @@ app/google-services.json
 service-account*.json
 .env
 .env.*
+!/.env.example
 
 # Sensitive demo artifacts
 /eKYC/

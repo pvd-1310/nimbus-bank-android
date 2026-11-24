@@ -1,5 +1,6 @@
 import { S3Client } from "@aws-sdk/client-s3";
-import "dotenv/config";
+import { config as loadEnv } from "dotenv";
+import { fileURLToPath } from "node:url";
 import { applicationDefault, cert, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
@@ -19,6 +20,8 @@ import { check } from "../shared/errors.js";
 import { FirestoreStore } from "./firestore-store.js";
 
 import { FaceService } from "../modules/security/face.js";
+
+loadEnv({ path: fileURLToPath(new URL("../../../.env", import.meta.url)) });
 
 function faceProvider() {
   const url = process.env.FACE_API_BASE_URL;

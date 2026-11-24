@@ -1,10 +1,26 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.application)
 }
 
-val firebaseDemo = providers.gradleProperty("firebaseDemo").orNull == "true"
+val androidEnvKeys = setOf("APP_MODE", "ANDROID_BACKEND_URL", "STRIPE_PUBLISHABLE_KEY", "MAPS_API_KEY")
+val androidEnv = rootProject.file(".env").let { envFile ->
+    if (!envFile.isFile) emptyMap() else envFile.useLines { lines ->
+        lines.mapNotNull { line ->
+            val key = line.substringBefore('=').trim()
+            if (key !in androidEnvKeys || '=' !in line) null else {
+                val raw = line.substringAfter('=').trim()
+                val value = when {
+                    raw.startsWith('"') -> raw.drop(1).substringBefore('"')
+                    raw.startsWith('\'') -> raw.drop(1).substringBefore('\'')
+                    else -> raw.substringBefore('#').trim()
+                }
+                key to value
+            }
+        }.toMap()
+    }
+}
+val firebaseDemo = providers.gradleProperty("firebaseDemo").orNull?.let { it == "true" }
+    ?: (androidEnv["APP_MODE"] == "emulator")
 if (!firebaseDemo) {
     check(file("google-services.json").exists()) {
         "Connected Android builds require app/google-services.json"
@@ -24,21 +40,17 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
-        val localProperties = Properties().apply {
-            val localPropertiesFile = rootProject.file("local.properties")
-            if (localPropertiesFile.isFile) {
-                localPropertiesFile.inputStream().use { load(it) }
-            }
-        }
         val configuredBackendUrl = providers.gradleProperty("backendBaseUrl").orNull
-            ?: localProperties.getProperty("backendBaseUrl")
+            ?: androidEnv["ANDROID_BACKEND_URL"]?.takeIf {
+                it.isNotEmpty() && (firebaseDemo == (androidEnv["APP_MODE"] == "emulator"))
+            }
         val stripePublishableKey = providers.gradleProperty("stripePublishableKey").orNull
-            ?: localProperties.getProperty("STRIPE_PUBLISHABLE_KEY", "")
+            ?: androidEnv["STRIPE_PUBLISHABLE_KEY"].orEmpty()
         check(stripePublishableKey.isEmpty() || stripePublishableKey.startsWith("pk_test_")) {
             "Stripe checkout requires a test publishable key (pk_test_...)"
         }
-        val simulatorBackendUrl = if (firebaseDemo) "http://10.0.2.2:3198"
-            else configuredBackendUrl ?: "http://10.0.2.2:3001"
+        val simulatorBackendUrl = configuredBackendUrl
+            ?: if (firebaseDemo) "http://10.0.2.2:3198" else "http://10.0.2.2:3001"
         val releaseRequested = gradle.startParameter.taskNames.any {
             it.contains("release", ignoreCase = true)
         }
@@ -47,8 +59,8 @@ android {
         }
         if (releaseRequested && configuredBackendUrl == null) {
             error(
-                "Release Android build requires backendBaseUrl=https://... "
-                    + "in local.properties or -PbackendBaseUrl=https://..."
+                "Release Android build requires ANDROID_BACKEND_URL=https://... "
+                    + "in .env or -PbackendBaseUrl=https://..."
             )
         }
         check(simulatorBackendUrl.startsWith("https://")
@@ -62,7 +74,7 @@ android {
 
         manifestPlaceholders["bankAppLabel"] = if (firebaseDemo) "Nimbus Bank (Local)" else "@string/app_name"
         manifestPlaceholders["bankAllowBackup"] = (!firebaseDemo).toString()
-        manifestPlaceholders["MAPS_API_KEY"] = if (firebaseDemo) "" else localProperties.getProperty("MAPS_API_KEY", "")
+        manifestPlaceholders["MAPS_API_KEY"] = if (firebaseDemo) "" else androidEnv["MAPS_API_KEY"].orEmpty()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

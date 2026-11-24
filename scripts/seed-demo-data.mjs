@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 
 import process from 'node:process';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+const envFile = fileURLToPath(new URL('../.env', import.meta.url));
+if (existsSync(envFile)) process.loadEnvFile(envFile);
 
 let admin;
 try {

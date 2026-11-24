@@ -45,7 +45,9 @@ Refactor giữ nguyên endpoint, schema, các field tương thích và thứ t�
 Không chạy production bằng emulator hoặc file seed demo. Trên deployment host:
 
 ```sh
-cp .env.production.example .env
+cp .env.example .env
+# Configure connected mode in the root .env before starting.
+cd backend
 npm ci
 npm run build
 npm start
@@ -58,7 +60,7 @@ Container production:
 ```sh
 docker build -t nimbus-bank-api ./backend
 docker run --read-only --cap-drop=ALL --security-opt=no-new-privileges \
-  -p 3000:3000 --env-file backend/.env \
+  -p 3000:3000 --env-file .env \
   -v /secure/firebase-admin.json:/run/secrets/firebase-admin.json:ro \
   nimbus-bank-api
 ```
@@ -73,7 +75,7 @@ Yêu cầu Node 22 trở lên, Java và Firebase CLI. Tại thư mục gốc pro
 firebase emulators:start --project demo-mobile-banking --only auth,firestore
 ```
 
-Mở terminal khác tại `backend/`. Sao chép `.env.example` thành `.env`, tạo `OTP_SECRET` bằng `openssl rand -hex 32`, đặt `DEMO_PASSWORD` riêng dài ít nhất 12 ký tự. Các giá trị này chỉ lưu trên máy, không gửi vào chat.
+Sao chép `.env.example` thành `.env` tại thư mục gốc, tạo `OTP_SECRET` bằng `openssl rand -hex 32`, đặt `DEMO_PASSWORD` riêng dài ít nhất 12 ký tự. Các giá trị này chỉ lưu trên máy, không gửi vào chat. Mở terminal tại `backend/` để chạy các lệnh sau.
 
 ```sh
 npm ci
@@ -89,7 +91,7 @@ API: `http://127.0.0.1:3000`; health: `GET /health`; hợp đồng API: `GET /op
 
 OTP giao dịch dùng DEMO_DISPLAY_CODE. Backend chỉ trả mã khi tạo challenge và giữ HMAC để xác minh. Đây là mã hiển thị cùng app cho đồ án, không phải yếu tố xác thực độc lập.
 
-Android Emulator truy cập API máy qua `10.0.2.2:3000`. Khi tích hợp Android, cần cấu hình Auth/Firestore emulator riêng và cho phép HTTP local trong debug build; Android hiện tại chưa tự chuyển sang emulator/backend này. App release sau này cần HTTPS.
+Android Emulator truy cập API máy qua `10.0.2.2:3000`. Khi tích hợp Android, cần cấu hình Auth/Firestore emulator riêng và cho phép HTTP local trong debug build; Gradle chọn Firebase Emulator khi `APP_MODE=emulator` trong `.env` và đọc địa chỉ từ `ANDROID_BACKEND_URL`. Bản release cần HTTPS.
 
 ## Luồng API chính
 
@@ -121,7 +123,7 @@ Gửi `latitude` và `longitude` tới `POST /branches/routes` để tìm chi nh
 
 `PATCH /me` chỉ cho phép contactEmail, contactPhone theo định dạng E.164 và preferences.language/notificationsEnabled. Officer có thể chỉnh họ tên, email/điện thoại liên hệ và địa chỉ qua `PATCH /officer/customers/:id`; bắt buộc có lý do. Backend lưu before/after vào `customerChanges` và audit log; GET `/officer/customers/:id/changes` đọc lịch sử theo quyền CUSTOMER_ADMIN. Email đăng nhập, role, UID, customerNo và trạng thái eKYC không được sửa qua endpoint này.
 
-Cấu hình `GOOGLE_ROUTES_API_KEY` trong `backend/.env` bằng khóa máy chủ được phép gọi Routes API trên dự án Google Cloud đã bật Routes API và billing. Android `local.properties` dùng `MAPS_API_KEY` giới hạn cho Maps SDK for Android và package `com.example.final_term` cùng SHA-1. Không commit API keys.
+Cấu hình `GOOGLE_ROUTES_API_KEY` trong `.env` ở thư mục gốc bằng khóa máy chủ được phép gọi Routes API trên dự án Google Cloud đã bật Routes API và billing. Android đọc `MAPS_API_KEY` từ cùng file `.env` giới hạn cho Maps SDK for Android và package `com.example.final_term` cùng SHA-1. Không commit API keys.
 
 Ví dụ tạo intent chuyển nội bộ:
 
@@ -148,7 +150,7 @@ OTP giao dịch dùng chung chế độ hiển thị demo trong emulator và con
 ## Face API và bước xác minh giao dịch giá trị cao
 
 1. Lấy đúng hai file `det_10g.onnx` và `w600k_r50.onnx` từ gói `buffalo_l` của [bản phát hành InsightFace v0.7](https://github.com/deepinsight/insightface/releases/tag/v0.7). Đặt chúng tại `<FACE_MODEL_PATH>/models/buffalo_l/`. Giữ license đi kèm gói ở ngoài Git. Chủ dự án xác nhận quyền sử dụng đúng bản weights cung cấp. File detection và recognition phát hành công khai thuộc điều khoản nghiên cứu phi thương mại của pretrained models. Quyền thương mại cần cấp phép riêng từ InsightFace. [Model Zoo](https://github.com/deepinsight/insightface/tree/master/model_zoo), [Cấp phép weights](https://www.insightface.ai/solutions/face-recognition-licensing)
-2. Trong `backend/.env`, đặt `FACE_TEMPLATE_KEY_HEX` bằng giá trị sinh độc lập với `OTP_SECRET`, dùng `openssl rand -hex 32`. Giữ khóa ổn định qua restart. Thay khóa cần quy trình chuyển đổi hoặc đăng ký lại template. Cấu hình Firebase Admin phải có quyền tạo custom token.
+2. Trong `.env` ở thư mục gốc, đặt `FACE_TEMPLATE_KEY_HEX` bằng giá trị sinh độc lập với `OTP_SECRET`, dùng `openssl rand -hex 32`. Giữ khóa ổn định qua restart. Thay khóa cần quy trình chuyển đổi hoặc đăng ký lại template. Cấu hình Firebase Admin phải có quyền tạo custom token.
 3. Từ thư mục gốc, đặt `FACE_MODEL_PATH` là đường dẫn tuyệt đối trên máy host, rồi chạy `docker compose up -d --build face-api backend`. Dùng `docker compose ps` để xem health. Compose đặt `FACE_API_BASE_URL=http://face-api:8000` trên mạng nội bộ. Face API không publish port và khởi động offline. Model version kết hợp hash hai file và phiên bản pipeline `v1`. Mẫu Python đi kèm yêu cầu thiếu file requirements nên bản pin trong `face-api/requirements.txt` là baseline được chọn cho Python 3.11.
 4. Android dùng POST `/auth/face-login` với JPEG/PNG raw, sau đó dùng Firebase `signInWithCustomToken`. Backend giới hạn 5 lần mỗi 5 phút theo IP kết nối và 60 lần mỗi phút toàn dịch vụ. Khi có reverse proxy, IP kết nối có thể là IP chung của proxy. Cấu hình rate-limit theo IP xác thực tại proxy nếu cần tách người dùng. Endpoint dùng tối đa 1.000 template cùng phiên bản và từ chối khi vượt ngưỡng.
 5. Backend áp dụng `FACE_THRESHOLDS_MINOR` (mặc định VND 100 triệu, mặc định dự phòng 100 triệu đơn vị nhỏ nhất mỗi currency chưa cấu hình). Khi `faceRequired` bật, POST JPEG/PNG mới tới `/intents/:id/face` với bearer Firebase. OTP và bằng chứng khuôn mặt có TTL riêng. Demo khớp ảnh tĩnh, thiếu liveness và kiểm tra chống phát lại.
@@ -157,7 +159,7 @@ OTP giao dịch dùng chung chế độ hiển thị demo trong emulator và con
 
 `FACE_ID_SIMILARITY` mặc định 0.40 cho phép so chân dung in trên CCCD với selfie trong chế độ FULL_ID. Cần hiệu chuẩn với dữ liệu được đồng ý trước khi dùng ngoài demo. Việc khớp ảnh không xác thực CCCD thật hoặc chống ảnh giả/phát lại.
 
-Chế độ tạm `EKYC_DEMO_SELFIE_ONLY=true` trong `backend/.env` bỏ qua hai ảnh CCCD và chỉ yêu cầu selfie ở index 2. Backend vẫn xác nhận S3 và kiểm tra đúng một khuôn mặt đủ chất lượng, rồi lưu template. Hồ sơ có `mode: DEMO_SELFIE_ONLY`; `/ekyc` trả `captureMode`, `/capabilities` trả `ekycMode`. Trạng thái kỹ thuật VERIFIED/ACTIVE trong chế độ này chỉ phục vụ demo đăng nhập khuôn mặt, không phải xác minh danh tính hoặc CCCD. Đặt `false` và restart backend để trở lại luồng FULL_ID; hồ sơ đã nộp giữ nguyên mode ban đầu.
+Chế độ tạm `EKYC_DEMO_SELFIE_ONLY=true` trong `.env` ở thư mục gốc bỏ qua hai ảnh CCCD và chỉ yêu cầu selfie ở index 2. Backend vẫn xác nhận S3 và kiểm tra đúng một khuôn mặt đủ chất lượng, rồi lưu template. Hồ sơ có `mode: DEMO_SELFIE_ONLY`; `/ekyc` trả `captureMode`, `/capabilities` trả `ekycMode`. Trạng thái kỹ thuật VERIFIED/ACTIVE trong chế độ này chỉ phục vụ demo đăng nhập khuôn mặt, không phải xác minh danh tính hoặc CCCD. Đặt `false` và restart backend để trở lại luồng FULL_ID; hồ sơ đã nộp giữ nguyên mode ban đầu.
 
 ## Mốc cấu hình S3 eKYC
 
@@ -178,8 +180,8 @@ Lên lịch chạy hằng ngày `docker compose exec -T backend npm run purge:ve
 
 Hóa đơn, nạp điện thoại và đơn hàng đều dùng Stripe Sandbox, kể cả khi chạy Firebase Emulator.
 
-1. Chọn cùng một sandbox cho Android, backend và Stripe CLI. Cấu hình `STRIPE_SECRET_KEY=sk_test_...` và `STRIPE_WEBHOOK_SECRET=whsec_...` trong `backend/.env`. Live keys bị từ chối.
-2. Cấu hình publishable test key `STRIPE_PUBLISHABLE_KEY=pk_test_...` trong `local.properties` ở thư mục gốc Android. Đây là key công khai dùng bởi Stripe Android SDK; không đưa secret key vào ứng dụng.
+1. Chọn cùng một sandbox cho Android, backend và Stripe CLI. Cấu hình `STRIPE_SECRET_KEY=sk_test_...` và `STRIPE_WEBHOOK_SECRET=whsec_...` trong `.env` ở thư mục gốc. Live keys bị từ chối.
+2. Cấu hình publishable test key `STRIPE_PUBLISHABLE_KEY=pk_test_...` trong `.env` ở thư mục gốc. Đây là key công khai dùng bởi Stripe Android SDK; không đưa secret key vào ứng dụng.
 3. Khởi động webhook listener: `stripe listen --events payment_intent.succeeded,payment_intent.payment_failed,payment_intent.canceled --forward-to http://localhost:3001/webhooks/stripe`. Với backend chạy cổng 3198, đổi URL chuyển tiếp sang `http://localhost:3198/webhooks/stripe`. Lưu signing secret listener in ra làm `STRIPE_WEBHOOK_SECRET`, rồi khởi động lại backend.
 4. Trong app đăng nhập khách hàng, mở Tiện ích & Thanh toán, chọn hóa đơn chưa thanh toán, hoàn tất OTP, nhập thẻ test ở Stripe PaymentSheet. Sau khi PaymentSheet báo hoàn tất, app đợi webhook và chỉ hiển thị biên nhận khi backend chuyển hóa đơn sang `PAID`.
 5. Webhook hợp lệ cập nhật hóa đơn; gọi `npm run worker` để xử lý outbox. Đơn demo được ghi `DEMO_FULFILLED`; đơn thật cần provider riêng. Browser return không xác nhận thanh toán.

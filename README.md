@@ -39,7 +39,7 @@ Bản này có nhãn Nimbus Bank (Local), package `com.example.final_term.localr
 ### Android với Firebase project thử nghiệm
 
 1. Đặt `app/google-services.json` cho ứng dụng `com.example.final_term`. App và backend phải dùng cùng project. Cấp custom claims và quyền hồ sơ tương ứng. Xem [cấu hình Firebase](docs/firebase-setup.md).
-2. Cấu hình URL backend phù hợp trong `local.properties` hoặc truyền `-PbackendBaseUrl=...`. Debug chấp nhận HTTP loopback. Release dùng HTTPS.
+2. Cấu hình URL backend phù hợp bằng `ANDROID_BACKEND_URL` trong `.env` ở thư mục gốc hoặc truyền `-PbackendBaseUrl=...`. Debug chấp nhận HTTP loopback. Release dùng HTTPS.
 3. Build bình thường với `./gradlew --offline testDebugUnitTest assembleDebug`. Thiết lập Stripe test, Google Routes và OpenAI theo tài liệu backend nếu chạy các đường dẫn provider đã được duyệt.
 
 ### Backend
@@ -53,7 +53,7 @@ npm test
 npm run dev
 ```
 
-Trước `npm run dev`, sao chép [`backend/.env.example`](backend/.env.example) thành `backend/.env`, điền cấu hình và khởi động Firebase Auth/Firestore Emulator nếu dùng `APP_MODE=emulator`. Xem [README backend](backend/README.md) để chọn chế độ emulator hoặc connected, cấu hình providers và seed dữ liệu. Khi API chạy trên cổng mẫu, `GET http://127.0.0.1:3000/health` kiểm tra tiến trình và `GET http://127.0.0.1:3000/openapi.json` xem hợp đồng API.
+Trước `npm run dev`, sao chép [`.env.example`](.env.example) thành `.env` tại thư mục gốc, điền cấu hình và khởi động Firebase Auth/Firestore Emulator nếu dùng `APP_MODE=emulator`. Xem [README backend](backend/README.md) để chọn chế độ emulator hoặc connected, cấu hình providers và seed dữ liệu. Khi API chạy trên cổng mẫu, `GET http://127.0.0.1:3000/health` kiểm tra tiến trình và `GET http://127.0.0.1:3000/openapi.json` xem hợp đồng API.
 
 `/health` kiểm tra tiến trình HTTP, không xác nhận Firebase hay S3 đã được cấu hình. Các route nghiệp vụ như `/accounts`, `/ekyc` và `/officer/customers/:id` không có tiền tố `/v1`.
 
