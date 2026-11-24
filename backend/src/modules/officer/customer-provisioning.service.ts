@@ -21,6 +21,8 @@ export async function provisionCustomer(
   key(input.requestId);
   const uid = "customer_" + digest([a.uid, input.requestId]).slice(0, 40),
     accountId = "acct_" + digest(["checking", uid]).slice(0, 24),
+    detailsPath = "checkingDetails/" + accountId,
+    checkingDetails = { accountId, overdraftPolicy: "NONE" },
     hash = digest(input),
     customerNoKey = input.customerNo
       ? "customerNumberReservations/" + digest(String(input.customerNo).trim().toLowerCase())
@@ -32,6 +34,9 @@ export async function provisionCustomer(
     if (old) check(old.digest === hash, "IDEMPOTENCY_CONFLICT", 409);
     if (old?.status === "COMPLETE") {
       const user = await t.get("users/" + uid);
+      const account = await t.get("accounts/" + accountId);
+      if (account?.ownerUid === uid && account.type === "CHECKING" && !(await t.get(detailsPath)))
+        t.set(detailsPath, checkingDetails);
       return user?.status ?? "ONBOARDING";
     }
     if (customerNoKey) {
@@ -84,6 +89,7 @@ export async function provisionCustomer(
     check(!u, "PROFILE_CONFLICT", 409);
     const existingAccount = await t.get("accounts/" + accountId);
     check(!existingAccount || existingAccount.ownerUid === uid, "ACCOUNT_CONFLICT", 409);
+    const existingDetails = await t.get(detailsPath);
     t.set("users/" + uid, {
       uid,
       role: "CUSTOMER",
@@ -93,6 +99,7 @@ export async function provisionCustomer(
       emailMasked: input.email.replace(/^(.).*(@.*)$/, "$1***$2"),
       phoneMasked: "••••" + String(input.phoneNumber ?? "").slice(-4),
       contactPhone: String(input.phoneNumber ?? ""),
+      primaryCheckingAccountId: accountId,
       createdAt: bank.now(),
       createdBy: a.uid,
     });
@@ -118,6 +125,7 @@ export async function provisionCustomer(
       createdAt: bank.now(),
       createdBy: a.uid,
     });
+    if (!existingDetails) t.set(detailsPath, checkingDetails);
     t.set(path, { ...old, status: "COMPLETE", completedAt: bank.now() });
     bank.audit(t, a, "CUSTOMER_PROVISION", uid, input.requestId);
   });

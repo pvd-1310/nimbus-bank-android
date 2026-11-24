@@ -188,6 +188,16 @@ Payment dùng nguồn tiền Stripe, không tự trừ tài khoản nội bộ t
 
 Sau OTP, PaymentSheet cho phép khách hàng chọn lưu thẻ test để dùng lại hoặc xóa thẻ đã lưu. Stripe lưu thông tin thẻ. Backend lưu liên kết tài khoản với Stripe Customer và cấp Customer Session ngắn hạn cho mỗi lần mở PaymentSheet.
 
+Trang chủ và chi tiết tài khoản thanh toán lấy số dư USD từ Stripe Treasury Sandbox. Khi khách hàng mở tài khoản hoặc officer tạo tài khoản thanh toán cho khách hàng, backend liên kết một Stripe Connect account, một Treasury Financial Account và một thẻ ảo Issuing. Tài khoản thanh toán có `stripeSandboxLinkPath` trỏ đến `stripeSandboxAccountLinks/{accountId}` trong Firestore. Backend lưu trạng thái và các ID Stripe tại đó. Luồng áp dụng cho tài khoản `CHECKING` của khách hàng.
+
+Chạy `npm run build` rồi `npm run link:stripe-sandbox` trong `backend/` để đếm các tài khoản thanh toán hiện có. Thêm `-- --apply` để liên kết những tài khoản này trong dự án Firebase đang được cấu hình. Chạy lại lệnh để tiếp tục các liên kết đang chờ Stripe kích hoạt.
+
+App hiển thị số dư và lịch sử Stripe bằng VND, theo tỷ giá demo cố định 1 USD = 25.000 ₫. Stripe Treasury vẫn ghi sổ bằng USD. Giá VND trên hóa đơn giữ nguyên, số tiền trừ được làm tròn đến cent gần nhất và được hiển thị ở bước OTP.
+
+Chuyển tiền giữa các tài khoản đã liên kết dùng Treasury Outbound Payments. Số nhận `0000000001` của DEMO_BANK trỏ đến tài khoản demo Stripe `demo_recipient_checking` (có thể cấu hình qua `STRIPE_SANDBOX_DEMO_RECIPIENT`). Nạp tiền dùng test Received Credits. Rút tiền mô phỏng và thanh toán hóa đơn dùng thử thẻ Issuing gắn với tài khoản. Các thao tác đều cần OTP riêng và dùng mã yêu cầu cố định khi thử lại.
+
+Backend đồng bộ lịch sử Treasury vào `transactions` với `provider: STRIPE_TREASURY` sau giao dịch và khi app tải số dư. Firestore giữ bản ghi báo cáo. Tài khoản mới bắt đầu với số dư Stripe Sandbox của chính nó.
+
 ## Kiểm thử và giới hạn
 
 Schema đã được đối chiếu với bảng 16 trong Word. Xem `../docs/database-template-alignment.md` để tra field chuẩn và chạy migration có bước xem trước. API nhận `sourceId`/`target` cho transfer, `billOrOrderRef` cho payment, `accountProduct` cho rate policy; body cũ vẫn được hỗ trợ riêng. Không trộn hai dạng trong cùng request.

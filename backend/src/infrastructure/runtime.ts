@@ -7,6 +7,8 @@ import Stripe from "stripe";
 import { z } from "zod";
 import { readFileSync } from "node:fs";
 import { createChatbot, localChatbotEnabled } from "../modules/chatbot/chatbot.js";
+import { StripeSandboxAccounts } from "../modules/accounts/stripe-sandbox-accounts.service.js";
+import { StripeSandboxMovements } from "../modules/accounts/stripe-sandbox-movements.service.js";
 import { Banking } from "../core/banking.js";
 import { config } from "../core/config.js";
 import { Evidence } from "../modules/ekyc/ekyc.service.js";
@@ -63,13 +65,10 @@ export function runtime() {
           process.env.S3_BUCKET,
         )
       : undefined;
-  const stripe =
-    process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET
-      ? new StripeGateway(
-          new Stripe(process.env.STRIPE_SECRET_KEY),
-          process.env.STRIPE_WEBHOOK_SECRET,
-        )
-      : undefined;
+  const stripeClient = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : undefined;
+  const stripeSandboxAccounts = stripeClient ? new StripeSandboxAccounts(bank, stripeClient, cfg.projectId) : undefined;
+  const stripe = stripeClient && process.env.STRIPE_WEBHOOK_SECRET
+    ? new StripeGateway(stripeClient, process.env.STRIPE_WEBHOOK_SECRET) : undefined;
   const evidenceRetentionMs = z.coerce.number().int().min(1).max(3650)
     .parse(process.env.EKYC_RETENTION_DAYS ?? "90") * 86_400_000;
   return {
@@ -82,6 +81,9 @@ export function runtime() {
     evidence: new Evidence(bank, s3, evidenceRetentionMs,
       process.env.EKYC_DEMO_SELFIE_ONLY === "true" ? "DEMO_SELFIE_ONLY" : "FULL_ID"),
     payments: new Payments(bank, stripe),
+    stripeSandboxAccounts,
+    stripeSandboxMovements: stripeClient ? new StripeSandboxMovements(bank, stripeClient, process.env.STRIPE_SANDBOX_DEMO_RECIPIENT,
+      stripeSandboxAccounts) : undefined,
     chatbot: createChatbot(process.env),
     ...(localChatbotEnabled(process.env) && { chatbotMode: "DEMO_ONLY" as const }),
   };

@@ -245,6 +245,7 @@ export class IntentSecurity {
         id,
         intentId: id,
         kind: i.kind ?? "TRANSFER",
+        ...(i.provider && { provider: i.provider }),
         ...(i.sourceId === "SIMULATOR" && { demo: true }),
         ...(i.kind === "DEMO_MOVEMENT" && {
           demo: true, providerReference: i.providerReference ?? null,

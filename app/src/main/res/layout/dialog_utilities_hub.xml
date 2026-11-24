@@ -294,6 +294,30 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
+                    android:labelFor="@id/topup_carrier_picker"
+                    android:text="Nhà mạng"
+                    android:textColor="@color/ink_muted"
+                    android:textSize="12sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/topup_carrier_picker"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:gravity="start|center_vertical"
+                    android:text="Chọn nhà mạng"
+                    android:textAllCaps="false"
+                    android:textColor="@color/ink"
+                    app:cornerRadius="12dp"
+                    app:icon="@drawable/ic_chevron_right"
+                    app:iconGravity="end"
+                    app:iconTint="@color/ink_muted"
+                    app:strokeColor="@color/ink_faint" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
                     android:text="Chọn mệnh giá nạp (VND):"
                     android:textColor="@color/ink_muted"
                     android:textSize="12sp" />

@@ -72,6 +72,9 @@ it("provisioning requires server officer permission and is idempotent", async ()
     fullName: "Customer",
   };
   const r = await provisionCustomer(b, auth, a, body);
+  expect(await s.run(t => t.get("checkingDetails/" + r.accountId))).toMatchObject({
+    accountId: r.accountId, overdraftPolicy: "NONE",
+  });
   expect(await provisionCustomer(b, auth, a, body)).toEqual(r);
   expect(users.size).toBe(1);
   expect((await s.run((t) => t.get("users/" + r.uid)))!.role).toBe("CUSTOMER");

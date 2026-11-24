@@ -1,10 +1,12 @@
 package com.example.final_term.data;
 
 import java.text.NumberFormat;
+import java.math.BigDecimal;
 import java.util.Locale;
 
 public final class ReadSummaryFormatter {
     private ReadSummaryFormatter() { }
+    public static final long VND_PER_SANDBOX_CENT = 250;
 
     public static String money(long amountMinor) {
         return NumberFormat.getIntegerInstance(new Locale("vi", "VN")).format(amountMinor) + " ₫";
@@ -15,7 +17,9 @@ public final class ReadSummaryFormatter {
     }
 
     public static String transactionTitle(ReadModels.TransactionSummary transaction) {
-        String type = "DEMO_DEPOSIT".equals(transaction.type) ? "Nạp tiền"
+        String type = "STRIPE_CREDIT".equals(transaction.type) ? "Tiền vào Stripe"
+                : "STRIPE_DEBIT".equals(transaction.type) ? "Tiền ra Stripe"
+                : "DEMO_DEPOSIT".equals(transaction.type) ? "Nạp tiền"
                 : "DEMO_WITHDRAWAL".equals(transaction.type) ? "Rút tiền"
                 : "DEMO_EXTERNAL_TRANSFER".equals(transaction.type) ? "Chuyển liên ngân hàng"
                 : transaction.isBillPayment() ? "Thanh toán hóa đơn" :
@@ -63,6 +67,10 @@ public final class ReadSummaryFormatter {
     }
 
     public static String formatCurrency(long amountMinor, String currency) {
+        if ("USD".equals(currency)) {
+            return NumberFormat.getIntegerInstance(new Locale("vi", "VN"))
+                    .format(BigDecimal.valueOf(amountMinor).multiply(BigDecimal.valueOf(VND_PER_SANDBOX_CENT))) + " ₫";
+        }
         return "VND".equals(currency) ? money(amountMinor) :
                 (NumberFormat.getIntegerInstance(new Locale("vi", "VN")).format(amountMinor) + " " + currency).trim();
     }

@@ -199,7 +199,9 @@ public final class AccountListFragment extends Fragment {
     // ==========================================
     private void renderCustomerCards() {
         if (accounts == null) return;
-        for (ReadModels.AccountSummary account : accounts) binding.content.addView(createAccountTile(account));
+        for (ReadModels.AccountSummary account : accounts) {
+            if (!"CLOSED".equalsIgnoreCase(account.status)) binding.content.addView(createAccountTile(account));
+        }
     }
 
     private void renderCustomerWallet() {
@@ -297,7 +299,7 @@ public final class AccountListFragment extends Fragment {
                 String maskedOwner = account.ownerUid.isEmpty() ? "" :
                         "Khách hàng: " + (account.ownerUid.length() > 6 ? account.ownerUid.substring(0, 3) + "••••" : account.ownerUid) + "\n";
                 TextView row = addLine(maskedOwner + Phase2Presentation.accountTitle(account.type) + "  •  " + account.status,
-                        formatMoney(account.balanceMinor, account.currency) + "\nMã tài khoản: " + account.id);
+                        "Mã tài khoản: " + account.id);
                 row.setBackgroundResource(R.drawable.glass_panel_card);
                 row.setClickable(true);
                 row.setFocusable(true);
@@ -658,18 +660,39 @@ public final class AccountListFragment extends Fragment {
         tile.addView(title);
 
         TextView balance = new TextView(requireContext());
-        balance.setText(formatMoney(acc.balanceMinor, acc.currency));
+        balance.setText("Đang tải số dư Stripe…");
         balance.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
         balance.setTextSize(20);
         balance.setPadding(0, dp(4), 0, dp(4));
         tile.addView(balance);
 
         TextView sub = new TextView(requireContext());
-        sub.setText((acc.demo ? "Mô phỏng · " : "") + acc.id + " · " + acc.status);
+        sub.setText(acc.id + " · " + acc.status);
         sub.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
         sub.setTextSize(12);
         tile.addView(sub);
 
+        var current = binding;
+        String requestedUid = uid;
+        application.getAppContainer().getBackendApiClient()
+                .get("/accounts/" + android.net.Uri.encode(acc.id) + "/stripe-sandbox")
+                .addOnCompleteListener(task -> {
+                    if (binding != current || !java.util.Objects.equals(uid, requestedUid)) return;
+                    try {
+                        if (!task.isSuccessful() || task.getResult().statusCode != 200)
+                            throw new org.json.JSONException("Unavailable");
+                        JSONObject snapshot = new JSONObject(task.getResult().body);
+                        if (snapshot.has("availableMinor")) {
+                            balance.setText(ReadSummaryFormatter.formatCurrency(snapshot.getLong("availableMinor"), "USD"));
+                            sub.setText("Stripe Sandbox · " + acc.id);
+                        } else {
+                            balance.setText("pending".equals(snapshot.optString("status"))
+                                    ? "Đang thiết lập Stripe" : "Chưa liên kết Stripe");
+                        }
+                    } catch (org.json.JSONException error) {
+                        balance.setText("Chưa đọc được số dư Stripe");
+                    }
+                });
         tile.setOnClickListener(v -> openDetails(v, acc));
         return tile;
     }

@@ -17,6 +17,7 @@ import androidx.navigation.Navigation;
 
 import com.example.final_term.databinding.FragmentAccountDetailBinding;
 import com.example.final_term.core.FinalTermApplication;
+import com.example.final_term.data.ReadSummaryFormatter;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -32,6 +33,8 @@ public class AccountDetailFragment extends Fragment {
     private Long currentBalance = null;
     private String currentCurrency = "";
     private String loadedTerms = "";
+    private String loadedStripeAccount = "";
+    private int stripeSandboxRequest;
 
     @Nullable
     @Override
@@ -54,6 +57,7 @@ public class AccountDetailFragment extends Fragment {
         binding.statusText.setText("Đang tải dữ liệu…");
         binding.detailText.setText("");
         loadedTerms = "";
+        loadedStripeAccount = "";
 
         binding.backButton.setOnClickListener(v -> Navigation.findNavController(v).navigateUp());
 
@@ -86,6 +90,8 @@ public class AccountDetailFragment extends Fragment {
             if (auth == null || auth.getUser() == null) {
                 currentBalance = null;
                 loadedTerms = "";
+                loadedStripeAccount = "";
+                binding.stripeSandboxPanel.setVisibility(View.GONE);
                 binding.detailText.setText("");
                 binding.balanceText.setText("—");
                 binding.statusText.setText("Cần đăng nhập để tải tài khoản.");
@@ -101,24 +107,88 @@ public class AccountDetailFragment extends Fragment {
 
     private void renderAccount(com.example.final_term.data.ReadModelResult<java.util.List<com.example.final_term.data.ReadModels.AccountSummary>> result,
                                String accountId) {
+        var accounts = result.getData();
+        if (accounts != null) for (var account : accounts) {
+            if (!accountId.equals(account.id)) continue;
+            binding.titleText.setText(Phase2Presentation.accountTitle(account.type));
+            binding.subtitleText.setText(Phase2Presentation.accountSubtitle(account.type));
+            loadTerms(account.id, account.type);
+            if (!loadedStripeAccount.equals(account.id)) {
+                loadStripeSandboxAccount(account.id);
+            }
+            return;
+        }
+        stripeSandboxRequest++;
+        loadedStripeAccount = "";
         currentBalance = null;
         binding.balanceText.setText("—");
+        binding.stripeSandboxPanel.setVisibility(View.GONE);
         binding.statusText.setText(result.getStatus() == com.example.final_term.data.ReadModelResult.Status.LOADING
                 ? "Đang tải dữ liệu…" : result.getStatus() == com.example.final_term.data.ReadModelResult.Status.ERROR
                 ? result.getMessage() : "Không có tài khoản hoặc bạn không có quyền xem.");
-        if (result.getData() == null) return;
-        for (com.example.final_term.data.ReadModels.AccountSummary account : result.getData()) {
-            if (!accountId.equals(account.id)) continue;
-            currentBalance = account.balanceMinor;
-            currentCurrency = account.currency;
-            binding.titleText.setText(Phase2Presentation.accountTitle(account.type));
-            binding.subtitleText.setText(Phase2Presentation.accountSubtitle(account.type));
-            binding.balanceText.setText(formatMoney(account.balanceMinor, account.currency));
-            binding.statusText.setText((account.demo ? "Dữ liệu mô phỏng · " : "") + account.status + " · chỉ đọc" +
-                    (result.isReadOnly() ? " · " + result.getMessage() : ""));
-            loadTerms(account.id, account.type);
-            return;
-        }
+    }
+
+    private void loadStripeSandboxAccount(String accountId) {
+        loadedStripeAccount = accountId;
+        int request = ++stripeSandboxRequest;
+        var current = binding;
+        currentBalance = null;
+        currentCurrency = "USD";
+        current.balanceText.setText("—");
+        current.statusText.setText("Đang đọc số dư Stripe…");
+        current.stripeSandboxSummary.setText("Đang đọc số dư Stripe…");
+        var app = (FinalTermApplication) requireActivity().getApplication();
+        app.getAppContainer().getBackendApiClient()
+                .get("/accounts/" + android.net.Uri.encode(accountId) + "/stripe-sandbox")
+                .addOnCompleteListener(task -> {
+                    if (binding != current || request != stripeSandboxRequest || !loadedStripeAccount.equals(accountId)) return;
+                    try {
+                        if (!task.isSuccessful() || task.getResult().statusCode != 200) {
+                            current.statusText.setText("Chưa đọc được số dư Stripe");
+                            return;
+                        }
+                        JSONObject snapshot = new JSONObject(task.getResult().body);
+                        if (!snapshot.has("availableMinor")) {
+                            current.stripeSandboxPanel.setVisibility(View.GONE);
+                            current.statusText.setText("unlinked".equals(snapshot.optString("status"))
+                                    ? "Chưa liên kết Stripe" : "Đang thiết lập Stripe");
+                            return;
+                        }
+                        currentBalance = snapshot.getLong("availableMinor");
+                        current.balanceText.setText(ReadSummaryFormatter.formatCurrency(currentBalance, "USD"));
+                        current.statusText.setText("Stripe Sandbox · VND");
+                        current.stripeSandboxPanel.setVisibility(View.VISIBLE);
+                        StringBuilder summary = new StringBuilder();
+                        long held = snapshot.getLong("outboundPendingMinor");
+                        if (held != 0) summary.append("Đang giữ  ").append(ReadSummaryFormatter.formatCurrency(held, "USD"));
+                        JSONObject card = snapshot.optJSONObject("card");
+                        if (card != null) {
+                            summary.append("\nThẻ ").append(card.getString("brand")).append(" •••• ")
+                                    .append(card.getString("last4"));
+                        }
+                        JSONArray transactions = snapshot.getJSONArray("transactions");
+                        if (transactions.length() > 0) summary.append("\n\nGiao dịch Stripe gần đây");
+                        for (int i = 0; i < transactions.length(); i++) {
+                            JSONObject item = transactions.getJSONObject(i);
+                            summary.append("\n").append(ReadSummaryFormatter.formatCurrency(item.getLong("amountMinor"), "USD"))
+                                    .append(" · ").append(date(item, "createdAt"));
+                            String description = item.optString("description");
+                            if (!description.isEmpty()) summary.append(" · ").append(description);
+                            String status = item.optString("status");
+                            if ("open".equals(status)) summary.append(" · Đang xử lý");
+                            if ("void".equals(status)) summary.append(" · Đã hủy");
+                        }
+                        current.stripeSandboxSummary.setText(summary);
+                    } catch (JSONException error) {
+                        current.stripeSandboxSummary.setText("Dữ liệu tài khoản Stripe chưa khả dụng.");
+                    }
+                });
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (binding != null && !loadedStripeAccount.isEmpty()) loadStripeSandboxAccount(loadedStripeAccount);
     }
 
     private void loadTerms(String accountId, String type) {
@@ -205,7 +275,7 @@ public class AccountDetailFragment extends Fragment {
     }
 
     private String formatMoney(long amount, String currency) {
-        return NumberFormat.getIntegerInstance(new Locale("vi", "VN")).format(amount) + " " + currency;
+        return ReadSummaryFormatter.formatCurrency(amount, currency);
     }
 
     @Override

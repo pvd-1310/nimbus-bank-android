@@ -66,14 +66,22 @@ it("settles a demo order once after OTP and a signed sandbox webhook", async () 
   const body = { billId: "demo", requestId: "order" };
   const prepared = await api.post("/payments/intents").set(auth).send(body).expect(200);
   const id = prepared.body.intentId;
+  const otherBill = { billId: "next", requestId: "next" };
+  const otherIntent = await api.post("/payments/intents").set(auth).send(otherBill).expect(200);
   const beforeOtp = await api.post("/payments").set(auth).send(body);
   expect(beforeOtp.body.error).toBe("OTP_REQUIRED");
   expect(create).not.toHaveBeenCalled();
   expect(customers).not.toHaveBeenCalled();
   expect(sessions).not.toHaveBeenCalled();
   const otp = await bank.security.challenge(actor, id);
+  await bank.security.challenge(actor, otherIntent.body.intentId);
+  await expect(bank.security.verify(actor, otherIntent.body.intentId, otp.challengeId, otp.code))
+    .rejects.toMatchObject({ code: "OTP_REQUIRED" });
   await bank.security.verify(actor, id, otp.challengeId, otp.code);
+  const otherPayment = await api.post("/payments").set(auth).send(otherBill);
+  expect(otherPayment.body.error).toBe("OTP_REQUIRED");
   const committed = await api.post("/payments").set(auth).send(body).expect(200);
+  expect((await store.run((t) => t.get("otpChallenges/" + id)))?.status).toBe("USED");
   expect(committed.body).toMatchObject({
     paymentId: id, gateway: "STRIPE", status: "COMMIT_PENDING", clientSecret: intent.client_secret,
     customerId: "cus_demo1", customerSessionClientSecret: "cuss_demo_1",

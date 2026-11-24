@@ -46,8 +46,10 @@ public final class TransferFragment extends Fragment {
     private boolean commitPending;
     private long authoritativeAmount;
     private long authoritativeFee;
-    private String authoritativeCurrency = "VND";
+    private String authoritativeCurrency = "USD";
     private String authoritativeTarget = "";
+    private String recipientAccountId;
+    private String recipientName = "";
     private final FaceCamera faceCamera = new FaceCamera(this, this::verifyFace, this::faceError);
     private boolean busy;
     private boolean external;
@@ -81,8 +83,10 @@ public final class TransferFragment extends Fragment {
         confirmedSource = state.getString("confirmedSource");
         authoritativeAmount = state.getLong("authoritativeAmount");
         authoritativeFee = state.getLong("authoritativeFee");
-        authoritativeCurrency = state.getString("authoritativeCurrency", "VND");
+        authoritativeCurrency = state.getString("authoritativeCurrency", "USD");
         authoritativeTarget = state.getString("authoritativeTarget", "");
+        recipientAccountId = state.getString("recipientAccountId");
+        recipientName = state.getString("recipientName", "");
     }
 
     @Override
@@ -101,6 +105,8 @@ public final class TransferFragment extends Fragment {
         state.putLong("authoritativeFee", authoritativeFee);
         state.putString("authoritativeCurrency", authoritativeCurrency);
         state.putString("authoritativeTarget", authoritativeTarget);
+        state.putString("recipientAccountId", recipientAccountId);
+        state.putString("recipientName", recipientName);
     }
 
     @Nullable
@@ -159,7 +165,7 @@ public final class TransferFragment extends Fragment {
         binding.btnShareReceipt.setOnClickListener(v -> {
             String receipt = (demoMode() ? "Biên lai ghi sổ mô phỏng Nimbus Bank" : "Biên lai chuyển khoản Nimbus Bank") + "\n" +
                     "Mã giao dịch: " + intentId + "\n" +
-                    "Số tiền: " + ReadSummaryFormatter.money(receiptAmount()) + "\n" +
+                    "Số tiền: " + ReadSummaryFormatter.formatCurrency(receiptAmount(), authoritativeCurrency) + "\n" +
                     "Người nhận: " + receiptTarget();
             Intent share = new Intent(Intent.ACTION_SEND);
             share.setType("text/plain");
@@ -263,7 +269,9 @@ public final class TransferFragment extends Fragment {
         binding.tabInternal.setTextColor(androidx.core.content.ContextCompat.getColor(requireContext(), external ? R.color.ink_muted : R.color.white));
         binding.tabExternal.setText("Liên ngân hàng demo");
         binding.targetInput.setHint(external ? "DEMO_BANK · 0000000001 hoặc 0000000002"
-                : getString(R.string.destination_hint));
+                : "Số điện thoại người nhận");
+        binding.targetInput.setInputType(external ? android.text.InputType.TYPE_CLASS_NUMBER
+                : android.text.InputType.TYPE_CLASS_PHONE);
         binding.headerTitle.setText(demoMode() ? demoLabel() : getString(R.string.transfer_title));
     }
 
@@ -290,6 +298,8 @@ public final class TransferFragment extends Fragment {
         if (intentId == null) {
             requestId = null;
             payloadKey = null;
+            recipientAccountId = null;
+            recipientName = "";
             showStep(Step.INPUT);
             return;
         }
@@ -305,6 +315,9 @@ public final class TransferFragment extends Fragment {
             forgetPending();
             intentId = null;
             requestId = null;
+            payloadKey = null;
+            recipientAccountId = null;
+            recipientName = "";
             challengeId = null;
             faceVerified = false;
             binding.demoCode.setText("");
@@ -340,7 +353,9 @@ public final class TransferFragment extends Fragment {
     }
 
     private void appendAmount(long value) {
-        long current = getCurrentAmount();
+        long current;
+        try { current = Long.parseLong(text(binding.amountInput.getText())); }
+        catch (NumberFormatException ignored) { current = 0; }
         long next = current + value;
         binding.amountInput.setText(String.valueOf(next));
     }
@@ -348,7 +363,8 @@ public final class TransferFragment extends Fragment {
     private long getCurrentAmount() {
         String val = text(binding.amountInput.getText());
         try {
-            return Long.parseLong(val);
+            return new java.math.BigDecimal(val).divide(java.math.BigDecimal.valueOf(
+                    ReadSummaryFormatter.VND_PER_SANDBOX_CENT), 0, java.math.RoundingMode.HALF_UP).longValueExact();
         } catch (Exception e) {
             return 0L;
         }
@@ -362,13 +378,45 @@ public final class TransferFragment extends Fragment {
         }
         String target = text(binding.targetInput.getText());
         String amount = text(binding.amountInput.getText());
-        if (!validTarget(target) || !Phase2Presentation.validRequestAmount(amount)) {
+        if (!validTarget(target) || (!Phase2Presentation.validRequestAmount(amount) || getCurrentAmount() <= 0)) {
             status(external ? "Chọn một tài khoản mẫu của DEMO_BANK và nhập số tiền VND hợp lệ."
-                    : "Kiểm tra số tiền VND và thông tin nhận.");
+                    : "Kiểm tra số điện thoại người nhận và số tiền VND.");
             return;
         }
         confirmedSource = sourceIds.get(sourceIndex);
-        showStep(Step.CONFIRM);
+        if (demoMode()) {
+            showStep(Step.CONFIRM);
+            return;
+        }
+        var view = binding;
+        setBusy(true);
+        status("Đang tìm người nhận…");
+        try {
+            String body = new JSONObject().put("sourceAccountId", confirmedSource)
+                    .put("destinationPhone", target).toString();
+            api.post("/transfers/recipient", body).addOnCompleteListener(task -> {
+                if (binding != view) return;
+                setBusy(false);
+                if (!task.isSuccessful() || !ok(task.getResult())) {
+                    status(task.isSuccessful()
+                            ? errorMessage(task.getResult(), "Chưa tìm được người nhận")
+                            : "Chưa kết nối được để tìm người nhận. Vui lòng thử lại.");
+                    return;
+                }
+                try {
+                    JSONObject recipient = new JSONObject(task.getResult().body);
+                    recipientAccountId = recipient.getString("accountId");
+                    recipientName = recipient.optString("fullName");
+                    status("");
+                    showStep(Step.CONFIRM);
+                } catch (JSONException error) {
+                    status("Chưa đọc được thông tin người nhận. Vui lòng thử lại.");
+                }
+            });
+        } catch (JSONException error) {
+            setBusy(false);
+            status("Dữ liệu người nhận không hợp lệ.");
+        }
     }
 
     private void bindConfirmationView() {
@@ -376,27 +424,28 @@ public final class TransferFragment extends Fragment {
         String target = text(binding.targetInput.getText());
         String note = text(binding.noteInput.getText());
         long amount = authoritativeAmount > 0 ? authoritativeAmount : getCurrentAmount();
-        String targetText = !authoritativeTarget.isEmpty() ? authoritativeTarget : target;
+        String targetText = demoMode() ? (!authoritativeTarget.isEmpty() ? authoritativeTarget : target)
+                : recipientName.isEmpty() ? target : recipientName + " · " + target;
 
-        binding.confirmAmountDisplay.setText(ReadSummaryFormatter.money(amount) + " " + authoritativeCurrency);
+        binding.confirmAmountDisplay.setText(ReadSummaryFormatter.formatCurrency(amount, authoritativeCurrency));
         binding.confirmSourceText.setText(("DEPOSIT".equals(cashOperation) ? "Tài khoản nhận: " : "Tài khoản nguồn: ") + sourceId);
         String recipient = cashOperation != null ? "Đối ứng: quỹ demo"
                 : "Tài khoản nhận: " + (external ? "DEMO_BANK / " : "") + targetText;
         binding.confirmTargetText.setText(recipient + "\nPhí: " +
-                (authoritativeFee == 0 ? "0 " + authoritativeCurrency : ReadSummaryFormatter.money(authoritativeFee) + " " + authoritativeCurrency) +
-                " · Tổng: " + ReadSummaryFormatter.money(amount + authoritativeFee) + " " + authoritativeCurrency);
-        binding.confirmNoteText.setText(demoMode() ? "Giao dịch mô phỏng, chỉ ghi sổ dữ liệu demo."
-                : "Nội dung: " + (note.isEmpty() ? "Chuyển tiền Nimbus" : note));
+                ReadSummaryFormatter.formatCurrency(authoritativeFee, authoritativeCurrency) +
+                " · Tổng: " + ReadSummaryFormatter.formatCurrency(amount + authoritativeFee, authoritativeCurrency));
+        binding.confirmNoteText.setText("Stripe Sandbox · Tỷ giá demo 1 USD = 25.000 ₫"
+                + (note.isEmpty() ? "" : "\nNội dung: " + note));
     }
 
     private void bindSuccessView() {
         long amount = authoritativeAmount > 0 ? authoritativeAmount : receiptAmount();
-        String target = !authoritativeTarget.isEmpty() ? authoritativeTarget : receiptTarget();
-        binding.successAmountDisplay.setText(ReadSummaryFormatter.money(amount) + " " + authoritativeCurrency);
+        String target = demoMode() && !authoritativeTarget.isEmpty() ? authoritativeTarget : receiptTarget();
+        binding.successAmountDisplay.setText(ReadSummaryFormatter.formatCurrency(amount, authoritativeCurrency));
         binding.receiptTxId.setText("Mã giao dịch: " + intentId);
         binding.successHeadline.setText(demoMode() ? "Giao dịch mô phỏng đã ghi sổ" : "Chuyển khoản đã ghi sổ");
         binding.receiptTargetInfo.setText("Chuyển đến: " + target + " (Phí: " +
-                (authoritativeFee == 0 ? "0 " + authoritativeCurrency : ReadSummaryFormatter.money(authoritativeFee) + " " + authoritativeCurrency) + ")");
+                ReadSummaryFormatter.formatCurrency(authoritativeFee, authoritativeCurrency) + ")");
         binding.receiptTime.setText(demoMode() ? "Đã ghi sổ mô phỏng · " + providerReference
                 : "Backend xác nhận đã ghi sổ.");
     }
@@ -407,7 +456,13 @@ public final class TransferFragment extends Fragment {
     }
 
     private String receiptTarget() {
-        try { return new JSONObject(payloadKey).optString(external ? "beneficiaryAccount" : "destinationPhone", "Quỹ demo"); }
+        try {
+            JSONObject payload = new JSONObject(payloadKey);
+            if (external) return payload.optString("beneficiaryAccount");
+            if (cashOperation != null) return "Quỹ demo";
+            String phone = payload.optString("destinationPhone", payload.optString("destinationAccountId"));
+            return recipientName.isEmpty() ? phone : recipientName + " · " + phone;
+        }
         catch (Exception ignored) { return text(binding.targetInput.getText()); }
     }
 
@@ -448,13 +503,9 @@ public final class TransferFragment extends Fragment {
         sourceIds.clear();
         List<String> labels = new ArrayList<>();
         for (ReadModels.AccountSummary account : result.getData()) {
-            if ("ACTIVE".equalsIgnoreCase(account.status) && !"MORTGAGE".equals(account.type)
-                    && "VND".equalsIgnoreCase(account.currency)
-                    && (!demoMode() || ("CHECKING".equals(account.type) && account.demo))) {
+            if ("ACTIVE".equalsIgnoreCase(account.status) && "CHECKING".equals(account.type)) {
                 sourceIds.add(account.id);
-                labels.add((account.demo ? "[Demo] " : "") + Phase2Presentation.accountTitle(account.type) + " (••" +
-                        (account.id.length() > 4 ? account.id.substring(account.id.length() - 4) : account.id) +
-                        ") · " + ReadSummaryFormatter.money(account.availableMinor != null ? account.availableMinor : account.balanceMinor));
+                labels.add(account.id + " · Stripe Sandbox");
             }
         }
         if (labels.isEmpty()) labels.add("Không có tài khoản nguồn khả dụng");
@@ -472,7 +523,7 @@ public final class TransferFragment extends Fragment {
         if (confirmedSource == null) return;
         String target = text(binding.targetInput.getText());
         String amount = text(binding.amountInput.getText());
-        if (!validTarget(target) || !Phase2Presentation.validRequestAmount(amount)) {
+        if (!validTarget(target) || (!Phase2Presentation.validRequestAmount(amount) || getCurrentAmount() <= 0)) {
             status("Nhập tài khoản nhận và số tiền VND hợp lệ.");
             return;
         }
@@ -480,11 +531,11 @@ public final class TransferFragment extends Fragment {
         try {
             JSONObject body = new JSONObject()
                     .put(demoMode() ? "accountId" : "sourceAccountId", confirmedSource)
-                    .put("amountMinor", Long.parseLong(amount))
-                    .put("currency", "VND");
+                    .put("amountMinor", getCurrentAmount())
+                    .put("currency", "USD");
             if (external) body.put("bankCode", "DEMO_BANK").put("beneficiaryAccount", target);
             else if (cashOperation != null) body.put("type", cashOperation);
-            else body.put("destinationPhone", target);
+            else body.put("destinationPhone", target).put("recipientAccountId", recipientAccountId);
             String payload = body.toString();
             if (!payload.equals(payloadKey) || requestId == null) {
                 requestId = UUID.randomUUID().toString();
@@ -675,6 +726,10 @@ public final class TransferFragment extends Fragment {
                     reconcileDemo();
                     return;
                 }
+                if ("COMMIT_PENDING".equals(state) && "STRIPE_TREASURY".equals(result.optString("provider"))) {
+                    commit();
+                    return;
+                }
                 if ("COMMITTED".equals(state)) {
                     finishTransfer();
                     return;
@@ -748,6 +803,13 @@ public final class TransferFragment extends Fragment {
                         finishTransfer();
                         return;
                     }
+                    if ("FAILED".equals(result.optString("status"))) {
+                        commitPending = false;
+                        forgetPending();
+                        renderAuthorization();
+                        status("Stripe từ chối giao dịch · " + result.optString("failureCode"));
+                        return;
+                    }
                 } catch (Exception ignored) { }
                 status("Chưa đọc được kết quả. Bấm kiểm tra lại.");
                 return;
@@ -813,6 +875,9 @@ public final class TransferFragment extends Fragment {
     private String errorMessage(BackendApiClient.Response response, String prefix) {
         String code = errorCode(response);
         switch (code) {
+            case "INVALID_DESTINATION": return "Không tìm thấy tài khoản nhận đang hoạt động cho số điện thoại này.";
+            case "RECIPIENT_CHANGED": return "Thông tin người nhận đã thay đổi. Quay lại để tra cứu lại số điện thoại.";
+            case "STRIPE_SANDBOX_ACCOUNT_REQUIRED": return "Tài khoản chưa sẵn sàng giao dịch trên Stripe Sandbox.";
             case "INVALID_OTP": return "Mã xác nhận sai. Vui lòng kiểm tra lại.";
             case "OTP_EXPIRED": return "Mã xác nhận đã hết hạn (OTP_EXPIRED). Tạo mã mới để tiếp tục.";
             case "OTP_LOCKED": return "Đã nhập sai quá 5 lần, giao dịch bị khóa (OTP_LOCKED). Quay lại và tạo yêu cầu mới.";

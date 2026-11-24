@@ -28,6 +28,8 @@ import com.example.final_term.databinding.ItemTransactionRowBinding;
 import com.example.final_term.ui.quickactions.QuickActionsBottomSheet;
 import com.example.final_term.ui.utilities.UtilitiesHubDialogFragment;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -37,9 +39,10 @@ public final class CustomerHomeFragment extends Fragment {
     private FragmentCustomerHomeBinding binding;
     private final List<ReadModels.AccountSummary> balanceAccounts = new ArrayList<>();
     private String selectedAccountId;
+    private String stripeActivityFingerprint = "";
     private boolean isBalanceHidden = false;
     private Long currentBalanceMinor = null;
-    private String currentCurrency = "VND";
+    private int balanceRequest;
 
     @Nullable
     @Override
@@ -138,6 +141,11 @@ public final class CustomerHomeFragment extends Fragment {
 
         binding.quickPayment.setOnClickListener(v -> {
             UtilitiesHubDialogFragment dialog = new UtilitiesHubDialogFragment();
+            Bundle arguments = new Bundle();
+            ReadModels.AccountSummary account = getSelectedAccount();
+            if (account != null && "CHECKING".equals(account.type))
+                arguments.putString("sourceAccountId", account.id);
+            dialog.setArguments(arguments);
             dialog.show(getChildFragmentManager(), "UtilitiesHub");
         });
 
@@ -176,6 +184,8 @@ public final class CustomerHomeFragment extends Fragment {
         if (result == null || binding == null) return;
         balanceAccounts.clear();
         if (result.getData() == null) {
+            balanceRequest++;
+            currentBalanceMinor = null;
             binding.balanceAccountSelector.setVisibility(View.GONE);
             binding.balanceText.setText(result.getStatus() == ReadModelResult.Status.LOADING ? "Đang tải…" : "—");
             binding.accountStatusText.setText(result.getMessage());
@@ -190,6 +200,8 @@ public final class CustomerHomeFragment extends Fragment {
                 .thenComparing(account -> account.id));
 
         if (balanceAccounts.isEmpty()) {
+            balanceRequest++;
+            currentBalanceMinor = null;
             binding.balanceAccountSelector.setVisibility(View.GONE);
             binding.balanceText.setText("—");
             binding.accountStatusText.setText("Chưa có tài khoản hoạt động.");
@@ -210,37 +222,69 @@ public final class CustomerHomeFragment extends Fragment {
         binding.balanceAccountSelector.setSelection(selected, false);
         binding.balanceAccountSelector.setVisibility(balanceAccounts.size() > 1 ? View.VISIBLE : View.GONE);
         showAccountBalance(selected);
-
-        showBalanceOrigin(result, balanceAccounts.get(selected));
-    }
-
-    private void showBalanceOrigin(ReadModelResult<?> result, ReadModels.AccountSummary account) {
-        String message = (account.demo ? "Dữ liệu mô phỏng" : "")
-                + (result.isReadOnly() ? (account.demo ? " · " : "") + result.getMessage() : "");
-        binding.accountStatusText.setText(message);
-        binding.accountStatusText.setVisibility(message.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
     private void showAccountBalance(int position) {
         if (binding == null || position < 0 || position >= balanceAccounts.size()) return;
         ReadModels.AccountSummary account = balanceAccounts.get(position);
         selectedAccountId = account.id;
-        currentBalanceMinor = account.availableMinor != null ? account.availableMinor : account.balanceMinor;
-        currentCurrency = account.currency != null ? account.currency : "VND";
+        loadStripeBalance(account.id);
+    }
+
+    private void loadStripeBalance(String accountId) {
+        var current = binding;
+        int request = ++balanceRequest;
+        currentBalanceMinor = null;
         updateBalanceDisplay();
+        current.accountStatusText.setText("Đang tải số dư Stripe…");
+        current.accountStatusText.setVisibility(View.VISIBLE);
+        var app = (FinalTermApplication) requireActivity().getApplication();
+        app.getAppContainer().getBackendApiClient()
+                .get("/accounts/" + android.net.Uri.encode(accountId) + "/stripe-sandbox")
+                .addOnCompleteListener(task -> {
+                    if (binding != current || request != balanceRequest || !accountId.equals(selectedAccountId)) return;
+                    try {
+                        if (!task.isSuccessful() || task.getResult().statusCode != 200)
+                            throw new JSONException("Unavailable");
+                        JSONObject snapshot = new JSONObject(task.getResult().body);
+                        if (!snapshot.has("availableMinor")) {
+                            current.accountStatusText.setText("unlinked".equals(snapshot.optString("status"))
+                                    ? "Chưa liên kết Stripe Sandbox" : "Đang thiết lập Stripe Sandbox");
+                            if ("pending".equals(snapshot.optString("status"))) {
+                                current.accountStatusText.postDelayed(() -> {
+                                    if (binding == current && isResumed() && request == balanceRequest)
+                                        loadStripeBalance(accountId);
+                                }, 5000);
+                            }
+                            return;
+                        }
+                        currentBalanceMinor = snapshot.getLong("availableMinor");
+                        current.accountStatusText.setText("Stripe Sandbox · VND");
+                        updateBalanceDisplay();
+                    } catch (JSONException error) {
+                        current.accountStatusText.setText("Chưa đọc được số dư Stripe");
+                    }
+                });
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (binding != null && !balanceAccounts.isEmpty() && selectedAccountId != null)
+            loadStripeBalance(selectedAccountId);
     }
 
     private void updateBalanceDisplay() {
         if (binding == null) return;
         if (isBalanceHidden) {
-            binding.balanceText.setText("•••••••• ₫");
+            binding.balanceText.setText("••••••••");
             binding.toggleBalanceButton.setImageResource(R.drawable.ic_eye_slash);
         } else {
             binding.toggleBalanceButton.setImageResource(R.drawable.ic_eye);
             if (currentBalanceMinor == null) {
                 binding.balanceText.setText("—");
             } else {
-                binding.balanceText.setText(ReadSummaryFormatter.formatCurrency(currentBalanceMinor, currentCurrency));
+                binding.balanceText.setText(ReadSummaryFormatter.formatCurrency(currentBalanceMinor, "USD"));
             }
         }
     }
@@ -260,7 +304,20 @@ public final class CustomerHomeFragment extends Fragment {
             status.setText(result.getMessage());
             binding.recentTransactionsContent.addView(status);
         }
-        if (result.getData().isEmpty()) {
+        List<ReadModels.TransactionSummary> stripeRows = new ArrayList<>();
+        StringBuilder activity = new StringBuilder();
+        for (ReadModels.TransactionSummary row : result.getData()) {
+            if (!row.isStripeSandbox()) continue;
+            stripeRows.add(row);
+            if (row.accountId.equals(selectedAccountId))
+                activity.append(row.id).append(':').append(row.status).append(';');
+        }
+        String currentActivity = activity.toString();
+        if (!stripeActivityFingerprint.equals(currentActivity)) {
+            stripeActivityFingerprint = currentActivity;
+            if (selectedAccountId != null) loadStripeBalance(selectedAccountId);
+        }
+        if (stripeRows.isEmpty()) {
             TextView emptyText = new TextView(requireContext());
             emptyText.setText("Chưa có giao dịch gần đây.");
             emptyText.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
@@ -269,9 +326,9 @@ public final class CustomerHomeFragment extends Fragment {
             return;
         }
         // Take at most 4 recent transactions for Home preview
-        int limit = Math.min(4, result.getData().size());
+        int limit = Math.min(4, stripeRows.size());
         for (int i = 0; i < limit; i++) {
-            ReadModels.TransactionSummary tx = result.getData().get(i);
+            ReadModels.TransactionSummary tx = stripeRows.get(i);
             ItemTransactionRowBinding rowBinding = ItemTransactionRowBinding.inflate(
                     getLayoutInflater(), binding.recentTransactionsContent, false);
 

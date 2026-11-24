@@ -35,8 +35,13 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 public class UtilitiesHubDialogFragment extends DialogFragment {
     private DialogUtilitiesHubBinding binding;
@@ -73,6 +78,8 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     private String authoritativeTarget = "";
 
     private long selectedTopupAmount = 20000;
+    private String selectedTopupCarrier;
+    private String selectedTopupCarrierName;
     private CountDownTimer otpTimer;
     private boolean preparingPreviously;
     private String pendingOrder;
@@ -118,6 +125,8 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
             pendingOrder = savedInstanceState.getString("pendingOrder");
             preparingPreviously = requestId != null;
             selectedTopupAmount = savedInstanceState.getLong("selectedTopupAmount", 20000);
+            selectedTopupCarrier = savedInstanceState.getString("selectedTopupCarrier");
+            selectedTopupCarrierName = savedInstanceState.getString("selectedTopupCarrierName");
         } else if (getArguments() != null) {
             currentBillId = getArguments().getString("billId");
         }
@@ -142,6 +151,8 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         outState.putString("authoritativeTarget", authoritativeTarget);
         outState.putString("pendingOrder", pendingOrder);
         outState.putLong("selectedTopupAmount", selectedTopupAmount);
+        outState.putString("selectedTopupCarrier", selectedTopupCarrier);
+        outState.putString("selectedTopupCarrierName", selectedTopupCarrierName);
     }
 
     @Nullable
@@ -186,6 +197,8 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
 
         // Topup chips
         setupTopupChips();
+        renderTopupCarrier();
+        binding.topupCarrierPicker.setOnClickListener(v -> chooseTopupCarrier());
 
         // Topup proceed button
         binding.btnProceedTopup.setOnClickListener(v -> proceedTopupOrder());
@@ -244,13 +257,18 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     }
 
     private void setupTopupChips() {
-        binding.chipTopup20k.setOnClickListener(v -> selectTopupChip(20000, binding.chipTopup20k));
-        binding.chipTopup50k.setOnClickListener(v -> selectTopupChip(50000, binding.chipTopup50k));
-        binding.chipTopup100k.setOnClickListener(v -> selectTopupChip(100000, binding.chipTopup100k));
-        binding.chipTopup200k.setOnClickListener(v -> selectTopupChip(200000, binding.chipTopup200k));
+        long[] amounts = {20000, 50000, 100000, 200000};
+        TextView[] chips = {binding.chipTopup20k, binding.chipTopup50k, binding.chipTopup100k, binding.chipTopup200k};
+        for (int i = 0; i < amounts.length; i++) {
+            long amount = amounts[i];
+            TextView chip = chips[i];
+            chip.setOnClickListener(v -> selectTopupChip(amount, chip));
+            if (amount == selectedTopupAmount) selectTopupChip(amount, chip);
+        }
     }
 
     private void selectTopupChip(long amount, TextView selectedView) {
+        if (busy) return;
         selectedTopupAmount = amount;
         TextView[] chips = {binding.chipTopup20k, binding.chipTopup50k, binding.chipTopup100k, binding.chipTopup200k};
         for (TextView chip : chips) {
@@ -365,7 +383,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         payBtn.setBackgroundTintList(ContextCompat.getColorStateList(requireContext(), R.color.navy));
         payBtn.setTextColor(ContextCompat.getColor(requireContext(), R.color.white));
         payBtn.setCornerRadius(14);
-        payBtn.setOnClickListener(v -> startCheckout(bill));
+        payBtn.setOnClickListener(v -> startCheckout(bill, ""));
         card.addView(payBtn);
 
         return card;
@@ -382,7 +400,59 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
             return;
         }
         binding.topupPhoneInput.setError(null);
-        loadCatalog("TOPUP", selectedTopupAmount, phone);
+        if (selectedTopupCarrier == null) {
+            binding.topupCarrierPicker.setError("Vui lòng chọn nhà mạng.");
+            return;
+        }
+        loadCatalog("TOPUP", products -> {
+            JSONObject product = carriersForAmount(products).get(selectedTopupCarrier);
+            if (product == null) {
+                selectedTopupCarrier = null;
+                selectedTopupCarrierName = null;
+                renderTopupCarrier();
+                binding.topupCarrierPicker.setError("Mệnh giá này không có ở nhà mạng đã chọn.");
+                return;
+            }
+            createOrderForProduct(product, phone);
+        });
+    }
+
+    private void chooseTopupCarrier() {
+        loadCatalog("TOPUP", products -> {
+            Map<String, JSONObject> carriers = carriersForAmount(products);
+            if (carriers.isEmpty()) {
+                binding.topupCarrierPicker.setError("Chưa có nhà mạng cho mệnh giá này.");
+                return;
+            }
+            List<String> networks = new ArrayList<>(carriers.keySet());
+            List<String> names = new ArrayList<>();
+            for (String network : networks) names.add(carriers.get(network).optString("name", network));
+            new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+                    .setTitle("Chọn nhà mạng")
+                    .setItems(names.toArray(new String[0]), (dialog, index) -> {
+                        selectedTopupCarrier = networks.get(index);
+                        selectedTopupCarrierName = names.get(index);
+                        renderTopupCarrier();
+                    })
+                    .show();
+        });
+    }
+
+    private Map<String, JSONObject> carriersForAmount(List<JSONObject> products) {
+        Map<String, JSONObject> carriers = new LinkedHashMap<>();
+        for (JSONObject product : products) {
+            String network = product.optString("network");
+            if (!product.isNull("network") && !network.isEmpty() && "VND".equals(product.optString("currency"))
+                    && product.optLong("amountMinor") == selectedTopupAmount) {
+                carriers.putIfAbsent(network, product);
+            }
+        }
+        return carriers;
+    }
+
+    private void renderTopupCarrier() {
+        binding.topupCarrierPicker.setText(selectedTopupCarrierName == null ? "Chọn nhà mạng" : selectedTopupCarrierName);
+        binding.topupCarrierPicker.setError(null);
     }
 
     private void openCatalog() {
@@ -413,7 +483,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
 
     private void openCatalogCategory(String category) {
         if (pendingOrder != null) recoverOrder();
-        else loadCatalog(category, 0, null);
+        else loadCatalog(category, this::showCatalogProducts);
     }
 
     private void hubStatus(String message) {
@@ -421,7 +491,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         binding.lookupResultText.setText(message);
     }
 
-    private void loadCatalog(String category, long amount, @Nullable String phone) {
+    private void loadCatalog(String category, Consumer<List<JSONObject>> onLoaded) {
         if (busy) return;
         setBusy(true);
         hubStatus("Đang tải danh mục mô phỏng…");
@@ -431,27 +501,13 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
             try {
                 if (!task.isSuccessful() || !ok(task.getResult())) throw new JSONException("Unavailable");
                 JSONArray items = new JSONObject(task.getResult().body).getJSONArray("items");
-                java.util.List<JSONObject> options = new java.util.ArrayList<>();
-                java.util.List<String> names = new java.util.ArrayList<>();
+                List<JSONObject> products = new ArrayList<>();
                 for (int i = 0; i < items.length(); i++) {
                     JSONObject item = items.getJSONObject(i);
-                    long price = item.getLong("amountMinor");
-                    if (!item.optBoolean("demo") || (amount > 0 && price != amount)) continue;
-                    options.add(item);
-                    names.add(item.getString("name") + " · " + ReadSummaryFormatter.money(price)
-                            + " " + item.getString("currency"));
+                    if (item.optBoolean("demo")) products.add(item);
                 }
-                if (options.isEmpty()) {
-                    hubStatus("Chưa có sản phẩm demo phù hợp.");
-                    scrollToSection(binding.lookupFormContainer);
-                    return;
-                }
-                hubStatus("Chọn sản phẩm demo để xem giá.");
-                new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
-                        .setTitle("Chọn sản phẩm demo")
-                        .setItems(names.toArray(new String[0]), (dialog, index) ->
-                                confirmProduct(options.get(index), names.get(index), phone))
-                        .show();
+                binding.lookupResultText.setVisibility(View.GONE);
+                onLoaded.accept(products);
             } catch (JSONException error) {
                 hubStatus("Không tải được danh mục. Vui lòng thử lại.");
                 scrollToSection(binding.lookupFormContainer);
@@ -459,26 +515,38 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         });
     }
 
-    private void confirmProduct(JSONObject item, String title, @Nullable String phone) {
-        String customerDetails = phone == null ? "Khách mẫu · 1 đơn vị · " + item.optString("name") : phone;
-        String details = phone == null ? customerDetails : "Số điện thoại nhận nạp: " + phone;
+    private void showCatalogProducts(List<JSONObject> products) {
+        if (products.isEmpty()) {
+            hubStatus("Chưa có sản phẩm demo phù hợp.");
+            scrollToSection(binding.lookupFormContainer);
+            return;
+        }
+        List<String> names = new ArrayList<>();
+        for (JSONObject product : products) {
+            names.add(product.optString("name") + " · " + ReadSummaryFormatter.money(product.optLong("amountMinor"))
+                    + " " + product.optString("currency"));
+        }
         new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
-                .setTitle("Xác nhận báo giá demo")
-                .setMessage(title + "\n" + details + "\nBáo giá giữ trong 15 phút sau khi tạo đơn.")
-                .setNegativeButton("Quay lại", null)
-                .setPositiveButton("Tạo đơn demo", (dialog, which) -> {
-                    try {
-                        pendingOrder = new JSONObject()
-                                .put("requestId", UUID.randomUUID().toString())
-                                .put("productId", item.getString("id")).put("quantity", 1)
-                                .put("expectedAmountMinor", item.getLong("amountMinor"))
-                                .put("expectedCurrency", item.getString("currency"))
-                                .put("customerDetails", customerDetails).toString();
-                        submitOrder();
-                    } catch (JSONException error) {
-                        hubStatus("Dữ liệu báo giá không hợp lệ.");
-                    }
-                }).show();
+                .setTitle("Chọn sản phẩm demo")
+                .setItems(names.toArray(new String[0]), (dialog, index) ->
+                        createOrderForProduct(products.get(index), null))
+                .show();
+    }
+
+    private void createOrderForProduct(JSONObject item, @Nullable String phone) {
+        if (busy || pendingOrder != null) return;
+        String customerDetails = phone == null ? "Khách mẫu · 1 đơn vị · " + item.optString("name") : phone;
+        try {
+            pendingOrder = new JSONObject()
+                    .put("requestId", UUID.randomUUID().toString())
+                    .put("productId", item.getString("id")).put("quantity", 1)
+                    .put("expectedAmountMinor", item.getLong("amountMinor"))
+                    .put("expectedCurrency", item.getString("currency"))
+                    .put("customerDetails", customerDetails).toString();
+            submitOrder();
+        } catch (JSONException error) {
+            hubStatus("Dữ liệu báo giá không hợp lệ.");
+        }
     }
 
     private void recoverOrder() {
@@ -530,8 +598,12 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         try {
             JSONObject order = new JSONObject(response.body);
             String id = order.getString("id");
+            String details = order.optString("customerDetails", "");
+            if ("TOPUP".equals(order.optString("serviceType")) && !details.isEmpty()) {
+                details = "Số điện thoại nhận nạp: " + details;
+            }
             clearPendingOrder();
-            lookupBill(id);
+            lookupBill(id, details);
         } catch (JSONException error) {
             hubStatus("Chưa đọc được mã đơn. Bấm kiểm tra đơn đang tạo.");
         }
@@ -580,6 +652,10 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     }
 
     private void lookupBill(String code) {
+        lookupBill(code, "");
+    }
+
+    private void lookupBill(String code, String orderDetails) {
         if (busy) return;
         setBusy(true);
         hubStatus("Đang tra cứu hóa đơn…");
@@ -599,7 +675,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                             + "\nMã thanh toán: " + bill.optString("paymentId", "—"));
                     return;
                 }
-                startCheckout(bill);
+                startCheckout(bill, orderDetails);
             } catch (JSONException error) {
                 hubStatus("Không tra cứu được hóa đơn. Hãy kiểm tra mã hoặc thử lại.");
             }
@@ -609,19 +685,16 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     // ============================================================
     // CHECKOUT FLOW
     // ============================================================
-    private void startCheckout(JSONObject bill) {
+    private void startCheckout(JSONObject bill, String orderDetails) {
         if (busy || binding == null) return;
         if (!bill.optBoolean("stripePending") && !bill.isNull("quoteExpiresAt")
                 && bill.optLong("quoteExpiresAt") <= System.currentTimeMillis()) {
             hubStatus("Báo giá đã hết hạn. Nếu đã gửi thanh toán, kiểm tra kết quả của đơn cũ.");
             return;
         }
-        if (paymentSheet == null) {
-            hubStatus("Ứng dụng chưa được cấu hình khóa công khai Stripe Sandbox.");
-            return;
-        }
         currentBillId = bill.optString("id");
         currentServiceName = bill.optString("serviceType", bill.optString("provider"));
+        if (!orderDetails.isEmpty()) currentServiceName += "\n" + orderDetails;
         currentReference = bill.optString("invoiceRef", currentBillId);
         if (requestId == null) {
             requestId = UUID.randomUUID().toString();
@@ -650,6 +723,8 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
             JSONObject body = new JSONObject()
                     .put("billId", currentBillId)
                     .put("requestId", requestId);
+            Bundle arguments = getArguments();
+            if (arguments != null) body.put("sourceAccountId", arguments.getString("sourceAccountId"));
 
             String prepare = "/payments/intents";
             String recovery = "/payment-intents/by-request/" + requestId;
@@ -838,10 +913,6 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
 
     private void commitPayment() {
         if (busy || completed || currentBillId == null || requestId == null) return;
-        if (paymentSheet == null) {
-            checkoutStatus("Thiếu STRIPE_PUBLISHABLE_KEY (pk_test_...) trong local.properties. Thêm key rồi cài lại bản debug.");
-            return;
-        }
         commitPending = true;
         setBusy(true);
         renderCheckoutStep();
@@ -878,8 +949,18 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                             finishPaymentSuccess();
                             return;
                         }
+                        if ("FAILED".equals(status)) {
+                            commitPending = false;
+                            checkoutStatus("Stripe từ chối thanh toán · " + p.optString("failureCode"));
+                            renderCheckoutStep();
+                            return;
+                        }
                         String clientSecret = p.optString("clientSecret", "");
                         if (!p.isNull("clientSecret") && !clientSecret.isEmpty()) {
+                            if (paymentSheet == null) {
+                                checkoutStatus("Thiếu khóa Stripe Sandbox để tiếp tục thanh toán thẻ.");
+                                return;
+                            }
                             PaymentSheet.Configuration.Builder configuration =
                                     new PaymentSheet.Configuration.Builder("Nimbus Bank");
                             if (!p.isNull("customerId") && !p.isNull("customerSessionClientSecret")) {
@@ -964,6 +1045,11 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                 authoritativeAmount = intent.optLong("amountMinor", authoritativeAmount);
                 authoritativeFee = intent.optLong("feeMinor", authoritativeFee);
                 authoritativeCurrency = intent.optString("currency", authoritativeCurrency);
+                if ("STRIPE_TREASURY".equals(intent.optString("provider"))) {
+                    binding.checkoutReferenceText.setText("Mã hóa đơn / tham chiếu: " + currentReference
+                            + "\nTài khoản thanh toán: " + intent.optString("sourceId")
+                            + "\nTỷ giá demo 1 USD = 25.000 ₫");
+                }
                 JSONObject tgt = intent.optJSONObject("target");
                 if (tgt != null) authoritativeTarget = tgt.optString("id", authoritativeTarget);
 
@@ -1088,7 +1174,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         binding.checkoutOtpStepContainer.setVisibility(View.GONE);
         binding.checkoutCommitContainer.setVisibility(View.GONE);
         binding.checkoutSuccessContainer.setVisibility(View.VISIBLE);
-        binding.receiptAmountDisplay.setText(ReadSummaryFormatter.money(authoritativeAmount + authoritativeFee) + " " + authoritativeCurrency);
+        binding.receiptAmountDisplay.setText(ReadSummaryFormatter.formatCurrency(authoritativeAmount + authoritativeFee, authoritativeCurrency));
         binding.receiptDetailsText.setText("Dịch vụ: " + currentServiceName + "\nTham chiếu: " + currentReference +
                 "\nMã thanh toán: " + intentId + "\nStripe Sandbox đã xác nhận thanh toán.");
         checkoutStatus("");
@@ -1104,6 +1190,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         this.busy = busy;
         if (binding != null) {
             binding.btnProceedTopup.setEnabled(!busy);
+            binding.topupCarrierPicker.setEnabled(!busy);
             binding.pendingOrderButton.setEnabled(!busy);
             binding.orderHistoryButton.setEnabled(!busy);
             binding.lookupButton.setEnabled(!busy);

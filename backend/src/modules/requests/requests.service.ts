@@ -41,6 +41,7 @@ export class RequestService {
   private async demoAccount(t: Tx, a: Actor, id: string, currency: string) {
     check(a.role === "CUSTOMER", "FORBIDDEN", 403);
     const account = await this.bank.owned(t, a, id);
+    check(!account.stripeSandboxLinkPath, "STRIPE_SANDBOX_CURRENCY_REQUIRED", 409);
     check(account.demo === true && account.type === "CHECKING" &&
       account.status === "ACTIVE" && account.currency === currency, "DEMO_ACCOUNT_REQUIRED", 409);
     return account;
@@ -138,6 +139,7 @@ export class RequestService {
         return this.demoResult(intent);
 
       const account = await this.bank.owned(t, a, intent.sourceAccountId);
+      check(!account.stripeSandboxLinkPath, "STRIPE_SANDBOX_CURRENCY_REQUIRED", 409);
       const delta = intent.movement === "DEPOSIT" ? intent.amountMinor : -intent.amountMinor;
       const bookedMinor = account.bookedMinor + delta;
       const availableMinor = account.availableMinor + delta;
