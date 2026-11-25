@@ -15,6 +15,13 @@ const app = createApp({
   provision: async (actor, input) => {
     return provisionCustomer(actor, input);
   },
+  lookupUserByEmail: async (email) => {
+    const account = await r.auth.getUserByEmail(email).catch(() => null);
+    return account ? { uid: account.uid, disabled: Boolean(account.disabled) } : null;
+  },
+  updateUserPassword: async (uid, password) => {
+    await r.auth.updateUser(uid, { password });
+  },
   authenticate: createFirebaseAuthenticator(r.auth),
 });
 const server = app.listen(r.cfg.port, r.cfg.host, () =>

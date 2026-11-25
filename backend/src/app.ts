@@ -1,4 +1,5 @@
 import { registerFaceLogin, registerFaceStepUp } from "./modules/security/face.routes.js";
+import { registerPasswordResetRoutes } from "./modules/security/password-reset.routes.js";
 import express from "express";
 import { registerChatbotRoutes } from "./modules/chatbot/chatbot.js";
 import {
@@ -33,6 +34,7 @@ export function createApp(d: AppDependencies) {
   registerStripeWebhook(app, d);
   registerFaceLogin(app, d);
   app.use(express.json({ limit: "64kb" }));
+  registerPasswordResetRoutes(app, d);
   app.use(authenticateRequests(d));
   registerFaceStepUp(app, d);
   const route = createRouteRegistrar(app);
