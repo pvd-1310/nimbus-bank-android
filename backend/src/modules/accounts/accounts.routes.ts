@@ -11,6 +11,19 @@ export function registerAccountsRoutes(route: Route, d: AppDependencies) {
   route("get", "/accounts/:id/details", (a, r) =>
     d.bank.accounts.details(a, String(r.params.id)),
   );
+  route("get", "/accounts/:id/limits", (a, r) =>
+    d.bank.accounts.limits(a, String(r.params.id)),
+  );
+  route("patch", "/accounts/:id/card-controls", (a, r) => {
+    const patch = z
+      .object({
+        nfcEnabled: z.boolean().optional(),
+        cardFrozen: z.boolean().optional(),
+      })
+      .strict()
+      .parse(r.body);
+    return d.bank.accounts.updateCardControls(a, String(r.params.id), patch, r.header("x-request-id") ?? "");
+  });
   route("get", "/accounts/:id/stripe-sandbox", async (a, r) => {
     const id = String(r.params.id);
     await d.bank.accounts.get(a, id);

@@ -28,6 +28,9 @@ const transferRequest = z.union([
     .or(z.object({ ...common, sourceAccountId: id, destinationAccountId: id }).strict())
 ]);
 export function registerTransfersRoutes(route: Route, d: AppDependencies) {
+  route("get", "/transfers/recent-recipients", (a) =>
+    d.bank.transfers.recentRecipients(a),
+  );
   route("post", "/transfers/recipient", (a, r) => {
     const input = z.object({ sourceAccountId: id, destinationPhone: phone }).strict().parse(r.body);
     return d.bank.store.run(async (t) => {

@@ -219,6 +219,8 @@ export class TransferService {
         });
       }
       t.set("transactionIntents/" + id, { ...i, status: "COMMITTED" });
+      const senderUser = await t.get("users/" + a.uid);
+      const recipientUser = await t.get("users/" + dst.ownerUid);
       const tx = {
         ownerUid: a.uid,
         actorUid: a.uid,
@@ -230,6 +232,8 @@ export class TransferService {
         currency: i.currency,
         status: "SETTLED",
         balanceAfterMinor: src.bookedMinor - i.amountMinor,
+        ...(typeof recipientUser?.fullName === "string" ? { counterpartyName: recipientUser.fullName } : {}),
+        ...(typeof recipientUser?.contactPhone === "string" ? { destinationPhone: recipientUser.contactPhone } : {}),
         committedAt: this.bank.now(),
       };
       t.set("transactions/" + id, tx);
@@ -243,6 +247,7 @@ export class TransferService {
         currency: i.currency,
         status: "SETTLED",
         balanceAfterMinor: dst.bookedMinor + i.amountMinor,
+        ...(typeof senderUser?.fullName === "string" ? { counterpartyName: senderUser.fullName } : {}),
         committedAt: this.bank.now(),
       });
       for (const uid of new Set([a.uid, dst.ownerUid]))
@@ -269,6 +274,29 @@ export class TransferService {
     }).catch(async (error: unknown) => {
       await this.recordRejection(a, id, "COMMIT", error);
       throw error;
+    });
+  }
+  async recentRecipients(a: Actor) {
+    check(a.role === "CUSTOMER", "FORBIDDEN", 403);
+    return this.bank.store.run(async (t) => {
+      await this.bank.authorize(t, a);
+      const txs = await t.list("transactions", { ownerUid: a.uid }, { limit: 100 });
+      const seen = new Set<string>();
+      const items: Array<{ name: string; target: string; accountId: string }> = [];
+      const sorted = [...txs].sort((x, y) => Number(y.committedAt ?? 0) - Number(x.committedAt ?? 0));
+      for (const tx of sorted) {
+        if (tx.type !== "INTERNAL_TRANSFER" || tx.status !== "SETTLED") continue;
+        const target = typeof tx.destinationPhone === "string" && tx.destinationPhone.length > 0
+          ? tx.destinationPhone : "";
+        const name = typeof tx.counterpartyName === "string" && tx.counterpartyName.length > 0
+          ? tx.counterpartyName : "";
+        const accountId = typeof tx.destinationAccountId === "string" ? tx.destinationAccountId : "";
+        if (!target || !name || seen.has(target)) continue;
+        seen.add(target);
+        items.push({ name, target, accountId });
+        if (items.length >= 5) break;
+      }
+      return { items };
     });
   }
 }

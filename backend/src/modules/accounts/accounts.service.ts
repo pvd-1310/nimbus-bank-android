@@ -24,6 +24,65 @@ export class AccountService {
       return { account: acc, details: detail };
     });
   }
+  async limits(a: Actor, id: string) {
+    return this.bank.store.run(async (t) => {
+      await this.bank.authorize(t, a);
+      const acc = await this.bank.owned(t, a, id);
+      const detail = acc.type === "CHECKING" ? await t.get("checkingDetails/" + acc.id) : null;
+      const dailyLimitMinor = typeof detail?.dailyLimitMinor === "number" ? detail.dailyLimitMinor : 10_000_000;
+      const monthlyLimitMinor = dailyLimitMinor * 3;
+      const cardDailyLimitMinor = typeof detail?.cardDailyLimitMinor === "number" ? detail.cardDailyLimitMinor : 20_000_000;
+      const now = new Date(this.bank.now());
+      const dayStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+      const monthStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+      const txs = await t.list("transactions", { ownerUid: a.uid, sourceAccountId: acc.id }, { limit: 500 });
+      let dailyUsedMinor = 0;
+      let monthlyUsedMinor = 0;
+      for (const tx of txs) {
+        if (tx.status !== "SETTLED" && tx.status !== "DEMO_SETTLED" && tx.status !== "SUCCEEDED") continue;
+        if (typeof tx.committedAt !== "number" || typeof tx.amountMinor !== "number") continue;
+        if (tx.type === "TRANSFER_RECEIVED" || tx.type === "TOP_UP" || tx.type === "STRIPE_CREDIT" || tx.type === "DEMO_DEPOSIT") continue;
+        if (tx.committedAt >= dayStart) dailyUsedMinor += tx.amountMinor;
+        if (tx.committedAt >= monthStart) monthlyUsedMinor += tx.amountMinor;
+      }
+      return {
+        accountId: acc.id,
+        dailyUsedMinor,
+        dailyLimitMinor,
+        monthlyUsedMinor,
+        monthlyLimitMinor,
+        cardDailyLimitMinor,
+        nfcEnabled: detail?.nfcEnabled === true,
+        cardFrozen: detail?.cardFrozen === true,
+        cardTier: typeof detail?.cardTier === "string" ? detail.cardTier : "infinite",
+        displayName: typeof detail?.displayName === "string" ? detail.displayName : "Tài khoản thanh toán",
+        branchName: typeof detail?.branchName === "string" ? detail.branchName : "Hội sở chính",
+      };
+    });
+  }
+  async updateCardControls(a: Actor, id: string, patch: { nfcEnabled?: boolean; cardFrozen?: boolean }, requestId = "") {
+    return this.bank.store.run(async (t) => {
+      await this.bank.authorize(t, a);
+      const acc = await this.bank.owned(t, a, id);
+      check(acc.type === "CHECKING", "INVALID_TYPE");
+      const detail = (await t.get("checkingDetails/" + acc.id)) ?? { accountId: acc.id };
+      const next = {
+        ...detail,
+        ...(patch.nfcEnabled !== undefined ? { nfcEnabled: patch.nfcEnabled } : {}),
+        ...(patch.cardFrozen !== undefined ? { cardFrozen: patch.cardFrozen } : {}),
+      };
+      t.set("checkingDetails/" + acc.id, next);
+      this.bank.audit(t, a, "CARD_CONTROLS_UPDATE", acc.id, requestId, {
+        nfcEnabled: next.nfcEnabled === true,
+        cardFrozen: next.cardFrozen === true,
+      });
+      return {
+        accountId: acc.id,
+        nfcEnabled: next.nfcEnabled === true,
+        cardFrozen: next.cardFrozen === true,
+      };
+    });
+  }
   async savings(a: Actor, id: string, month?: string) {
     return this.bank.store.run(async (t) => {
       await this.bank.authorize(t, a);
@@ -90,6 +149,14 @@ export class AccountService {
         periodEnd,
         estimatePolicies,
       );
+      const termMonths = typeof detail.termMonths === "number"
+        ? detail.termMonths
+        : (typeof detail.openedAt === "number" && typeof detail.maturityAt === "number"
+            ? Math.max(1, Math.round((detail.maturityAt - detail.openedAt) / (30 * 86_400_000)))
+            : 12);
+      const maturityProfitMinor = Math.round(
+        detail.principalMinor * (currentPolicy.annualRateBasisPoints / 10000) * (termMonths / 12),
+      );
       return {
         demo: acc.demo === true,
         principalMinor: detail.principalMinor,
@@ -98,6 +165,8 @@ export class AccountService {
         effectiveFrom: currentPolicy.effectiveFrom,
         openedAt: detail.openedAt ?? null,
         maturityAt: detail.maturityAt ?? null,
+        termMonths,
+        maturityProfitMinor,
         month: selectedMonth,
         periodStart,
         periodEnd,
@@ -152,6 +221,9 @@ export class AccountService {
         monthlyFirstPaymentMinor: monthly[0].totalMinor,
         biweeklyFirstPaymentMinor: biweekly[0].totalMinor,
         totalMinor,
+        contractCode: typeof terms.contractCode === "string" ? terms.contractCode : acc.id,
+        nextDueAt: typeof terms.nextDueAt === "number" ? terms.nextDueAt : null,
+        paidInstallments: typeof terms.paidInstallments === "number" ? terms.paidInstallments : 0,
         convention: "ANNUITY PERIODIC HALF_UP",
         items,
       };

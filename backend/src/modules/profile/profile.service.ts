@@ -8,6 +8,7 @@ export class ProfileService {
   async get(a: Actor) {
     return this.bank.store.run(async (t) => {
       const u = await this.bank.authorize(t, a, undefined, true);
+      const c = await t.get("customers/" + a.uid);
       return {
         uid: a.uid,
         fullName: u.fullName ?? "",
@@ -15,6 +16,8 @@ export class ProfileService {
         phoneMasked: u.phoneMasked ?? "",
         contactEmail: u.contactEmail ?? "",
         contactPhone: u.contactPhone ?? "",
+        customerNo: typeof c?.customerNo === "string" ? c.customerNo : "",
+        tier: typeof c?.tier === "string" ? c.tier : "STANDARD",
         preferences: u.preferences ?? {},
         status: u.status ?? (u.active ? "ACTIVE" : "INACTIVE"),
         createdAt: u.createdAt ?? null,

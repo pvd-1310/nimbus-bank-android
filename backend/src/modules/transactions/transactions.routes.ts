@@ -3,6 +3,13 @@ import type { AppDependencies, Route } from "../../core/http.js";
 import { page } from "../../shared/pagination.js";
 import { id } from "../../shared/validation.js";
 export function registerTransactionsRoutes(route: Route, d: AppDependencies) {
+  route("get", "/transactions/summary", async (a, r) => {
+    const q = z
+      .object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional() })
+      .strict()
+      .parse(r.query);
+    return d.bank.transactions.summary(a, q.month);
+  });
   route("get", "/transactions", async (a, r) => {
     const filters = z
       .object({
