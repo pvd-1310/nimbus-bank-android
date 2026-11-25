@@ -147,6 +147,40 @@ public class AccountDetailFragment extends Fragment {
                 binding.heroLabel.setText("Số dư khả dụng");
                 currentBalance = account.availableMinor != null ? account.availableMinor : account.balanceMinor;
                 binding.balanceText.setText(ReadSummaryFormatter.formatCurrency(currentBalance, currentCurrency));
+                binding.heroMeta.setVisibility(View.VISIBLE);
+                binding.heroMeta.setText("Tài khoản thanh toán Platinum");
+                binding.miniVisaBadge.setVisibility(View.VISIBLE);
+                binding.checkingLimitBox.setVisibility(View.VISIBLE);
+                binding.checkingLimitBar.setProgress(0.64f);
+                binding.genericDetails.setVisibility(View.VISIBLE);
+                binding.detailText.setText("Tên tài khoản: Tài khoản thanh toán Platinum\n"
+                        + "Số tài khoản: " + account.id + "\n"
+                        + "Chi nhánh: Quận 1, TP.HCM (minh họa)");
+                var current = binding;
+                ((FinalTermApplication) requireActivity().getApplication()).getAppContainer().getBackendApiClient()
+                        .get("/accounts/" + android.net.Uri.encode(account.id) + "/limits")
+                        .addOnCompleteListener(task -> {
+                            if (binding != current || !task.isSuccessful() || task.getResult() == null
+                                    || task.getResult().statusCode != 200) return;
+                            try {
+                                JSONObject lim = new JSONObject(task.getResult().body);
+                                long limit = Math.max(1L, lim.optLong("dailyLimitMinor", 10_000_000L));
+                                long used = Math.max(0L, lim.optLong("dailyUsedMinor", 0L));
+                                float ratio = Math.min(1f, (float) used / (float) limit);
+                                int pct = Math.round(ratio * 100f);
+                                binding.checkingLimitBar.setProgress(ratio);
+                                binding.checkingLimitText.setText("Hạn mức giao dịch · "
+                                        + ReadSummaryFormatter.formatCurrency(used, currentCurrency)
+                                        + " / " + ReadSummaryFormatter.formatCurrency(limit, currentCurrency));
+                                binding.checkingLimitPct.setText(pct + "%");
+                                String displayName = lim.optString("displayName", "Tài khoản thanh toán");
+                                String branchName = lim.optString("branchName", "Hội sở chính");
+                                binding.heroMeta.setText(displayName);
+                                binding.detailText.setText("Tên tài khoản: " + displayName + "\n"
+                                        + "Số tài khoản: " + account.id + "\n"
+                                        + "Chi nhánh: " + branchName);
+                            } catch (Exception ignored) { }
+                        });
             }
 
             if (!"CHECKING".equals(account.type)) loadTerms(account.id, account.type);
@@ -222,6 +256,8 @@ public class AccountDetailFragment extends Fragment {
         binding.savingsPolicy.setText("Kỳ tính lãi: " + date(terms, "periodStart") + " – " + date(terms, "periodEnd"));
         binding.savingsConvention.setText("Khoản lãi dự kiến chưa được cộng vào số dư.");
         binding.savingsProfit.setText("+" + formatMoney(terms.getLong("profitMinor"), currency));
+        long maturityProfit = terms.optLong("maturityProfitMinor", terms.getLong("profitMinor") * 12L);
+        binding.savingsMaturityProfit.setText("+" + formatMoney(maturityProfit, currency) + " khi đáo hạn");
     }
 
     private void renderMortgage(JSONObject terms) throws JSONException {
@@ -230,6 +266,25 @@ public class AccountDetailFragment extends Fragment {
                 ? terms.getLong("principalMinor") : terms.getLong("outstandingMinor");
         binding.heroLabel.setText("Dư nợ còn lại");
         binding.balanceText.setText(formatMoney(currentBalance, currentCurrency));
+        long origPrincipal = terms.optLong("principalMinor", 0L);
+        float paidRatio = origPrincipal > 0L && currentBalance != null
+                ? Math.max(0f, Math.min(1f, (float) (origPrincipal - currentBalance) / (float) origPrincipal))
+                : 0f;
+        int paidPct = Math.round(paidRatio * 100f);
+        binding.mortgageProgressBar.setProgress(paidRatio);
+        binding.mortgageProgressTitle.setText("Tiến độ trả nợ · Đã trả " + paidPct + "%");
+        String contractCode = terms.optString("contractCode", currentAccountId);
+        long nextDueAt = terms.optLong("nextDueAt", 0L);
+        if (nextDueAt > 0L) {
+            String dueStr = java.text.DateFormat.getDateInstance(java.text.DateFormat.SHORT,
+                    Locale.forLanguageTag("vi-VN")).format(new Date(nextDueAt));
+            long daysLeft = Math.max(0L, (nextDueAt - System.currentTimeMillis()) / 86_400_000L);
+            binding.mortgageDueBadge.setText(daysLeft <= 7 ? "Sắp đến hạn" : "Đang trả nợ");
+            binding.mortgageContractInfo.setText("HĐ #" + contractCode + " · Hạn thanh toán: " + dueStr
+                    + " (còn " + daysLeft + " ngày)");
+        } else {
+            binding.mortgageContractInfo.setText("HĐ #" + contractCode);
+        }
         binding.mortgageRate.setText(formatRate(terms.getInt("annualRateBasisPoints")));
         binding.mortgagePrincipal.setText(formatMoney(terms.getLong("principalMinor"), currentCurrency));
         binding.mortgageTerm.setText(terms.getInt("termMonths") + " tháng");
@@ -284,7 +339,8 @@ public class AccountDetailFragment extends Fragment {
         row.setPadding(dp(10), dp(12), dp(10), dp(12));
 
         TextView installment = new TextView(requireContext());
-        installment.setText("Kỳ " + item.getInt("installment"));
+        String statusBadge = item.getInt("installment") == 1 ? " · Chờ thanh toán" : " · Chưa đến hạn";
+        installment.setText("Kỳ " + item.getInt("installment") + statusBadge);
         installment.setTextColor(requireContext().getColor(R.color.ink));
         installment.setTextSize(14);
         installment.setTypeface(Typeface.DEFAULT, Typeface.BOLD);

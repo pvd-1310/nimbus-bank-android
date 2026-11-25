@@ -82,9 +82,9 @@ public class SignatureBarChartView extends View {
         super.onDraw(canvas);
         float w = getWidth();
         float h = getHeight();
-        float bottomLabelSpace = dp(24);
+        float bottomLabelSpace = dp(26);
         float chartHeight = h - bottomLabelSpace;
-        float barWidth = dp(14);
+        float barWidth = dp(24);
         float r = barWidth / 2f;
 
         int count = days.length;
@@ -93,7 +93,7 @@ public class SignatureBarChartView extends View {
         for (int i = 0; i < count; i++) {
             float left = gap + i * (barWidth + gap);
             float right = left + barWidth;
-            float barH = chartHeight * heights[i];
+            float barH = Math.max(dp(12), chartHeight * heights[i]);
             float top = chartHeight - barH;
             float bottom = chartHeight;
 
@@ -101,10 +101,20 @@ public class SignatureBarChartView extends View {
             boolean isSelected = (i == selectedIndex);
             canvas.drawRoundRect(barRect, r, r, isSelected ? barSelectedPaint : barGlassPaint);
 
+            if (isSelected && barH > dp(18)) {
+                labelPaint.setColor(ContextCompat.getColor(getContext(), R.color.white));
+                canvas.drawCircle(left + r, top + dp(10), dp(3), labelPaint);
+            }
+
+            if (isSelected) {
+                barRect.set(left - dp(2), h - dp(20), right + dp(2), h - dp(2));
+                canvas.drawRoundRect(barRect, dp(8), dp(8), barGlassPaint);
+            }
+
             // Draw label below
             labelPaint.setColor(ContextCompat.getColor(getContext(), isSelected ? R.color.navy : R.color.ink_muted));
             labelPaint.setFakeBoldText(isSelected);
-            canvas.drawText(days[i], left + r, h - dp(6), labelPaint);
+            canvas.drawText(days[i], left + r, h - dp(7), labelPaint);
         }
     }
 }

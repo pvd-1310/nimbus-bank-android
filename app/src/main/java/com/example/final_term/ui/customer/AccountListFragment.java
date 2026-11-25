@@ -436,7 +436,7 @@ public final class AccountListFragment extends Fragment {
         wordmark.setOrientation(LinearLayout.VERTICAL);
         TextView name = walletText("nimbus", 22, R.color.white, false);
         name.setLetterSpacing(-0.03f);
-        TextView subtitle = walletText("THẺ THANH TOÁN", 9, R.color.white, true);
+        TextView subtitle = walletText("infinite", 10, R.color.white, true);
         subtitle.setAlpha(0.78f);
         wordmark.addView(name); wordmark.addView(subtitle); bottom.addView(wordmark);
         ImageView contactless = new ImageView(requireContext());
@@ -511,9 +511,14 @@ public final class AccountListFragment extends Fragment {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         rowParams.bottomMargin = dp(12);
         actions.setLayoutParams(rowParams);
-        String[] titles = {"NFC", "Hạn mức thẻ", "Khóa thẻ", "Cài đặt"};
+        String[] titles = {"NFC Tắt", "Hạn mức thẻ", "Khóa thẻ", "Cài đặt"};
         int[] icons = {R.drawable.ic_nfc, R.drawable.ic_schedule,
                 R.drawable.ic_lock, R.drawable.ic_settings};
+        final boolean[] nfcOn = {false};
+        final boolean[] locked = {false};
+        final long[] cardLimit = {20_000_000L};
+        final TextView[] actionLabels = new TextView[titles.length];
+        final ImageView[] actionIcons = new ImageView[titles.length];
         for (int i = 0; i < titles.length; i++) {
             final int actionIndex = i;
             LinearLayout action = new LinearLayout(requireContext());
@@ -534,23 +539,63 @@ public final class AccountListFragment extends Fragment {
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             labelParams.topMargin = dp(6);
             action.addView(label, labelParams);
+            actionLabels[i] = label;
+            actionIcons[i] = icon;
             action.setOnClickListener(view -> {
-                if (actionIndex == 1) {
+                if (actionIndex == 0) {
+                    nfcOn[0] = !nfcOn[0];
+                    label.setText(nfcOn[0] ? "NFC Bật" : "NFC Tắt");
+                    icon.setImageTintList(ContextCompat.getColorStateList(requireContext(),
+                            nfcOn[0] ? R.color.success : R.color.navy));
+                    try {
+                        application.getAppContainer().getBackendApiClient().patch(
+                                "/accounts/" + android.net.Uri.encode(account.id) + "/card-controls",
+                                new JSONObject().put("nfcEnabled", nfcOn[0]).toString());
+                    } catch (Exception ignored) { }
+                } else if (actionIndex == 1) {
                     new MaterialAlertDialogBuilder(requireContext())
                             .setTitle("Hạn mức thẻ")
-                            .setMessage("Dữ liệu minh họa: 20.000.000 ₫ mỗi ngày. Hạn mức thẻ sẽ được cập nhật khi có dữ liệu từ hệ thống.")
+                            .setMessage("Hạn mức chi tiêu thẻ hiện tại: "
+                                    + ReadSummaryFormatter.formatCurrency(cardLimit[0], account.currency) + " mỗi ngày.")
                             .setPositiveButton("Đóng", null).show();
+                } else if (actionIndex == 2) {
+                    locked[0] = !locked[0];
+                    label.setText(locked[0] ? "Đã khóa" : "Khóa thẻ");
+                    icon.setImageTintList(ContextCompat.getColorStateList(requireContext(),
+                            locked[0] ? R.color.danger : R.color.navy));
+                    try {
+                        application.getAppContainer().getBackendApiClient().patch(
+                                "/accounts/" + android.net.Uri.encode(account.id) + "/card-controls",
+                                new JSONObject().put("cardFrozen", locked[0]).toString());
+                    } catch (Exception ignored) { }
                 } else if (actionIndex == 3) {
                     openDetails(view, account);
-                } else {
-                    new MaterialAlertDialogBuilder(requireContext())
-                            .setTitle(titles[actionIndex])
-                            .setMessage("Tính năng này chưa được kết nối với hệ thống thẻ.")
-                            .setPositiveButton("Đóng", null).show();
                 }
             });
             actions.addView(action, new LinearLayout.LayoutParams(0, dp(88), 1f));
         }
+        application.getAppContainer().getBackendApiClient()
+                .get("/accounts/" + android.net.Uri.encode(account.id) + "/limits")
+                .addOnCompleteListener(task -> {
+                    if (binding == null || !task.isSuccessful() || task.getResult() == null
+                            || task.getResult().statusCode != 200) return;
+                    try {
+                        JSONObject lim = new JSONObject(task.getResult().body);
+                        nfcOn[0] = lim.optBoolean("nfcEnabled", false);
+                        locked[0] = lim.optBoolean("cardFrozen", false);
+                        cardLimit[0] = lim.optLong("cardDailyLimitMinor", 20_000_000L);
+                        if (actionLabels[0] != null) {
+                            actionLabels[0].setText(nfcOn[0] ? "NFC Bật" : "NFC Tắt");
+                            actionIcons[0].setImageTintList(ContextCompat.getColorStateList(requireContext(),
+                                    nfcOn[0] ? R.color.success : R.color.navy));
+                        }
+                        if (actionLabels[2] != null) {
+                            actionLabels[2].setText(locked[0] ? "Đã khóa" : "Khóa thẻ");
+                            actionIcons[2].setImageTintList(ContextCompat.getColorStateList(requireContext(),
+                                    locked[0] ? R.color.danger : R.color.navy));
+                        }
+                    } catch (Exception ignored) { }
+                });
         return actions;
     }
 
@@ -613,6 +658,42 @@ public final class AccountListFragment extends Fragment {
             TextView accountName = walletText("Tài khoản thanh toán mặc định", 12, R.color.ink_muted, false);
             balanceCard.addView(accountName);
         }
+        // Hatched monthly limit progress bar bound to real account limits
+        LinearLayout limitHeader = new LinearLayout(requireContext());
+        limitHeader.setOrientation(LinearLayout.HORIZONTAL);
+        limitHeader.setGravity(Gravity.CENTER_VERTICAL);
+        limitHeader.setPadding(0, dp(12), 0, dp(6));
+        TextView limitLabel = walletText("Hạn mức tháng · Đang tải…", 12, R.color.ink_muted, false);
+        limitHeader.addView(limitLabel, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        TextView limitPct = walletText("0%", 11, R.color.navy, true);
+        limitPct.setBackgroundResource(R.drawable.glass_pill_bg);
+        limitPct.setPadding(dp(8), dp(2), dp(8), dp(2));
+        limitHeader.addView(limitPct);
+        balanceCard.addView(limitHeader);
+        com.example.final_term.ui.common.HatchedProgressBar limitBar =
+                new com.example.final_term.ui.common.HatchedProgressBar(requireContext());
+        limitBar.setProgress(0f);
+        balanceCard.addView(limitBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(10)));
+        if (checking != null) {
+            final ReadModels.AccountSummary checkedAccount = checking;
+            application.getAppContainer().getBackendApiClient()
+                    .get("/accounts/" + android.net.Uri.encode(checkedAccount.id) + "/limits")
+                    .addOnCompleteListener(task -> {
+                        if (binding == null || !task.isSuccessful() || task.getResult() == null
+                                || task.getResult().statusCode != 200) return;
+                        try {
+                            JSONObject lim = new JSONObject(task.getResult().body);
+                            long used = Math.max(0L, lim.optLong("monthlyUsedMinor", 0L));
+                            long limit = Math.max(1L, lim.optLong("monthlyLimitMinor", 30_000_000L));
+                            float ratio = Math.min(1f, (float) used / (float) limit);
+                            limitBar.setProgress(ratio);
+                            limitLabel.setText("Hạn mức tháng · "
+                                    + ReadSummaryFormatter.formatCurrency(used, walletCurrency)
+                                    + " / " + ReadSummaryFormatter.formatCurrency(limit, walletCurrency));
+                            limitPct.setText(Math.round(ratio * 100f) + "%");
+                        } catch (Exception ignored) { }
+                    });
+        }
         binding.content.addView(balanceCard);
 
         addWalletSectionTitle("Hoạt động thu nhập · 7 ngày");
@@ -644,19 +725,33 @@ public final class AccountListFragment extends Fragment {
                 thisWeek += transaction.amountMinor;
             }
         }
+        LinearLayout weekHeader = new LinearLayout(requireContext());
+        weekHeader.setOrientation(LinearLayout.HORIZONTAL);
+        weekHeader.setGravity(Gravity.CENTER_VERTICAL);
         TextView weekTotal = walletText(ReadSummaryFormatter.formatCurrency(thisWeek, "VND"), 19, R.color.ink, true);
-        activityCard.addView(weekTotal);
+        weekHeader.addView(weekTotal, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        TextView filterPill = walletText("Tuần này", 11, R.color.navy, true);
+        filterPill.setBackgroundResource(R.drawable.glass_pill_bg);
+        filterPill.setPadding(dp(10), dp(4), dp(10), dp(4));
+        weekHeader.addView(filterPill);
+        activityCard.addView(weekHeader);
         if (hasPreviousWeekActivity && previousWeek > 0) {
             double change = ((double) thisWeek - previousWeek) * 100d / previousWeek;
             TextView comparison = walletText(String.format(Locale.getDefault(), "%+.0f%% so với tuần trước", change),
                     12, change >= 0 ? R.color.navy : R.color.ink_muted, false);
             comparison.setPadding(0, dp(3), 0, dp(8));
             activityCard.addView(comparison);
+        } else if (thisWeek == 0) {
+            TextView comparison = walletText("Chưa có thu nhập trong tuần này", 12, R.color.ink_muted, false);
+            comparison.setPadding(0, dp(3), 0, dp(8));
+            activityCard.addView(comparison);
         }
         float[] chartValues = new float[7];
         long maxDaily = 0;
         for (long value : daily) maxDaily = Math.max(maxDaily, value);
-        if (maxDaily > 0) for (int i = 0; i < daily.length; i++) chartValues[i] = (float) daily[i] / maxDaily;
+        if (maxDaily > 0) {
+            for (int i = 0; i < daily.length; i++) chartValues[i] = (float) daily[i] / maxDaily;
+        }
         int selectedDay = Math.max(0, Math.min(6, (today.get(Calendar.DAY_OF_WEEK) + 5) % 7));
         SignatureBarChartView chart = new SignatureBarChartView(requireContext());
         chart.setValues(chartValues, selectedDay);
