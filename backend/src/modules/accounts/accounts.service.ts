@@ -71,7 +71,7 @@ export class AccountService {
       };
     });
   }
-  async mortgage(a: Actor, id: string) {
+  async mortgage(a: Actor, id: string, frequency?: "MONTHLY" | "BIWEEKLY") {
     return this.bank.store.run(async (t) => {
       await this.bank.authorize(t, a);
       const acc = await this.bank.owned(t, a, id);
@@ -83,7 +83,8 @@ export class AccountService {
       check(["MONTHLY", "BIWEEKLY"].includes(terms.paymentFrequency), "INVALID_TERMS");
       const monthly = mortgageSchedule(principal, annualRateBasisPoints, terms.termMonths, "MONTHLY");
       const biweekly = mortgageSchedule(principal, annualRateBasisPoints, terms.termMonths, "BIWEEKLY");
-      const items = terms.paymentFrequency === "BIWEEKLY" ? biweekly : monthly;
+      const paymentFrequency = frequency ?? terms.paymentFrequency;
+      const items = paymentFrequency === "BIWEEKLY" ? biweekly : monthly;
       const totalMinor = items.reduce((total, item) => total + item.totalMinor, 0);
       check(Number.isSafeInteger(totalMinor), "AMOUNT_OVERFLOW");
       return {
@@ -94,7 +95,7 @@ export class AccountService {
         outstandingMinor: terms.outstandingMinor ?? null,
         annualRateBasisPoints,
         termMonths: terms.termMonths,
-        paymentFrequency: terms.paymentFrequency,
+        paymentFrequency,
         monthlyFirstPaymentMinor: monthly[0].totalMinor,
         biweeklyFirstPaymentMinor: biweekly[0].totalMinor,
         totalMinor,

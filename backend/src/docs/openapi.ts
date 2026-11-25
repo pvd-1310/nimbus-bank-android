@@ -73,7 +73,7 @@ const endpoints: [string, string, string, unknown?][] = [
     "/accounts/{id}/savings-estimate",
     "ACT/365 savings estimate; days query",
   ],
-  ["get", "/accounts/{id}/mortgage-schedule", "Projected amortization"],
+  ["get", "/accounts/{id}/mortgage-schedule", "Projected amortization; optional frequency=MONTHLY|BIWEEKLY"],
   ["get", "/transactions", "History; accountId,type,status,from,to filters"],
   [
     "post",

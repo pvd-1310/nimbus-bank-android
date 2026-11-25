@@ -7,7 +7,6 @@
     android:background="@drawable/background_gradient"
     android:orientation="vertical">
 
-    <!-- Top Bar -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="56dp"
@@ -18,33 +17,33 @@
 
         <ImageButton
             android:id="@+id/back_button"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:background="@drawable/circle_action_button"
             android:contentDescription="Quay lại"
-            android:padding="10dp"
+            android:padding="14dp"
             android:src="@drawable/ic_arrow_back" />
 
         <TextView
             android:id="@+id/title_text"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:layout_marginEnd="8dp"
+            android:layout_marginHorizontal="8dp"
             android:layout_weight="1"
             android:gravity="center"
             android:textColor="@color/ink"
             android:textSize="18sp"
-            android:textStyle="bold"
-            tools:text="Chi tiết tài khoản" />
+            android:fontFamily="sans-serif-medium"
+            android:textStyle="normal"
+            tools:text="Tài khoản tiết kiệm" />
 
         <ImageButton
             android:id="@+id/share_button"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:background="@drawable/circle_action_button"
-            android:contentDescription="Chia sẻ"
-            android:padding="10dp"
+            android:contentDescription="Chia sẻ thông tin"
+            android:padding="14dp"
             android:src="@drawable/ic_share" />
     </LinearLayout>
 
@@ -57,7 +56,7 @@
         android:paddingStart="20dp"
         android:paddingTop="8dp"
         android:paddingEnd="20dp"
-        android:paddingBottom="96dp">
+        android:paddingBottom="24dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -71,15 +70,13 @@
                 android:gravity="center"
                 android:textColor="@color/ink_muted"
                 android:textSize="13sp"
-                tools:text="Số dư khả dụng" />
+                tools:text="Lãi suất và lợi nhuận dự kiến" />
 
-            <!-- Hero Balance Card -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="14dp"
                 android:background="@drawable/glass_panel_card"
-                android:elevation="6dp"
                 android:orientation="vertical"
                 android:padding="20dp">
 
@@ -90,27 +87,25 @@
                     android:orientation="horizontal">
 
                     <TextView
+                        android:id="@+id/hero_label"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="Số dư / Giá trị hiện tại"
+                        android:text="Tổng tiền gửi tiết kiệm"
                         android:textColor="@color/ink_muted"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
+                        android:textSize="13sp" />
 
                     <TextView
                         android:id="@+id/status_text"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:background="@drawable/badge_status_success"
-                        android:paddingStart="8dp"
-                        android:paddingTop="3dp"
-                        android:paddingEnd="8dp"
-                        android:paddingBottom="3dp"
+                        android:paddingHorizontal="9dp"
+                        android:paddingVertical="4dp"
+                        android:text="ĐANG HOẠT ĐỘNG"
                         android:textColor="@color/success"
-                        android:textSize="11sp"
-                        android:textStyle="bold"
-                        tools:text="ACTIVE" />
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
                 </LinearLayout>
 
                 <TextView
@@ -120,20 +115,401 @@
                     android:layout_marginTop="8dp"
                     android:fontFamily="sans-serif-light"
                     android:textColor="@color/ink"
-                    android:textSize="32sp"
-                    tools:text="24.990.000 ₫" />
+                    android:textSize="36sp"
+                    android:textStyle="normal"
+                    tools:text="62.500.000 ₫" />
 
+                <TextView
+                    android:id="@+id/hero_meta"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
+                    android:textColor="@color/ink_muted"
+                    android:textSize="12sp"
+                    tools:text="Kỳ hạn 12 tháng · Tài khoản 1234567890" />
             </LinearLayout>
 
-            <!-- Detailed Specifications Card -->
             <LinearLayout
+                android:id="@+id/savings_content"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="18dp"
-                android:background="@drawable/glass_panel_card"
-                android:elevation="4dp"
                 android:orientation="vertical"
-                android:padding="18dp">
+                android:visibility="gone"
+                tools:visibility="visible">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:background="@drawable/glass_panel_card"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Thông tin tiền gửi"
+                        android:textColor="@color/ink"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Lãi suất áp dụng"
+                            android:textColor="@color/ink_muted"
+                            android:textSize="14sp" />
+
+                        <TextView
+                            android:id="@+id/savings_rate"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/ink"
+                            android:textSize="14sp"
+                            android:textStyle="bold"
+                            tools:text="4,65%/năm" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Ngày mở"
+                            android:textColor="@color/ink_muted"
+                            android:textSize="14sp" />
+
+                        <TextView
+                            android:id="@+id/savings_opened"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/ink"
+                            android:textSize="14sp"
+                            tools:text="25/08/2026" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Ngày đáo hạn"
+                            android:textColor="@color/ink_muted"
+                            android:textSize="14sp" />
+
+                        <TextView
+                            android:id="@+id/savings_maturity"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/ink"
+                            android:textSize="14sp"
+                            tools:text="25/08/2027" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/savings_policy"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:textColor="@color/ink_muted"
+                        android:textSize="11sp"
+                        tools:text="Chính sách savings_standard_vnd_1 · hiệu lực từ 27/08/2026" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/glass_panel_card"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="16dp"
+                    android:paddingVertical="14dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Lợi nhuận ước tính · 30 ngày"
+                        android:textColor="@color/ink"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/savings_profit"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/success"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        tools:text="+238.870 ₫" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/savings_convention"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:paddingHorizontal="4dp"
+                    android:text="Ước tính theo lãi đơn ACT/365; khoản lãi chưa được cộng vào số dư."
+                    android:textColor="@color/ink_muted"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/mortgage_content"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone"
+                tools:visibility="visible">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:background="@drawable/glass_panel_card"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Số tiền phải trả mỗi kỳ"
+                        android:textColor="@color/ink_muted"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/mortgage_payment"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:fontFamily="sans-serif-light"
+                        android:textColor="@color/ink"
+                        android:textSize="28sp"
+                        tools:text="7.386.000 ₫" />
+
+                    <com.google.android.material.button.MaterialButtonToggleGroup
+                        android:id="@+id/mortgage_frequency_toggle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        app:selectionRequired="true"
+                        app:singleSelection="true">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/mortgage_monthly_button"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="0dp"
+                            android:layout_height="48dp"
+                            android:layout_weight="1"
+                            android:text="Hàng tháng"
+                            android:textSize="13sp"
+                            app:cornerRadius="14dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/mortgage_biweekly_button"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="0dp"
+                            android:layout_height="48dp"
+                            android:layout_weight="1"
+                            android:text="Mỗi 2 tuần"
+                            android:textSize="13sp"
+                            app:cornerRadius="14dp" />
+                    </com.google.android.material.button.MaterialButtonToggleGroup>
+
+                    <TextView
+                        android:id="@+id/mortgage_frequency_caption"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:gravity="center"
+                        android:textColor="@color/ink_muted"
+                        android:textSize="11sp"
+                        tools:text="Số tiền ước tính theo kỳ hạn đã chọn" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/glass_panel_card"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Điều khoản khoản vay"
+                        android:textColor="@color/ink"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Lãi suất năm"
+                            android:textColor="@color/ink_muted"
+                            android:textSize="13sp" />
+
+                        <TextView
+                            android:id="@+id/mortgage_rate"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/ink"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            tools:text="8,50%" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Gốc khoản vay"
+                            android:textColor="@color/ink_muted"
+                            android:textSize="13sp" />
+
+                        <TextView
+                            android:id="@+id/mortgage_principal"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/ink"
+                            android:textSize="13sp"
+                            tools:text="850.000.000 ₫" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Thời hạn hợp đồng"
+                            android:textColor="@color/ink_muted"
+                            android:textSize="13sp" />
+
+                        <TextView
+                            android:id="@+id/mortgage_term"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/ink"
+                            android:textSize="13sp"
+                            tools:text="240 tháng" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Tổng dự kiến theo lịch gốc"
+                            android:textColor="@color/ink_muted"
+                            android:textSize="13sp" />
+
+                        <TextView
+                            android:id="@+id/mortgage_total"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/ink"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            tools:text="1.772.640.000 ₫" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:paddingHorizontal="4dp"
+                    android:text="Lịch ước tính tính từ gốc khoản vay ban đầu; hệ thống chưa có ngày đến hạn và kỳ còn lại thực tế."
+                    android:textColor="@color/ink_muted"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:paddingHorizontal="4dp"
+                    android:text="Lịch trả góp"
+                    android:textColor="@color/ink"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:id="@+id/mortgage_schedule_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/glass_panel_card"
+                    android:orientation="vertical"
+                    android:padding="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/mortgage_load_more"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="4dp"
+                    android:text="Xem thêm kỳ"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/generic_details"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:background="@drawable/glass_panel_card"
+                android:orientation="vertical"
+                android:padding="18dp"
+                android:visibility="gone">
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -154,7 +530,34 @@
                     tools:text="Mã tài khoản: 0123456789" />
             </LinearLayout>
 
-            <!-- Copy & Share Buttons -->
+            <LinearLayout
+                android:id="@+id/history_section"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingHorizontal="4dp"
+                    android:text="Lịch sử giao dịch"
+                    android:textColor="@color/ink"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:id="@+id/history_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/glass_panel_card"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="4dp" />
+            </LinearLayout>
+
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/copy_info_button"
                 style="@style/Widget.Material3.Button.TonalButton"
@@ -162,7 +565,7 @@
                 android:layout_height="52dp"
                 android:layout_marginTop="18dp"
                 android:backgroundTint="@color/glass_pill"
-                android:text="Sao chép thông tin tài khoản"
+                android:text="Sao chép mã tài khoản"
                 android:textColor="@color/navy"
                 android:textSize="14sp"
                 app:cornerRadius="18dp"

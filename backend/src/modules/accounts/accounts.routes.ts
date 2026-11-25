@@ -29,6 +29,12 @@ export function registerAccountsRoutes(route: Route, d: AppDependencies) {
     ),
   );
   route("get", "/accounts/:id/mortgage-schedule", (a, r) =>
-    d.bank.accounts.mortgage(a, String(r.params.id)),
+    d.bank.accounts.mortgage(
+      a,
+      String(r.params.id),
+      r.query.frequency == null
+        ? undefined
+        : z.enum(["MONTHLY", "BIWEEKLY"]).parse(r.query.frequency),
+    ),
   );
 }
