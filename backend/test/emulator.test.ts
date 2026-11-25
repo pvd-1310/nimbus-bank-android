@@ -25,7 +25,15 @@ it.skipIf(!enabled)(
       db = getFirestore(app),
       ns = "schema_" + Date.now();
     try {
-      await promisify(execFile)(
+      const seedEnv = {
+        ...process.env,
+        APP_MODE: "emulator",
+        FIREBASE_PROJECT_ID: projectId,
+        OTP_SECRET: randomBytes(32).toString("hex"),
+        DEMO_NAMESPACE: ns,
+        DEMO_PASSWORD: randomBytes(24).toString("hex"),
+      };
+      const seed = () => promisify(execFile)(
         process.execPath,
         [
           "node_modules/tsx/dist/cli.mjs",
@@ -33,17 +41,11 @@ it.skipIf(!enabled)(
           "--apply",
         ],
         {
-          env: {
-            ...process.env,
-            APP_MODE: "emulator",
-            FIREBASE_PROJECT_ID: projectId,
-            OTP_SECRET: randomBytes(32).toString("hex"),
-            DEMO_NAMESPACE: ns,
-            DEMO_PASSWORD: randomBytes(24).toString("hex"),
-          },
+          env: seedEnv,
           timeout: 20000,
         },
       );
+      await seed();
       for (const path of [
         "users/" + ns + "_customer",
         "customers/" + ns + "_customer",
@@ -58,6 +60,15 @@ it.skipIf(!enabled)(
           missingTemplateFields(path, (await db.doc(path).get()).data()!),
         ).toEqual([]);
       }
+      expect((await db.doc("users/" + ns + "_peer").get()).exists).toBe(true);
+      expect((await db.doc("transactions/" + ns + "_tx_salary").get()).exists).toBe(true);
+      await db.doc("accounts/" + ns + "_checking").update({ availableMinor: 12345, version: 8 });
+      await db.doc("users/" + ns + "_customer").update({ fullName: "Tên đã sửa" });
+      await db.doc("bills/" + ns + "_water").update({ status: "PAID" });
+      await seed();
+      expect((await db.doc("accounts/" + ns + "_checking").get()).data()).toMatchObject({ availableMinor: 12345, version: 8 });
+      expect((await db.doc("users/" + ns + "_customer").get()).data()?.fullName).toBe("Tên đã sửa");
+      expect((await db.doc("bills/" + ns + "_water").get()).data()?.status).toBe("PAID");
       const path = "accounts/" + ns + "_legacy";
       await db.doc(path).set({ ownerUid: ns + "_customer", balanceMinor: 321 });
       const record = (await db.doc(path).get()).data()!;
@@ -76,7 +87,7 @@ it.skipIf(!enabled)(
       await deleteApp(app);
     }
   },
-  30000,
+  60000,
 );
 it.skipIf(!enabled)(
   "Firestore pagination traverses more than 500 documents and supports date cursors",

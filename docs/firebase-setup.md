@@ -8,11 +8,8 @@ The Android package is fixed as `com.example.final_term`. The repository intenti
 2. Register an Android app with package `com.example.final_term`.
 3. Download `google-services.json` and place it at `app/google-services.json` locally.
 4. Enable Email/Password in Authentication.
-5. Create the two demo Authentication users:
-   - `customer.demo@example.com`
-   - `officer.demo@example.com`
-6. Create Firestore in the intended region.
-7. Deploy rules and indexes from the repository when the Firebase CLI is available:
+5. Create Firestore in the intended region.
+6. Deploy rules and indexes from the repository when the Firebase CLI is available:
 
 ```bash
 firebase deploy --only firestore:rules,firestore:indexes
@@ -24,19 +21,18 @@ When updating an existing project, deploy the current Firestore rules after revi
 
 Each `users/{uid}` profile should also contain a `fullName` string. The Android home greeting displays this value and falls back to the authenticated email only when the field is empty.
 
-## Trusted seed/reset
+## Trusted seed
 
-Use `scripts/seed-demo-data.mjs` outside Android with Application Default Credentials and the real Authentication UIDs:
+Use the single backend seed flow described in [README](../README.md#28-seed-dữ-liệu-và-khởi-động-docker). Configure a test project, `DEMO_PASSWORD`, and `CONFIRM_SEED_PROJECT` in the environment before applying:
 
 ```bash
-export FIREBASE_PROJECT_ID="your-project-id"
-export GOOGLE_APPLICATION_CREDENTIALS="/secure/path/service-account.json"
-export DEMO_CUSTOMER_UID="..."
-export DEMO_OFFICER_UID="..."
-node scripts/seed-demo-data.mjs
+cd backend
+npm ci
+npm run seed
+npm run seed -- --apply
 ```
 
-The script is intentionally not an in-app admin control. It must run only in a trusted environment where `firebase-admin` is installed. Reset is scoped to documents marked `demo: true`.
+The first command previews the target; `--apply` creates missing demo records and Auth users in the `demo` namespace without resetting existing data or passwords. The seed is a trusted backend operation, not an in-app admin control. Existing records and users from other seed workflows are not automatically migrated or deleted.
 
 ## Emulator
 

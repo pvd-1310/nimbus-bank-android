@@ -1,47 +1,64 @@
 # Nimbus Bank Android
 
-> Ứng dụng ngân hàng phục vụ đồ án/học tập. Hãy chỉ dùng Firebase project, AWS bucket và Stripe ở môi trường thử nghiệm; không nhập dữ liệu khách hàng thật hoặc thông tin thẻ thật.
+Ứng dụng ngân hàng cho đồ án, gồm Android app, backend Node.js, Firebase Authentication/Firestore và các tích hợp tùy chọn cho thanh toán, eKYC và bản đồ. Tài liệu này hướng dẫn từ máy mới đến khi đăng nhập được bằng tài khoản mẫu.
 
-README này hướng dẫn chuẩn bị dịch vụ, chạy backend, ứng dụng Android và các tích hợp bên ngoài. Có hai cấu hình:
+> Chỉ sử dụng dữ liệu giả và dịch vụ thử nghiệm. OTP giao dịch hiển thị ngay trong app là cơ chế demo, không phải xác thực hai yếu tố độc lập. Chức năng eKYC hiện chưa kiểm tra tính thật của CCCD, chưa đối chiếu ảnh trên thẻ với selfie và chưa có liveness.
 
-- **Local**: Firebase Emulator + backend chạy trên máy + Android Emulator. Dùng để phát triển luồng ngân hàng cơ bản.
-- **Đầy đủ**: Firebase project thử nghiệm + Docker backend/Face API + S3 + Stripe test + Android. Maps/Routes và chatbot là tùy chọn.
+## 1. Chọn cách chạy
 
-## Thành phần hệ thống
-
-| Thành phần | Vai trò | Cần dịch vụ ngoài? |
+| | A. Local với Firebase Emulator | B. Firebase test và Docker |
 |---|---|---|
-| Android app | Giao diện khách hàng và nhân viên | Firebase Android config khi dùng Firebase thật |
-| Backend Node.js/Express | API, xác thực, giao dịch, OTP, tích hợp | Firebase Admin; các dịch vụ còn lại tùy tính năng |
-| Firebase Auth + Firestore | Tài khoản, phiên đăng nhập, dữ liệu | Emulator cho local hoặc Firebase project thử nghiệm |
-| Face API | Xử lý ảnh khuôn mặt và embedding cho eKYC | Chạy bằng Docker; cần model InsightFace |
-| S3 | Lưu ảnh/chứng cứ eKYC riêng tư | Cần cho luồng eKYC đầy đủ |
-| Stripe | Tạo PaymentIntent và nhận webhook | Stripe test mode để thử thanh toán |
-| Google Maps/Routes | Bản đồ và định tuyến tới chi nhánh | API key; có thể bỏ qua khi chạy phần cốt lõi |
-| OpenAI | Chatbot tùy chọn | API key chỉ khi bật chatbot |
+| Dùng khi | Mới làm quen, phát triển chức năng cơ bản | Cần dữ liệu Firebase test và tích hợp dịch vụ ngoài |
+| Firebase | Auth và Firestore chạy trên máy | Một Firebase project test riêng |
+| Backend | Node.js chạy trên máy, cổng `3000` | Docker, cổng host `3001` |
+| Android | Android Emulator | Android Emulator hoặc điện thoại USB |
+| Cần tài khoản dịch vụ | Không cần Firebase, AWS, Stripe hoặc FPT.AI | Cần Firebase; các dịch vụ khác tùy chức năng |
 
-## Yêu cầu cài đặt
+**Nên bắt đầu với cách A.** Làm xong mục 2, tiếp tục mục 3 cho cách A hoặc mục 4 cho cách B. Các lệnh bên dưới dùng **PowerShell trên Windows**; đường dẫn tương đối tính từ thư mục gốc repository trừ khi có hướng dẫn khác.
 
-- Git và Android Studio; cài Android SDK **API 37** và tạo Android Emulator.
-- JDK **25** để chạy Gradle wrapper của dự án.
-- Node.js **22 trở lên** và npm.
-- Docker Desktop có Docker Compose.
-- Firebase CLI và Java nếu chạy Firebase Emulator. Đăng nhập CLI bằng `firebase login` khi cần deploy rules hoặc dùng project.
-- Stripe CLI nếu muốn nhận webhook thanh toán trên máy.
+## 2. Chuẩn bị máy
 
-## 1. Chạy local với Firebase Emulator
+1. Cài [Git](https://git-scm.com/downloads), [Node.js 22 trở lên](https://nodejs.org/) và [Android Studio](https://developer.android.com/studio).
+2. Trong Android Studio, mở **SDK Manager** và cài Android SDK Platform **API 37**, Android SDK Build-Tools, Platform-Tools và Android Emulator. Tạo một thiết bị ảo trong **Device Manager**; app yêu cầu Android API 26 trở lên.
+3. Cài **JDK 25** cho Gradle và cấu hình Gradle JDK trong Android Studio. Dự án đã có Gradle wrapper, không cần cài Gradle riêng. Firebase Emulator cũng cần Java.
+4. Cài [Firebase CLI](https://firebase.google.com/docs/cli) để chạy Firebase Emulator hoặc triển khai rules. Với npm, có thể chạy `npm install -g firebase-tools`. Chỉ cần [Docker Desktop](https://www.docker.com/products/docker-desktop/) cho cách B.
+5. Clone repository bằng URL do chủ dự án cung cấp, rồi mở thư mục vừa clone trong Android Studio:
 
-Cấu hình này không cần tài khoản AWS, Stripe, Maps hay OpenAI. Firebase Emulator chứa dữ liệu cục bộ và phù hợp để làm việc với dữ liệu seed.
+   ```powershell
+   git clone <URL-repository>
+   Set-Location <thu-muc-repository>
+   ```
 
-### 1.1 Chuẩn bị biến môi trường
+   Thay nội dung trong `<...>` bằng giá trị thực, không nhập dấu ngoặc. Nếu đã có source, chỉ cần mở terminal tại thư mục chứa `README.md` này.
 
-Tại thư mục gốc, sao chép `.env.example` thành `.env`:
+6. Kiểm tra các công cụ trong terminal mới:
+
+   ```powershell
+   node --version
+   npm --version
+   java -version
+   firebase --version
+   ```
+
+   Với cách B, mở Docker Desktop và kiểm tra thêm `docker compose version`. Android Studio tạo `local.properties` trỏ tới Android SDK trên máy; không sao chép đường dẫn SDK của người khác.
+
+### File cấu hình và thứ tự ưu tiên
+
+Copy `.env.example` thành `.env` ở root cho cấu hình máy mới. `.env` root được Gradle đọc để đưa URL backend, Maps key và Stripe publishable key vào app; Docker Compose cũng đọc file này cho đường dẫn mount. Backend Node đọc **`backend/.env` trước, sau đó `.env` root**; biến môi trường đã có trong terminal/container được ưu tiên hơn cả hai file. Docker Compose nạp `backend/.env` cho service backend và đặt một số biến riêng trong `docker-compose.yaml`.
+
+Khi đổi chế độ, kiểm tra cả hai file và các biến trong terminal; không để cấu hình emulator cũ ghi đè cấu hình connected. Các file `.env`, credentials và `google-services.json` là cấu hình cục bộ: không commit hoặc gửi key vào chat.
+
+## 3. Cách A — chạy local với Firebase Emulator
+
+### Bước 1: Tạo `.env`
+
+Tại root, sao chép mẫu nếu chưa có file:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Mở `.env` và đặt các giá trị local tương ứng:
+Mở `.env`, kiểm tra hoặc sửa các giá trị sau:
 
 ```dotenv
 APP_MODE=emulator
@@ -51,33 +68,32 @@ FIRESTORE_EMULATOR_HOST=127.0.0.1:18080
 HOST=127.0.0.1
 PORT=3000
 ANDROID_BACKEND_URL=http://10.0.2.2:3000
-OTP_SECRET=<chuỗi-ngẫu-nhiên-tối-thiểu-32-ký-tự>
-DEMO_PASSWORD=<mật-khẩu-thử-nghiệm-tối-thiểu-12-ký-tự>
+OTP_SECRET=<secret-ngau-nhien-it-nhat-32-ky-tu>
+DEMO_NAMESPACE=demo
+DEMO_PASSWORD=<mat-khau-demo-it-nhat-12-ky-tu>
 ```
 
-Tạo secret ngẫu nhiên bằng PowerShell:
+Tạo một secret ngẫu nhiên bằng lệnh dưới và dán kết quả vào `OTP_SECRET`; tự đặt `DEMO_PASSWORD` và lưu lại trên máy:
 
 ```powershell
 [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
 ```
 
-Thay các giá trị trong dấu `<...>`; không giữ dấu ngoặc. `10.0.2.2` là địa chỉ để Android Emulator truy cập máy host. Android app hiện dùng cổng Auth `19099` và Firestore `18080`, vì vậy hãy dùng đúng file cấu hình emulator bên dưới. `firebase.json` mặc định có cổng khác.
+Không giữ giá trị ví dụ trong `.env.example`. Nếu đã có `backend/.env`, sửa hoặc tạm đổi tên file đó để tránh nó ưu tiên cấu hình khác. Cách A không cần `app/google-services.json`.
 
-Backend đọc `backend/.env` trước rồi mới đọc `.env` ở root. Nếu `backend/.env` đã tồn tại, hãy bảo đảm các biến trùng tên có giá trị tương thích; file backend được ưu tiên.
+### Bước 2: Chạy Firebase Emulator
 
-### 1.2 Khởi động Firebase Emulator
-
-Mở terminal tại root và chạy:
+Ở terminal thứ nhất tại root:
 
 ```powershell
 firebase emulators:start --project demo-mobile-banking --config firebase.backend-test.json --only auth,firestore
 ```
 
-Giữ terminal này mở. Emulator Auth dùng cổng `19099`, Firestore dùng `18080`.
+Giữ terminal mở. Đợi Auth ở `127.0.0.1:19099` và Firestore ở `127.0.0.1:18080` sẵn sàng. Dùng đúng `firebase.backend-test.json`: cấu hình mặc định `firebase.json` có thể dùng cổng khác. Đây là dữ liệu emulator cục bộ; lần chạy hướng dẫn này không cấu hình lưu dữ liệu qua các lần khởi động lại.
 
-### 1.3 Khởi động backend và tạo dữ liệu thử nghiệm
+### Bước 3: Cài, seed và chạy backend
 
-Mở terminal thứ hai:
+Mở terminal thứ hai tại root:
 
 ```powershell
 Set-Location backend
@@ -88,124 +104,92 @@ npm run seed -- --apply
 npm run dev
 ```
 
-Lệnh seed đầu chỉ xem trước thay đổi; lệnh có `--apply` mới ghi dữ liệu vào Firebase đang cấu hình. Backend chạy tại `http://127.0.0.1:3000`. Tài khoản seed dùng các địa chỉ `local_demo.customer@example.com`, `local_demo.recipient@example.com` và `local_demo.officer@example.com`; mật khẩu là giá trị `DEMO_PASSWORD`.
+Lệnh `seed` đầu tiên chỉ in project, namespace và tài khoản dự kiến. Kiểm tra project là `demo-mobile-banking`, mode là `emulator`, namespace là `demo` trước khi chạy lệnh có `--apply`. Giữ terminal mở khi backend đã khởi động.
 
-### 1.4 Chạy Android
+Ở terminal khác, kiểm tra:
 
-Mở project ở Android Studio, chọn Android Emulator rồi Run cấu hình `app`. Hoặc tại root chạy:
+```powershell
+Invoke-RestMethod http://127.0.0.1:3000/health
+```
+
+Kết quả mong đợi có `status: ok`. Endpoint này chỉ xác nhận tiến trình HTTP phản hồi, không kiểm tra toàn bộ dịch vụ bên ngoài.
+
+### Bước 4: Chạy Android Emulator
+
+Khởi động thiết bị ảo trong Android Studio. Chờ thiết bị khởi động xong, sau đó mở project root và Run cấu hình `app`. Hoặc chạy tại root:
 
 ```powershell
 .\gradlew.bat assembleDebug -PfirebaseDemo=true -PbackendBaseUrl=http://10.0.2.2:3000
 .\gradlew.bat installDebug -PfirebaseDemo=true -PbackendBaseUrl=http://10.0.2.2:3000
 ```
 
-Đây là cấu hình Firebase demo/local; không cần `app/google-services.json`. Với Android Emulator, backend phải được truy cập qua `10.0.2.2`, không phải `127.0.0.1`.
+`10.0.2.2` là địa chỉ Android Emulator dùng để truy cập máy host. Bản local có application ID `com.example.final_term.localreview`, có thể cài cạnh bản connected. Firebase Emulator của app đang cố định tại `10.0.2.2:19099` và `10.0.2.2:18080`, nên các bước này dành cho Android Emulator; dùng cách B nếu muốn chạy trên điện thoại thật.
 
-## 2. Chạy cấu hình đầy đủ bằng Docker và dịch vụ thử nghiệm
+### Bước 5: Đăng nhập và thử
 
-Docker Compose khởi động **backend và Face API**; nó không khởi động Firebase Emulator, không tạo bucket S3 và không chạy Stripe CLI. Hãy chuẩn bị các dịch vụ dưới đây trước.
+| Email | Vai trò | Gợi ý thử |
+|---|---|---|
+| `demo.customer@example.com` | Khách hàng chính | Xem tài khoản, lịch sử và tiện ích |
+| `demo.recipient@example.com` | Khách hàng nhận | Người nhận chuyển tiền nội bộ |
+| `demo.peer@example.com` | Khách hàng | Khách hàng mẫu thứ ba |
+| `demo.officer@example.com` | Nhân viên | Xem chức năng nhân viên |
 
-### 2.1 Firebase project thử nghiệm
+Mật khẩu của tài khoản mới là `DEMO_PASSWORD` trong `.env`. Đăng xuất để đổi vai trò. Nếu đổi `DEMO_NAMESPACE`, tiền tố email/UID đổi theo; namespace phải gồm 3–30 ký tự chữ thường, số hoặc `_`.
 
-1. Tạo Firebase project dành riêng cho development/test.
-2. Bật **Email/Password** trong Firebase Authentication và tạo Firestore database.
-3. Thêm Android app với application ID `com.example.final_term`, tải `google-services.json` và đặt tại `app/google-services.json`.
-4. Tạo service account có quyền cần thiết cho Firebase Admin SDK; tải JSON key về `backend/firebase-admin.json`. Giữ file này ngoài Git.
-5. Triển khai Firestore rules và indexes từ root:
+Để thử chuyển khoản nội bộ, đăng nhập khách hàng chính, chọn tài khoản thanh toán và tra cứu người nhận bằng số điện thoại mẫu `0907364000` của khách hàng recipient. Kiểm tra tên/số tiền trước khi xác nhận. Với giao dịch demo cần OTP, app hiển thị mã để tiếp tục. Số dư và các giao dịch trong emulator là dữ liệu thử nghiệm.
 
-```powershell
-firebase login
-firebase use <FIREBASE_PROJECT_ID>
-firebase deploy --only firestore:rules,firestore:indexes
-```
+Cách A không tự cấu hình S3, Face API, FPT.AI, Stripe hay Maps. Các tính năng phụ thuộc chúng sẽ báo chưa khả dụng; bản Firebase demo cũng không gắn Maps key vào Android. Xem mục 5 khi cần thử các tích hợp đó trong cấu hình connected.
 
-Không dùng project production cho đồ án hoặc dữ liệu seed. Tham khảo [Firebase Android setup](https://firebase.google.com/docs/android/setup), [Email/Password Auth](https://firebase.google.com/docs/auth/android/password-auth), [Admin SDK](https://firebase.google.com/docs/admin/setup) và [deploy Firestore rules](https://firebase.google.com/docs/rules/manage-deploy).
+## 4. Cách B — Firebase test và Docker
 
-### 2.2 S3 riêng tư cho eKYC
+### Bước 1: Tạo Firebase project test
 
-Tạo bucket S3 ở region phù hợp và:
+1. Trong [Firebase Console](https://console.firebase.google.com/), tạo project riêng cho phát triển/test; ghi lại **Project ID**.
+2. Bật **Authentication → Sign-in method → Email/Password** và tạo **Cloud Firestore**.
+3. Thêm Android app với package `com.example.final_term`. Tải `google-services.json` và đặt tại `app/google-services.json`.
+4. Trong cài đặt project, tạo service-account key cho Firebase Admin và lưu cục bộ tại `backend/firebase-admin.json`. Tài khoản này cần quyền phù hợp để quản lý Auth và Firestore của project test.
+5. Đăng nhập Firebase CLI, chọn đúng project và deploy rules/indexes từ root:
 
-- Bật toàn bộ **Block Public Access**, không tạo public ACL/policy.
-- Bật versioning; backend cần version ID để quản lý chứng cứ eKYC.
-- Tạo IAM user/role riêng với quyền tối thiểu trên bucket và prefix `ekyc/` cần dùng.
-- Chuẩn bị AWS access key/secret cho môi trường local. Không đưa key vào Git hoặc Android app.
+   ```powershell
+   firebase login
+   firebase use <FIREBASE_PROJECT_ID>
+   firebase deploy --only firestore:rules,firestore:indexes
+   ```
 
-Đọc thêm hướng dẫn AWS về [Block Public Access](https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html) và [S3 versioning](https://docs.aws.amazon.com/AmazonS3/latest/userguide/Versioning.html). Cấu hình eKYC đầy đủ cần `S3_BUCKET` và `AWS_REGION`.
+   Đợi indexes hoàn tất trước khi thử các danh sách. Đảm bảo `google-services.json`, service account và Project ID đều thuộc **cùng project test**.
 
-### 2.3 Face API và model eKYC
+### Bước 2: Cấu hình Android và đường dẫn Docker
 
-Face API chạy trong Docker Compose. Model InsightFace không nằm trong Git; tải gói `buffalo_l` từ [InsightFace model zoo](https://github.com/deepinsight/insightface/releases/download/model-zoo/buffalo_l.zip), giải nén để có cấu trúc:
-
-```text
-backend/private-face-model/models/buffalo_l/det_10g.onnx
-backend/private-face-model/models/buffalo_l/w600k_r50.onnx
-```
-
-Kiểm tra quyền sử dụng model theo [điều khoản cấp phép InsightFace](https://www.insightface.ai/solutions/face-recognition-licensing). Model weights và thư mục chứa model được loại khỏi Git. Backend bật face verification khi có `FACE_API_BASE_URL` và `FACE_TEMPLATE_KEY_HEX`; Compose tự đặt URL nội bộ `http://face-api:8000`.
-
-### 2.4 Stripe test mode
-
-Tạo tài khoản Stripe, bật test mode và lấy publishable key (`pk_test_...`) cùng secret key (`sk_test_...`). Cài và đăng nhập [Stripe CLI](https://docs.stripe.com/stripe-cli), sau đó chạy listener ở terminal riêng:
-
-```powershell
-stripe login
-stripe listen --events payment_intent.succeeded,payment_intent.payment_failed,payment_intent.canceled --forward-to http://127.0.0.1:3001/webhooks/stripe
-```
-
-CLI in ra signing secret `whsec_...`; đưa secret đó vào `backend/.env`, rồi tạo lại backend container như hướng dẫn bên dưới. Giữ listener hoạt động để Stripe có thể gửi webhook tới backend. Dùng thẻ thử nghiệm Stripe, ví dụ `4242 4242 4242 4242`, ngày hết hạn tương lai và CVC bất kỳ.
-
-### 2.5 Google Maps và Routes (tùy chọn)
-
-Trong Google Cloud Console, bật billing và **Maps SDK for Android**; tạo Android key giới hạn theo package `com.example.final_term` và SHA-1 của signing certificate. Đặt key vào `MAPS_API_KEY` ở `.env` root. Nếu cần chỉ đường, bật **Routes API**, tạo key riêng phía server và đặt `GOOGLE_ROUTES_API_KEY` ở `backend/.env`. Không dùng chung một key không giới hạn cho Android và backend. Xem [lấy Maps Android key](https://developers.google.com/maps/documentation/android-sdk/get-api-key), [bảo vệ API keys](https://developers.google.com/maps/api-security-best-practices) và [Routes API](https://developers.google.com/maps/documentation/routes/get-api-key).
-
-### 2.6 Chatbot (tùy chọn)
-
-Chỉ khi muốn bật chatbot, tạo OpenAI API key và cấu hình `CHATBOT_ENABLED=true`, `OPENAI_API_KEY` cùng `OPENAI_MODEL` trong `backend/.env`. Nếu không dùng chatbot, để `CHATBOT_ENABLED=false`.
-
-### 2.7 Tạo file môi trường
-
-Root `.env` được Gradle đọc cho cấu hình Android và Compose đọc cho đường dẫn mount. Backend `.env` là cấu hình runtime của Node API. Hai file có mục đích khác nhau; Compose nạp `backend/.env` vào container.
-
-Tạo `.env` root từ mẫu và đặt tối thiểu:
+Nếu chưa có `.env` root, copy từ `.env.example`. Sửa các giá trị sau trong `.env` root:
 
 ```dotenv
 APP_MODE=connected
 FIREBASE_PROJECT_ID=<FIREBASE_PROJECT_ID>
 ANDROID_BACKEND_URL=http://10.0.2.2:3001
-STRIPE_PUBLISHABLE_KEY=pk_test_<giá-trị>
-MAPS_API_KEY=<Android-Maps-key>
 FIREBASE_ADMIN_KEY_PATH=./backend/firebase-admin.json
 FACE_MODEL_PATH=./backend/private-face-model
 ```
 
-Tạo `backend/.env` với các biến sau (giữ lại biến khác từ cấu hình hiện có nếu cần):
+**Xóa hoặc comment cả hai dòng** `FIREBASE_AUTH_EMULATOR_HOST` và `FIRESTORE_EMULATOR_HOST` từ file mẫu khi chuyển sang connected. `ANDROID_BACKEND_URL` phía trên dành cho Android Emulator; nếu dùng điện thoại USB, đổi theo bước 5 trước khi build. Key Android tùy chọn (`MAPS_API_KEY`, `STRIPE_PUBLISHABLE_KEY`) cũng đặt trong file root này.
+
+Tạo `backend/.env` cho backend và Docker:
 
 ```dotenv
 APP_MODE=connected
 FIREBASE_PROJECT_ID=<FIREBASE_PROJECT_ID>
-HOST=0.0.0.0
-PORT=3000
-GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/firebase-admin.json
-OTP_SECRET=<chuỗi-ngẫu-nhiên-tối-thiểu-32-ký-tự>
-DEMO_PASSWORD=<mật-khẩu-thử-nghiệm-tối-thiểu-12-ký-tự>
-DEMO_NAMESPACE=local_demo
+HOST=127.0.0.1
+PORT=3001
+OTP_SECRET=<secret-ngau-nhien-it-nhat-32-ky-tu>
+DEMO_NAMESPACE=demo
+DEMO_PASSWORD=<mat-khau-demo-it-nhat-12-ky-tu>
 CONFIRM_SEED_PROJECT=<FIREBASE_PROJECT_ID>
-AWS_REGION=<AWS_REGION>
-S3_BUCKET=<bucket-riêng-tư>
-AWS_ACCESS_KEY_ID=<access-key>
-AWS_SECRET_ACCESS_KEY=<secret-key>
-FACE_TEMPLATE_KEY_HEX=<chuỗi-hex-ngẫu-nhiên-64-ký-tự>
-STRIPE_SECRET_KEY=sk_test_<giá-trị>
-STRIPE_WEBHOOK_SECRET=whsec_<giá-trị-từ-stripe-listen>
-GOOGLE_ROUTES_API_KEY=<server-side-Routes-key>
-CHATBOT_ENABLED=false
 ```
 
-Sinh `OTP_SECRET` và `FACE_TEMPLATE_KEY_HEX` bằng lệnh PowerShell ở trên; cả hai cần secret riêng. Không đặt `FACE_API_BASE_URL` trỏ về `localhost`: Compose đã cấu hình URL nội bộ tới service Face API. `FACE_TEMPLATE_KEY_HEX` cần đúng định dạng hex 32 bytes. Không commit `.env`, service account JSON, AWS keys, Stripe keys hoặc model weights.
+Không đặt hai biến emulator host trong `backend/.env`. Tạo `OTP_SECRET` bằng lệnh ở mục 3 và tự đặt mật khẩu demo. `CONFIRM_SEED_PROJECT` phải trùng chính xác Project ID khi áp dụng seed lên Firebase connected. Docker Compose tự đặt `HOST=0.0.0.0`, `PORT=3000` và đường dẫn credential bên trong container; cổng truy cập từ máy host vẫn là `3001`.
 
-### 2.8 Seed dữ liệu và khởi động Docker
+### Bước 3: Cài dependency và seed Firebase test
 
-Seed sẽ ghi tài khoản/dữ liệu thử nghiệm vào Firebase project đã chọn. Chỉ chạy với project test. `CONFIRM_SEED_PROJECT` phải trùng `FIREBASE_PROJECT_ID` để cho phép áp dụng.
+Ở terminal tại root:
 
 ```powershell
 Set-Location backend
@@ -213,72 +197,153 @@ $env:GOOGLE_APPLICATION_CREDENTIALS = (Resolve-Path .\firebase-admin.json).Path
 npm ci
 npm run build
 npm run seed
-npm run seed -- --apply
-Set-Location ..
-docker compose up -d --build face-api backend
-docker compose ps
 ```
 
-Khi seed từ máy host, dòng `$env:GOOGLE_APPLICATION_CREDENTIALS` trỏ tới file JSON trên máy; Compose dùng cùng file nhưng mount nó tại `/run/secrets/firebase-admin.json` bên trong container. Nếu chạy lệnh từ bash/macOS/Linux, dùng `export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/firebase-admin.json"` trong thư mục `backend`.
-
-Docker backend publish cổng host `3001` tới cổng container `3000`; Face API publish `8000`. Kiểm tra API:
+Đọc kết quả xem trước và xác nhận đúng **project test**, mode `connected` và namespace `demo`. Sau đó mới ghi dữ liệu mẫu:
 
 ```powershell
+npm run seed -- --apply
+Set-Location ..
+```
+
+Đường dẫn service-account ở trên dành cho tiến trình Node chạy **trên máy host**. Compose mount cùng file vào `/run/secrets/firebase-admin.json` bên trong container. Biến `$env:GOOGLE_APPLICATION_CREDENTIALS` chỉ tồn tại trong terminal hiện tại; mở terminal mới thì đặt lại trước khi chạy seed trên host.
+
+Seed tạo tài khoản ở bảng mục 3.5 và dữ liệu checking/savings/mortgage, hóa đơn, sản phẩm, chi nhánh. Chạy lại giữ các trường và mật khẩu hiện có; lịch sử giao dịch mẫu chỉ thêm khi tài khoản chính chưa tồn tại. Script không có lệnh xóa/reset dữ liệu. Nếu tài khoản đã có, `DEMO_PASSWORD` không đổi mật khẩu của tài khoản đó. Namespace cũ không được tự động di chuyển hoặc xóa.
+
+### Bước 4: Khởi động backend
+
+Mở Docker Desktop, rồi tại root chạy:
+
+```powershell
+docker compose up -d --build backend
+docker compose ps
 Invoke-RestMethod http://127.0.0.1:3001/health
 ```
 
-`/health` xác nhận tiến trình HTTP phản hồi; nó không đảm bảo Firebase, S3, Stripe, model hoặc camera đã sẵn sàng. Theo dõi log bằng `docker compose logs -f backend face-api`.
+Backend dùng Firebase test và phản hồi `status: ok`. Service `face-api` chưa bắt buộc cho bước đăng nhập; cấu hình model ở mục 5.2 khi cần eKYC. Xem log bằng `docker compose logs -f backend`.
 
-### 2.9 Chạy Android với backend Docker
+### Bước 5: Cài app
 
-Đảm bảo `app/google-services.json` đã có, `.env` root đặt `APP_MODE=connected` và `ANDROID_BACKEND_URL=http://10.0.2.2:3001`, sau đó:
+**Android Emulator:** giữ `ANDROID_BACKEND_URL=http://10.0.2.2:3001` trong `.env` root. Mở project trong Android Studio, chọn emulator và Run `app`, hoặc dùng:
 
 ```powershell
 .\gradlew.bat assembleDebug
 .\gradlew.bat installDebug
 ```
 
-Hoặc mở project bằng Android Studio và chạy app trên emulator. Với thiết bị Android thật qua USB, backend trên máy có thể được chuyển tiếp bằng:
+**Điện thoại Android thật qua USB:** bật Developer options và USB debugging, kết nối cáp, xác nhận hộp thoại cho phép debug trên điện thoại. Đổi `ANDROID_BACKEND_URL` trong `.env` root thành `http://127.0.0.1:3001`, rồi chạy tại root:
 
 ```powershell
 .\scripts\connect-android-usb.ps1
+.\gradlew.bat assembleDebug
+.\gradlew.bat installDebug
 ```
 
-Chạy lại lệnh sau khi ngắt/kết nối lại thiết bị hoặc khởi động lại ADB. Thiết bị thật không truy cập được địa chỉ `10.0.2.2`; với USB reverse, build app dùng backend URL `http://127.0.0.1:3001` (đặt `ANDROID_BACKEND_URL` trong `.env` root trước khi build).
+Script thiết lập `adb reverse tcp:3001 tcp:3001`; chạy lại sau khi rút cáp, kết nối lại hoặc khởi động lại ADB. Nếu có nhiều điện thoại, chạy `adb devices` và truyền `-Serial <serial>` cho script. URL được đóng vào app khi build: sau khi sửa URL, **build và cài lại app**.
 
-Tài khoản seed đăng nhập: `local_demo.customer@example.com`, `local_demo.recipient@example.com`, `local_demo.officer@example.com`; mật khẩu là `DEMO_PASSWORD` trong `backend/.env`. Đăng xuất rồi đăng nhập lại sau khi seed nếu claims/role vừa được cập nhật.
+Mở app, đăng nhập bằng một trong các email ở mục 3.5 và mật khẩu đã dùng khi tạo tài khoản. Nếu seed vừa bổ sung role/claims, đăng xuất rồi đăng nhập lại để lấy token mới.
 
-**Giới hạn xác thực:** OTP giao dịch hiện dùng chế độ `DEMO_DISPLAY_CODE` để hiển thị mã trong luồng app, không gửi qua một kênh độc lập như SMS/email và không phải 2FA production. Face step-up cũng là luồng demo, không thay thế quy trình xác minh danh tính/liveness được chứng nhận.
+## 5. Bật các chức năng tích hợp
 
-## Xác nhận các endpoint
+Các bước này dùng project và tài khoản **test**, thực hiện sau mục 4. Đặt secret phía máy chủ vào `backend/.env`; sau khi sửa file, chạy `docker compose up -d --build backend` để tạo lại container với cấu hình mới. Không đưa secret backend vào Android hoặc Git.
 
-- API health: `http://127.0.0.1:3000/health` khi chạy backend trực tiếp hoặc `http://127.0.0.1:3001/health` qua Docker.
-- OpenAPI: `/openapi.json` trên cùng host/port.
-- Runtime capabilities: `/capabilities` trên cùng host/port.
-- Face API trong Docker: `http://127.0.0.1:8000/health`.
+### 5.1 Bản đồ và đường đi bộ
 
-## Dừng hệ thống
+1. Trong Google Cloud project phù hợp, bật billing và **Maps SDK for Android**. Tạo Android API key giới hạn theo package `com.example.final_term` và SHA-1 của signing certificate; xem [hướng dẫn lấy key](https://developers.google.com/maps/documentation/android-sdk/get-api-key). Có thể xem SHA-1 của debug build bằng `./gradlew.bat signingReport`.
+2. Đặt `MAPS_API_KEY=<android-maps-key>` trong `.env` root. Build/cài lại app sau khi sửa.
+3. Để tìm tuyến đi bộ, tạo key trên [HeiGIT / openrouteservice](https://account.heigit.org/) và đặt `OPENROUTESERVICE_API_KEY=<key>` trong `backend/.env`. Backend ưu tiên key này nếu có; nếu không, có thể cấu hình `GOOGLE_ROUTES_API_KEY` cho Google Routes API.
+4. Tạo lại backend, mở bản đồ chi nhánh và cấp quyền vị trí. App cần dữ liệu chi nhánh có tọa độ và kết nối tới nhà cung cấp chỉ đường. Backend so sánh tối đa 20 chi nhánh; nếu nhiều hơn, người dùng phải chọn chi nhánh.
 
-- Backend chạy trực tiếp, Firebase Emulator hoặc Stripe CLI: nhấn `Ctrl+C` ở terminal tương ứng.
-- Docker services: `docker compose down` tại root. Lệnh này giữ dữ liệu Firebase cloud và S3; nó không xóa các tài nguyên bên ngoài.
+Đường đi openrouteservice và nền Google Maps đến từ hai nhà cung cấp; kiểm tra điều khoản và yêu cầu ghi nguồn áp dụng trước khi phát hành. Hạn mức và khả năng hoạt động phụ thuộc tài khoản/provider.
 
-## Khắc phục sự cố thường gặp
+### 5.2 eKYC: CCCD, FPT.AI, S3 và khuôn mặt
+
+Luồng `FULL_ID` cần đủ các thành phần sau:
+
+1. **S3:** tạo bucket test private, bật Block Public Access và **versioning**. Cấu hình `AWS_REGION` và `S3_BUCKET` trong `backend/.env`; cấp AWS credentials cho container với quyền giới hạn prefix `ekyc/` để tải lên, đọc object/version và dọn object version. `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` là một cách cấu hình local; không dùng root credentials. Chi tiết quyền và retention ở [backend README](backend/README.md).
+2. **FPT.AI:** tạo key cho ID Recognition theo [tài liệu FPT.AI](https://docs.fpt.ai/docs/vi/vision/api/id-recognition/) và đặt `FPT_AI_KEY=<key>` trong `backend/.env`. Ảnh mặt trước CCCD được backend gửi tới FPT.AI để trích xuất; người dùng kiểm tra và xác nhận thông tin trước bước selfie. Cần key hợp lệ, hạn mức và kết nối mạng.
+3. **Face API:** lấy model `buffalo_l` từ [InsightFace Model Zoo](https://github.com/deepinsight/insightface/tree/master/model_zoo) và kiểm tra quyền sử dụng weights. Đặt **chính xác hai file ONNX** vào:
+
+   ```text
+   backend/private-face-model/models/buffalo_l/
+   ├── det_10g.onnx
+   └── w600k_r50.onnx
+   ```
+
+   Không để thêm file `.onnx` khác trong thư mục này. Model không nằm trong Git. Nếu đặt ở nơi khác, sửa `FACE_MODEL_PATH` trong `.env` root.
+4. Tạo một secret riêng bằng lệnh ở mục 3, đặt 64 ký tự hex vào `FACE_TEMPLATE_KEY_HEX` trong `backend/.env`. Giữ ổn định key này giữa các lần restart vì template khuôn mặt được mã hóa bằng key đó.
+5. Khởi động lại:
+
+   ```powershell
+   docker compose up -d --build face-api backend
+   docker compose ps
+   Invoke-RestMethod http://127.0.0.1:8000/health
+   ```
+
+   Face API trả `status: ready` khi nạp model. Nếu trả `503`/`setup_required`, xem `docker compose logs face-api` và kiểm tra model path/tên file. Trên Android, vào hồ sơ → eKYC, đồng ý, chụp hai mặt CCCD, kiểm tra thông tin, quét selfie và nộp.
+
+`EKYC_DEMO_SELFIE_ONLY=true` trong `backend/.env` là chế độ chỉ đăng ký selfie, không OCR hay xác minh CCCD; chế độ này vẫn cần S3 và Face API. Để trống hoặc đặt `false` cho `FULL_ID`. Chỉ thử với ảnh có quyền sử dụng; kết quả OCR có thể sai và cần người dùng xác nhận.
+
+### 5.3 Stripe thanh toán thử nghiệm
+
+1. Tạo tài khoản [Stripe](https://dashboard.stripe.com/) và chọn **test mode**. Lấy publishable key `pk_test_...` và secret key `sk_test_...`.
+2. Đặt `STRIPE_PUBLISHABLE_KEY=pk_test_...` vào `.env` root và `STRIPE_SECRET_KEY=sk_test_...` vào `backend/.env`. Dự án chỉ chấp nhận test keys cho checkout.
+3. Cài [Stripe CLI](https://docs.stripe.com/stripe-cli), mở terminal riêng và chạy:
+
+   ```powershell
+   stripe login
+   stripe listen --events payment_intent.succeeded,payment_intent.payment_failed,payment_intent.canceled --forward-to http://127.0.0.1:3001/webhooks/stripe
+   ```
+
+4. Copy webhook signing secret `whsec_...` do CLI in ra vào `STRIPE_WEBHOOK_SECRET` trong `backend/.env`. Tạo lại backend, build/cài lại app để nạp publishable key và giữ Stripe CLI chạy khi thử. Dùng [thẻ test Stripe](https://docs.stripe.com/testing), không dùng thẻ thật.
+
+Webhook phải tới backend và xác thực thành công để đồng bộ kết quả. Các chức năng Stripe Sandbox liên kết tài khoản có hướng dẫn riêng trong [backend README](backend/README.md).
+
+### 5.4 Chatbot
+
+Nếu muốn dùng chatbot với OpenAI, đặt `CHATBOT_ENABLED=true`, `OPENAI_API_KEY` và `OPENAI_MODEL` trong `backend/.env`, rồi tạo lại backend. Nếu không dùng, để `CHATBOT_ENABLED=false`. Chế độ emulator còn có thể bật chatbot hướng dẫn cục bộ bằng `CHATBOT_LOCAL_DEMO=true`; chế độ này không cần OpenAI key.
+
+## 6. Kiểm tra, dừng và xử lý lỗi
+
+| Cần kiểm tra | Cách thực hiện |
+|---|---|
+| Backend Node local | `Invoke-RestMethod http://127.0.0.1:3000/health` |
+| Backend Docker | `Invoke-RestMethod http://127.0.0.1:3001/health` |
+| API contract | Mở `/openapi.json` trên cùng host và cổng backend |
+| Tình trạng các tích hợp | `GET /capabilities` với Firebase bearer token; `ENABLED` không bảo đảm quota hoặc credential còn hợp lệ |
+| Face API | `Invoke-RestMethod http://127.0.0.1:8000/health` khi đã chạy service |
+| Backend tests | `Set-Location backend`, sau đó `npm test` |
+| Android unit tests | Tại root chạy `.\gradlew.bat testDebugUnitTest` |
+
+Để dừng Node, Firebase Emulator hoặc Stripe CLI, nhấn `Ctrl+C` tại terminal tương ứng. Dừng Docker tại root bằng `docker compose down`; lệnh này không xóa Firebase cloud hay S3.
 
 | Triệu chứng | Kiểm tra |
 |---|---|
-| Android không gọi được backend | Emulator dùng `10.0.2.2`; backend npm dùng cổng `3000`, Docker dùng cổng host `3001`. Kiểm tra `ANDROID_BACKEND_URL`. |
-| Firebase Emulator không kết nối | Khởi động bằng `firebase.backend-test.json`; Auth/Firestore phải ở `19099`/`18080`. Kiểm tra cả root `.env` và `backend/.env`. |
-| Android connected không khởi động Firebase | Kiểm tra `app/google-services.json`, application ID và Firebase project có trùng nhau không. |
-| Login được nhưng thiếu quyền/role | Chạy seed đúng project, đăng xuất rồi đăng nhập lại để lấy token claims mới. |
-| eKYC báo thiếu cấu hình | Kiểm tra S3 bucket/versioning/credentials, hai file ONNX, `FACE_TEMPLATE_KEY_HEX` và log của `face-api`. |
-| Thanh toán chờ hoặc chưa cập nhật | Giữ Stripe CLI listener chạy, kiểm tra webhook secret và endpoint `/webhooks/stripe`; trạng thái cập nhật dựa trên webhook. |
-| Bản đồ không tải hoặc định tuyến thiếu | Kiểm tra billing, API đã bật, package/SHA-1 restriction và dùng đúng key Android hoặc Routes server. |
+| App không kết nối backend | `/health` trên máy host; emulator dùng `10.0.2.2`, điện thoại USB dùng `127.0.0.1` qua `adb reverse`; build/cài lại sau khi đổi URL. |
+| Điện thoại không hiện trong ADB | Cài Platform-Tools, bật USB debugging, chấp nhận thông báo trên điện thoại; xem `adb devices` và chạy lại script USB. |
+| Đăng nhập local thất bại | Emulator còn chạy đúng cổng `19099`/`18080`; seed đã chạy với `--apply`; app là bản local và dùng đúng `DEMO_PASSWORD`. |
+| Seed báo `CONFIRM_PROJECT_REQUIRED` | Cách B: đặt `CONFIRM_SEED_PROJECT` bằng đúng `FIREBASE_PROJECT_ID` trong cấu hình backend. |
+| Seed báo `SEED_TARGET_NOT_DEMO`, `SEED_AUTH_EMAIL_MISMATCH` hoặc email đã tồn tại | Không xóa dữ liệu để thử lại. Kiểm tra namespace, project và tài khoản/document đang tồn tại; chọn project test hoặc namespace phù hợp. |
+| Backend báo `EMULATORS_REQUIRED` / `EXPLICIT_PROJECT_REQUIRED` | Kiểm tra `APP_MODE`, project ID, hai emulator host và thứ tự ưu tiên `backend/.env`, root `.env`, biến terminal. |
+| Connected app thiếu Firebase | Kiểm tra `app/google-services.json`, package `com.example.final_term` và đúng project; sync/build lại. |
+| eKYC không đọc được CCCD | Kiểm tra `FPT_AI_KEY`, hạn mức/kết nối FPT.AI; dùng ảnh rõ toàn bộ mặt trước và xem log backend. Ảnh SVG minh họa không thay thế kiểm thử ảnh hợp lệ. |
+| eKYC không nộp được | Kiểm tra S3 credentials/versioning, `FACE_TEMPLATE_KEY_HEX`, model và `/health` Face API. |
+| Bản đồ hoặc tuyến không hiện | Kiểm tra Maps SDK key/package/SHA-1, billing, vị trí; kiểm tra routes key và backend logs. |
+| Thanh toán không cập nhật | Kiểm tra test keys, Stripe CLI đang chạy, webhook secret và endpoint forward. |
 
-## Tài liệu liên quan
+## 7. Cấu trúc và tài liệu
 
-- [Backend setup và API](backend/README.md)
-- [Firebase setup](docs/firebase-setup.md)
-- [Hướng dẫn seed dữ liệu](scripts/seed-demo-data.md)
+```text
+app/                 Android Java, XML, resources và tests
+backend/             API TypeScript/Express, seed và tests
+face-api/            Dịch vụ Python nhận diện khuôn mặt
+firebase*.json       Cấu hình Firebase và emulator
+firestore.rules      Quy tắc truy cập Firestore
+docker-compose.yaml  Backend và Face API cho cấu hình Docker
+scripts/             Tiện ích kết nối thiết bị
+```
+
+- [Backend: cấu hình, API và kiểm thử](backend/README.md)
+- [Thiết lập Firebase](docs/firebase-setup.md)
 - [Đối chiếu database template](docs/database-template-alignment.md)
-- [Các khoảng trống chức năng](docs/functional-gaps.md)
-- [Firestore rules](firestore.rules) và [Firestore indexes](firestore.indexes.json)
+- [Firestore rules](firestore.rules) và [indexes](firestore.indexes.json)

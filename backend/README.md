@@ -72,7 +72,7 @@ Chỉ mở cổng qua reverse proxy/API gateway có TLS, rate limit, access log 
 Yêu cầu Node 22 trở lên, Java và Firebase CLI. Tại thư mục gốc project:
 
 ```sh
-firebase emulators:start --project demo-mobile-banking --only auth,firestore
+firebase emulators:start --project demo-mobile-banking --config firebase.backend-test.json --only auth,firestore
 ```
 
 Sao chép `.env.example` thành `.env` tại thư mục gốc, tạo `OTP_SECRET` bằng `openssl rand -hex 32`, đặt `DEMO_PASSWORD` riêng dài ít nhất 12 ký tự. Các giá trị này chỉ lưu trên máy, không gửi vào chat. Mở terminal tại `backend/` để chạy các lệnh sau.
@@ -85,9 +85,9 @@ npm run seed -- --apply
 npm run dev
 ```
 
-Lệnh seed đầu tiên chỉ xem trước; `--apply` chỉ bổ sung dữ liệu còn thiếu và giữ nguyên mọi trường đã có, gồm hồ sơ, số dư, giao dịch, hóa đơn và chính sách. Dữ liệu theo namespace mặc định: `local_demo.customer@example.com`, `local_demo.recipient@example.com`, `local_demo.officer@example.com`. Mật khẩu là `DEMO_PASSWORD` bạn tự đặt. Seed không có chức năng xóa dữ liệu.
+Lệnh seed đầu tiên chỉ xem trước; `--apply` bổ sung dữ liệu còn thiếu và giữ nguyên trường đã có, gồm hồ sơ, số dư, giao dịch, hóa đơn và chính sách. Namespace mặc định `demo` tạo bốn tài khoản: `demo.customer@example.com`, `demo.recipient@example.com`, `demo.peer@example.com`, `demo.officer@example.com`. Tài khoản Auth mới dùng `DEMO_PASSWORD`; tài khoản đã có không bị đổi mật khẩu. Lịch sử giao dịch mẫu chỉ được tạo nếu tài khoản chính chưa tồn tại. Seed không xóa dữ liệu; nếu document thuộc namespace khác hoặc UID Auth có email khác, script dừng. Namespace tùy chỉnh được đặt qua `DEMO_NAMESPACE`.
 
-API: `http://127.0.0.1:3000`; health: `GET /health`; hợp đồng API: `GET /openapi.json`. Đăng nhập bằng Firebase Auth emulator rồi gửi ID token qua `Authorization: Bearer ...`. Auth emulator REST: `POST http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo` với JSON `email`, `password`, `returnSecureToken: true`. Tiền tố `/v1` ở đây thuộc Firebase, không thuộc API Nimbus. Không in hoặc chia sẻ ID token.
+API: `http://127.0.0.1:3000`; health: `GET /health`; hợp đồng API: `GET /openapi.json`. Đăng nhập bằng Firebase Auth emulator rồi gửi ID token qua `Authorization: Bearer ...`. Auth emulator REST: `POST http://127.0.0.1:19099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo` với JSON `email`, `password`, `returnSecureToken: true`. Tiền tố `/v1` ở đây thuộc Firebase, không thuộc API Nimbus. Không in hoặc chia sẻ ID token.
 
 OTP giao dịch dùng DEMO_DISPLAY_CODE. Backend chỉ trả mã khi tạo challenge và giữ HMAC để xác minh. Đây là mã hiển thị cùng app cho đồ án, không phải yếu tố xác thực độc lập.
 
@@ -130,7 +130,7 @@ Cấu hình `GOOGLE_ROUTES_API_KEY` trong `.env` ở thư mục gốc bằng kh�
 Ví dụ tạo intent chuyển nội bộ:
 
 ```json
-{"requestId":"transfer-demo-001","sourceAccountId":"local_demo_checking","destinationAccountId":"local_demo_recipient_checking","amountMinor":10000,"currency":"VND"}
+{"requestId":"transfer-demo-001","sourceAccountId":"demo_checking","destinationAccountId":"demo_recipient_checking","amountMinor":10000,"currency":"VND"}
 ```
 
 Gọi POST `/intents/:id/otp` để nhận `challengeId`, `code`, `expiresAt` và trạng thái AWAITING_CODE. Gọi POST `/intents/:id/verify-otp` với `{challengeId,code}`, sau đó commit. Giữ nguyên requestId và intent ID khi retry. GET `/intents/:id` trả trạng thái giao dịch, OTP và face. Khi chỉnh sửa nội dung, POST `/intents/:id/cancel` trước khi tạo intent mới. Intent sống 5 phút, mã sống tối đa 2 phút. Mỗi intent có tối đa 5 lần nhập và mỗi lần tạo mã cách nhau ít nhất 30 giây.
@@ -227,7 +227,7 @@ Từ một shell riêng, cung cấp các biến này cho tiến trình backend v
 ```sh
 export APP_MODE=emulator FIREBASE_PROJECT_ID=demo-mobile-banking
 export FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:19099 FIRESTORE_EMULATOR_HOST=127.0.0.1:18080
-export HOST=127.0.0.1 PORT=3198 DEMO_NAMESPACE=local_demo
+export HOST=127.0.0.1 PORT=3198 DEMO_NAMESPACE=demo
 export CHATBOT_ENABLED=false CHATBOT_LOCAL_DEMO=true GOOGLE_ROUTES_API_KEY=
 export S3_BUCKET= FACE_API_BASE_URL=
 export OTP_SECRET="$(openssl rand -hex 32)"
@@ -237,7 +237,7 @@ npm --prefix backend run build
 npm --prefix backend start
 ```
 
-Đăng nhập `local_demo.customer@example.com` hoặc `local_demo.officer@example.com` bằng mật khẩu demo đã cấp. Chạy seed trên namespace emulator cục bộ để thêm hóa đơn nước và danh mục mới. Seed thêm bản ghi còn thiếu. Khi có thanh toán đồ án đã quyết toán, từ shell dùng cùng môi trường, chạy:
+Đăng nhập `demo.customer@example.com` hoặc `demo.officer@example.com` bằng mật khẩu demo đã cấp. Chạy seed trên namespace emulator cục bộ để thêm hóa đơn nước và danh mục mới. Seed thêm bản ghi còn thiếu. Khi có thanh toán đồ án đã quyết toán, từ shell dùng cùng môi trường, chạy:
 
 ```sh
 npm --prefix backend run worker

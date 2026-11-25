@@ -12,7 +12,6 @@
     "build": "node scripts/build.mjs",
     "test": "vitest run",
     "seed": "tsx src/scripts/seed-demo.ts",
-    "reset:seed": "tsx src/scripts/reset-and-seed.ts",
     "migrate": "tsx src/scripts/migrate-schema.ts",
     "backfill:officer-account-search": "tsx src/scripts/backfill-officer-account-search.ts",
     "link:stripe-sandbox": "node dist/scripts/link-stripe-sandbox-accounts.js",

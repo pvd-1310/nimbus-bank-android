@@ -2,8 +2,9 @@ import { runtime } from "../infrastructure/runtime.js";
 import { check } from "../shared/errors.js";
 import { normalizeSearchText } from "../shared/search.js";
 import { preserveExisting, preserveSeedAccount, seedClaims } from "./seed-preserve.js";
+import { reserveContactPhone } from "../modules/profile/contact-phone-reservations.js";
 const r = runtime();
-const ns = process.env.DEMO_NAMESPACE ?? "local_demo";
+const ns = process.env.DEMO_NAMESPACE ?? "demo";
 check(/^[a-z0-9_]{3,30}$/.test(ns), "INVALID_NAMESPACE");
 const apply = process.argv.includes("--apply");
 const permissions = [
@@ -18,6 +19,9 @@ type SeedIdentity = {
   role: "CUSTOMER" | "OFFICER";
   fullName: string;
   phoneMasked: string;
+  phone?: string;
+  nationalIdNumber?: string;
+  tier?: string;
   customerNo?: string;
   address?: string;
   staffCode?: string;
@@ -29,6 +33,7 @@ const identities: SeedIdentity[] = [
     role: "CUSTOMER",
     fullName: "Nguyễn Minh Anh",
     phoneMasked: "•••• 4821",
+    phone: "+84901482100", nationalIdNumber: "079198004821", tier: "PLATINUM",
     customerNo: "KH-028451",
     address: "18 Nguyễn Văn Linh, phường Tân Phong, TP. Hồ Chí Minh",
   },
@@ -38,8 +43,19 @@ const identities: SeedIdentity[] = [
     role: "CUSTOMER",
     fullName: "Trần Quốc Bảo",
     phoneMasked: "•••• 7364",
+    phone: "+84907364000", nationalIdNumber: "079096007364", tier: "GOLD",
     customerNo: "KH-028452",
     address: "42 Lê Văn Sỹ, phường 13, TP. Hồ Chí Minh",
+  },
+  {
+    id: ns + "_peer",
+    email: ns + ".peer@example.com",
+    role: "CUSTOMER",
+    fullName: "Phạm Thu Hà",
+    phoneMasked: "•••• 5678",
+    phone: "+84912345678", nationalIdNumber: "079199005678", tier: "STANDARD",
+    customerNo: "KH-028453",
+    address: "105 Hai Bà Trưng, phường Bến Nghé, TP. Hồ Chí Minh",
   },
   {
     id: ns + "_officer",
@@ -70,7 +86,7 @@ try {
   );
   if (!apply)
     console.log(
-      "Dry run only. Use --apply after checking the project and namespace. Login identities and mutable account/payment state are retained; descriptive fixture data in this namespace may be refreshed.",
+      "Dry run only. Use --apply after checking the project and namespace. Existing fields, passwords and mutable state are retained.",
     );
   else {
     check(
@@ -81,6 +97,12 @@ try {
     const password = process.env.DEMO_PASSWORD;
     check(password && password.length >= 12, "DEMO_PASSWORD_REQUIRED");
     for (const u of identities) {
+      await r.bank.store.run(async (t) => {
+        const user = await t.get("users/" + u.id);
+        const profile = await t.get((u.role === "OFFICER" ? "officers/" : "customers/") + u.id);
+        check(!user || user.demoNamespace === ns, "SEED_TARGET_NOT_DEMO");
+        check(!profile || profile.demoNamespace === ns, "SEED_TARGET_NOT_DEMO");
+      });
       let authUser;
       try {
         authUser = await r.auth.getUser(u.id);
@@ -93,6 +115,8 @@ try {
       if (!authUser) {
         await r.auth.createUser({ uid: u.id, email: u.email, password });
         await r.auth.setCustomUserClaims(u.id, seedClaims(undefined, u.role, u.role === "OFFICER" ? permissions : []));
+      } else if (authUser.email !== u.email) {
+        check(false, "SEED_AUTH_EMAIL_MISMATCH");
       } else if (!authUser.customClaims?.role || !Array.isArray(authUser.customClaims.permissions)) {
         await r.auth.setCustomUserClaims(u.id, seedClaims(
           authUser.customClaims,
@@ -103,12 +127,15 @@ try {
       await r.bank.store.run(async (t) => {
         const old = await t.get("users/" + u.id);
         check(!old || old.demoNamespace === ns, "SEED_TARGET_NOT_DEMO");
+        if (u.phone && old?.contactPhone === undefined) await reserveContactPhone(t, u.id, u.phone, Date.now());
         t.set("users/" + u.id, preserveExisting(old, {
           uid: u.id,
           role: u.role,
           fullName: u.fullName,
           emailMasked: u.email.replace(/^(.).*(@.*)$/, "$1***$2"),
           phoneMasked: u.phoneMasked,
+          contactEmail: u.email,
+          ...(u.phone ? { contactPhone: u.phone } : {}),
           status: "ACTIVE",
           createdAt: Date.now(),
           active: true,
@@ -134,6 +161,8 @@ try {
             : {
                 customerNo: u.customerNo,
                 address: u.address,
+                nationalIdNumber: u.nationalIdNumber,
+                tier: u.tier,
                 createdBy: "TRUSTED_SEED",
               }),
         }));
@@ -168,6 +197,7 @@ try {
         }));
       };
       const ownerUid = identities[0].id;
+      const mainAccountExisted = !!(await t.get("accounts/" + ns + "_checking"));
       const seedAccount = async (id: string, data: Record<string, unknown>) => {
         const path = "accounts/" + id;
         const old = await t.get(path);
@@ -204,12 +234,46 @@ try {
         bookedMinor: 12487500,
         balanceMinor: 12487500,
       });
+      await seedAccount(ns + "_peer_checking", {
+        ownerUid: identities[2].id, type: "CHECKING", currency: "VND", status: "ACTIVE",
+        availableMinor: 21400000, bookedMinor: 21400000, balanceMinor: 21400000,
+      });
       await upsertDemo("checkingDetails/" + ns + "_checking", {
         accountId: ns + "_checking",
         dailyLimitMinor: 100000000,
         overdraftPolicy: "NONE",
         cardAlias: "Minh Anh",
+        displayName: "Tài khoản thanh toán Platinum",
+        branchId: ns + "_branch_pmh",
+        branchName: "PGD Phú Mỹ Hưng · Quận 7",
+        cardDailyLimitMinor: 20000000,
+        cardTier: "infinite",
+        cardFrozen: false,
+        nfcEnabled: false,
       });
+      for (const [suffix, label, alias] of [["recipient", "Gold", "TRAN QUOC BAO"], ["peer", "Chuẩn", "PHAM THU HA"]] as const) {
+        const accountId = ns + "_" + suffix + "_checking";
+        await upsertDemo("checkingDetails/" + accountId, {
+          accountId, displayName: "Tài khoản thanh toán " + label,
+          branchId: ns + "_branch_sg", branchName: "Chi nhánh Sài Gòn · Quận 1",
+          dailyLimitMinor: 30000000, cardDailyLimitMinor: 15000000,
+          overdraftPolicy: "NONE", cardAlias: alias, cardFrozen: false, nfcEnabled: false,
+        });
+      }
+      if (!mainAccountExisted) {
+        for (const [suffix, type, amountMinor, counterpartyName, daysAgo] of [
+          ["salary", "TRANSFER_RECEIVED", 18500000, "Công ty Công nghệ Nimbus", 5],
+          ["bao", "INTERNAL_TRANSFER", 1500000, "Trần Quốc Bảo", 3],
+          ["coffee", "UTILITY_ORDER", 65000, "The Coffee House", 1],
+        ] as const) {
+          const id = ns + "_tx_" + suffix;
+          await upsertDemo("transactions/" + id, {
+            transactionId: id, requestId: id, actorUid: ownerUid, ownerUid,
+            sourceAccountId: ns + "_checking", type, amountMinor, counterpartyName,
+            currency: "VND", status: "SETTLED", committedAt: Date.now() - daysAgo * 86400000,
+          });
+        }
+      }
       await upsertDemo("ratePolicies/" + ns + "_savings_v1", {
         productId: "savings_standard_vnd",
         accountProduct: "savings_standard_vnd",
@@ -329,6 +393,17 @@ try {
         active: true,
         openingHours: "Thứ Hai–Thứ Sáu, 08:00–17:00",
       }, isLegacySeedBranch);
+      for (const branch of [
+        { id: ns + "_branch_pmh", name: "Ngân hàng Nimbus · PGD Phú Mỹ Hưng", address: "12 Nguyễn Lương Bằng, Quận 7, TP. Hồ Chí Minh", latitude: 10.7295, longitude: 106.7216 },
+        { id: ns + "_branch_sg", name: "Ngân hàng Nimbus · Chi nhánh Sài Gòn", address: "124 Nguyễn Huệ, Quận 1, TP. Hồ Chí Minh", latitude: 10.7745, longitude: 106.7032 },
+      ]) {
+        const { id, ...data } = branch;
+        await upsertDemo("bankBranches/" + id, { ...data, active: true, type: "BRANCH", openingHours: "Thứ Hai–Thứ Sáu, 08:00–17:00" });
+      }
+      await upsertDemo("notifications/" + ns + "_welcome", {
+        ownerUid, category: "GENERAL", title: "Chào mừng đến Nimbus Bank",
+        message: "Tài khoản và các tiện ích số đã sẵn sàng.", read: false, readAt: null, createdAt: Date.now(),
+      });
     });
     console.log(
       "Namespaced seed completed. Sign in with the DEMO_PASSWORD configured locally.",
