@@ -25,10 +25,24 @@ export function decode(after: string) {
     throw new Fault("INVALID_CURSOR");
   }
 }
+export function decodePrefixCursor(after: string) {
+  try {
+    const d = JSON.parse(Buffer.from(after, "base64url").toString());
+    check(
+      Array.isArray(d) && d.length === 2 && typeof d[0] === "string" && typeof d[1] === "string",
+      "INVALID_CURSOR",
+    );
+    return d as [string, string];
+  } catch {
+    throw new Fault("INVALID_CURSOR");
+  }
+}
 export const cursor = (d: Doc, dated: boolean) =>
   dated
     ? Buffer.from(JSON.stringify([d.committedAt, d.id])).toString("base64url")
     : d.id;
+export const prefixCursor = (d: Doc, field: string) =>
+  Buffer.from(JSON.stringify([String(d[field] ?? ""), d.id])).toString("base64url");
 export function page(rows: Doc[], q: Doc) {
   const limit = Number(q.limit ?? 25);
   check(Number.isInteger(limit) && limit > 0 && limit <= 100, "INVALID_LIMIT");

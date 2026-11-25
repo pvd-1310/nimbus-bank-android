@@ -4,6 +4,7 @@ export interface ListOptions {
   after?: string;
   from?: number;
   to?: number;
+  prefix?: { field: string; value: string };
 }
 export interface Tx {
   get(path: string): Promise<Doc | undefined>;

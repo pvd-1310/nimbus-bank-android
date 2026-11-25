@@ -38,6 +38,7 @@ it("repairs missing custom claims on provisioning retry", async () => {
     requestId: "repair",
     email: "test@example.com",
     fullName: "Test User",
+    nationalIdNumber: "012345678901",
   };
   await expect(provisionCustomer(b, auth, a, input)).rejects.toThrow();
   await provisionCustomer(b, auth, a, input);
@@ -70,15 +71,30 @@ it("provisioning requires server officer permission and is idempotent", async ()
     requestId: "request",
     email: "customer@example.com",
     fullName: "Customer",
+    nationalIdNumber: "012345678901",
   };
   const r = await provisionCustomer(b, auth, a, body);
   expect(await s.run(t => t.get("checkingDetails/" + r.accountId))).toMatchObject({
     accountId: r.accountId, overdraftPolicy: "NONE",
   });
+  expect(await s.run(t => t.get("accounts/" + r.accountId))).toMatchObject({ ownerNameSearch: "customer" });
   expect(await provisionCustomer(b, auth, a, body)).toEqual(r);
   expect(users.size).toBe(1);
   expect((await s.run((t) => t.get("users/" + r.uid)))!.role).toBe("CUSTOMER");
+  expect((await s.run((t) => t.get("customers/" + r.uid)))!.nationalIdNumber).toBe("012345678901");
+  expect(JSON.stringify(r)).not.toContain("012345678901");
   await expect(
     provisionCustomer(b, auth, { ...a, permissions: [] }, body),
   ).rejects.toThrow();
+});
+
+it("rejects malformed CCCD before creating a customer identity", async () => {
+  const s = new MemoryStore(), b = new Banking(s, { otpSecret: "test", deliver: async () => {} });
+  const a: Actor = { uid: "officer", role: "OFFICER", permissions: ["CUSTOMER_ADMIN"] };
+  await s.run(async (t) => {
+    t.set("users/officer", { active: true, role: "OFFICER" });
+    t.set("officers/officer", { active: true, permissions: ["CUSTOMER_ADMIN"] });
+  });
+  const auth = { exists: async () => false, create: async () => {}, ensureClaims: async () => {} };
+  await expect(provisionCustomer(b, auth, a, { requestId: "bad-cccd", email: "bad@example.com", fullName: "Bad Customer", nationalIdNumber: "123" })).rejects.toThrow();
 });

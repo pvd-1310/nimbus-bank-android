@@ -42,7 +42,7 @@ public final class OfficerHomeFragment extends Fragment {
             binding.ekycMetric.setText("—");
         });
         binding.signOutButton.setOnClickListener(v -> app.getAppContainer().getAuthRepository().signOut());
-        binding.accountButton.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.accountList));
+        binding.checkingAccountsButton.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.officerCheckingAccounts));
         binding.historyButton.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.transactionHistory));
         binding.ekycButton.setOnClickListener(v -> openFeature(v, R.id.officerEkyc,
                 "Hồ sơ eKYC", "Theo dõi kết quả kiểm tra ảnh và xem bằng chứng theo quyền."));

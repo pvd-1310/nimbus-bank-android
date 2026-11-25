@@ -6,7 +6,23 @@ import { check, key } from "../../shared/errors.js";
 import { page, queryOptions } from "../../shared/pagination.js";
 import { id } from "../../shared/validation.js";
 import { releaseContactPhone, reserveContactPhone } from "../profile/contact-phone-reservations.js";
+import { OfficerAccountsService } from "./officer-accounts.service.js";
+import { normalizeSearchText } from "../../shared/search.js";
 export function registerOfficerRoutes(route: Route, d: AppDependencies) {
+  const officerAccounts = new OfficerAccountsService(d.bank);
+  route("get", "/officer/checking-accounts", async (a, r) => {
+    const query = z.object({
+      q: z.string().trim().max(120).optional(),
+      limit: z.string().regex(/^([1-9]|[1-9][0-9]|100)$/).optional(),
+      cursor: z.string().max(256).optional(),
+    }).parse(r.query);
+    queryOptions(query);
+    const q = query.q ? normalizeSearchText(query.q) : "";
+    return officerAccounts.listCheckingAccounts(a, { ...query, q });
+  });
+  route("get", "/officer/customers/:id", (a, r) =>
+    officerAccounts.getCustomer(a, String(r.params.id)),
+  );
   for (const [path, collection, permission] of [
     ["customers", "customers", "CUSTOMER_ADMIN"],
     ["audit", "auditLogs", "AUDIT_READ"],
@@ -17,10 +33,11 @@ export function registerOfficerRoutes(route: Route, d: AppDependencies) {
         const action = path === "audit"
           ? z.enum(["TRANSFER_COMMIT", "CUSTOMER_UPDATE"]).optional().parse(r.query.action)
           : undefined;
-        return page(
-          await t.list(collection, action ? { action } : {}, queryOptions(r.query)),
-          r.query,
-        );
+        const rows = await t.list(collection, action ? { action } : {}, queryOptions(r.query));
+        const visible = collection === "customers"
+          ? rows.map(({ nationalIdNumber: _nationalIdNumber, ...customer }) => customer)
+          : rows;
+        return page(visible, r.query);
       }),
     );
   route("post", "/officer/customers", async (a, r) => {
@@ -34,6 +51,7 @@ export function registerOfficerRoutes(route: Route, d: AppDependencies) {
           fullName: z.string().min(2).max(120),
           phoneNumber: z.string().regex(/^(?:0[0-9]{9}|\+84[0-9]{9})$/)
             .transform((phone) => phone.startsWith("0") ? "+84" + phone.slice(1) : phone),
+          nationalIdNumber: z.string().regex(/^\d{12}$/),
           customerNo: z.string().trim().min(1).max(60).optional(),
           address: z.string().trim().min(1).max(300).optional(),
         })
@@ -95,6 +113,13 @@ export function registerOfficerRoutes(route: Route, d: AppDependencies) {
       t.set("users/" + uid, { ...u, ...userPatch });
       const { id: customerId, _cursor, ...customerData } = customer;
       t.set(`customers/${customerId}`, { ...customerData, ...customerPatch });
+      if (typeof userPatch.fullName === "string") {
+        const checkingAccounts = await t.list("accounts", { ownerUid: uid, type: "CHECKING" }, { limit: 100 });
+        for (const account of checkingAccounts) {
+          const { id: accountId, _cursor, ...accountData } = account;
+          t.set("accounts/" + accountId, { ...accountData, ownerNameSearch: normalizeSearchText(String(userPatch.fullName)) });
+        }
+      }
       const changeId = randomUUID();
       t.set("customerChanges/" + changeId, {
         id: changeId,

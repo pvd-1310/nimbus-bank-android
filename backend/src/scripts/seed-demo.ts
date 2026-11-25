@@ -1,5 +1,7 @@
 import { runtime } from "../infrastructure/runtime.js";
 import { check } from "../shared/errors.js";
+import { normalizeSearchText } from "../shared/search.js";
+import { preserveExisting, preserveSeedAccount, seedClaims } from "./seed-preserve.js";
 const r = runtime();
 const ns = process.env.DEMO_NAMESPACE ?? "local_demo";
 check(/^[a-z0-9_]{3,30}$/.test(ns), "INVALID_NAMESPACE");
@@ -79,42 +81,43 @@ try {
     const password = process.env.DEMO_PASSWORD;
     check(password && password.length >= 12, "DEMO_PASSWORD_REQUIRED");
     for (const u of identities) {
-      let exists = true;
+      let authUser;
       try {
-        await r.auth.getUser(u.id);
+        authUser = await r.auth.getUser(u.id);
       } catch (e) {
         check(
           (e as { code?: string }).code === "auth/user-not-found",
           "AUTH_LOOKUP_FAILED",
         );
-        exists = false;
       }
-      if (!exists)
+      if (!authUser) {
         await r.auth.createUser({ uid: u.id, email: u.email, password });
-      await r.auth.setCustomUserClaims(u.id, {
-        role: u.role,
-        permissions: u.role === "OFFICER" ? permissions : [],
-      });
+        await r.auth.setCustomUserClaims(u.id, seedClaims(undefined, u.role, u.role === "OFFICER" ? permissions : []));
+      } else if (!authUser.customClaims?.role || !Array.isArray(authUser.customClaims.permissions)) {
+        await r.auth.setCustomUserClaims(u.id, seedClaims(
+          authUser.customClaims,
+          u.role,
+          u.role === "OFFICER" ? permissions : [],
+        ));
+      }
       await r.bank.store.run(async (t) => {
         const old = await t.get("users/" + u.id);
         check(!old || old.demoNamespace === ns, "SEED_TARGET_NOT_DEMO");
-        t.set("users/" + u.id, {
-          ...old,
+        t.set("users/" + u.id, preserveExisting(old, {
           uid: u.id,
           role: u.role,
           fullName: u.fullName,
           emailMasked: u.email.replace(/^(.).*(@.*)$/, "$1***$2"),
           phoneMasked: u.phoneMasked,
-          status: old?.status ?? "ACTIVE",
-          createdAt: old?.createdAt ?? Date.now(),
+          status: "ACTIVE",
+          createdAt: Date.now(),
           active: true,
           demoNamespace: ns,
-        });
+        }));
         const collection = u.role === "OFFICER" ? "officers" : "customers";
         const profile = await t.get(collection + "/" + u.id);
         check(!profile || profile.demoNamespace === ns, "SEED_TARGET_NOT_DEMO");
-        t.set(collection + "/" + u.id, {
-          ...profile,
+        t.set(collection + "/" + u.id, preserveExisting(profile, {
           uid: u.id,
           fullName: u.fullName,
           phoneMasked: u.phoneMasked,
@@ -131,9 +134,9 @@ try {
             : {
                 customerNo: u.customerNo,
                 address: u.address,
-                createdBy: profile?.createdBy ?? "TRUSTED_SEED",
+                createdBy: "TRUSTED_SEED",
               }),
-        });
+        }));
       });
     }
     await r.bank.store.run(async (t) => {
@@ -148,47 +151,38 @@ try {
             (allowLegacyOwned && old.demoNamespace === undefined && old.demo !== true),
           "SEED_TARGET_NOT_DEMO",
         );
-        t.set(path, {
-          ...old,
+        t.set(path, preserveExisting(old, {
           ...data,
-          ...(old?.createdAt === undefined ? {} : { createdAt: old.createdAt }),
-          ...(old?.openedAt === undefined ? {} : { openedAt: old.openedAt }),
-          ...(old?.maturityAt === undefined ? {} : { maturityAt: old.maturityAt }),
           demo: true,
           demoNamespace: ns,
-        });
+        }));
       };
       const refreshBill = async (path: string, data: Record<string, unknown>) => {
         const old = await t.get(path);
         check(!old || old.demoNamespace === ns, "SEED_TARGET_NOT_DEMO");
-        const preserveAmount = !!old && old.status !== "UNPAID";
-        t.set(path, {
-          ...old,
+        t.set(path, preserveExisting(old, {
           ...data,
-          status: old?.status ?? "UNPAID",
-          ...(preserveAmount ? { amountMinor: old?.amountMinor } : {}),
+          status: "UNPAID",
           demo: true,
           demoNamespace: ns,
-        });
+        }));
       };
       const ownerUid = identities[0].id;
       const seedAccount = async (id: string, data: Record<string, unknown>) => {
         const path = "accounts/" + id;
         const old = await t.get(path);
         check(!old || old.demoNamespace === ns, "SEED_TARGET_NOT_DEMO");
-        const version = Number(old?.version ?? 0);
-        const baseline = data.availableMinor as number;
-        const account = {
-          ...old,
+        const owner = data.type === "CHECKING" ? await t.get("users/" + String(data.ownerUid ?? "")) : undefined;
+        const ownerNameSearch = data.type === "CHECKING" && owner?.fullName
+          ? normalizeSearchText(String(owner.fullName))
+          : undefined;
+        const account = preserveSeedAccount(old, {
           ...data,
-          availableMinor: version > 0 ? (old?.availableMinor ?? baseline) : baseline,
-          bookedMinor: version > 0 ? (old?.bookedMinor ?? data.bookedMinor) : data.bookedMinor,
-          balanceMinor: version > 0 ? (old?.balanceMinor ?? data.balanceMinor) : data.balanceMinor,
-          status: old?.status && old.status !== "ACTIVE" ? old.status : "ACTIVE",
-          version,
+          status: "ACTIVE",
+          version: 0,
           demo: true,
           demoNamespace: ns,
-        };
+        }, ownerNameSearch);
         t.set(path, account);
       };
       for (const [type, balance] of [["CHECKING", 38642500], ["SAVINGS", 62500000], ["MORTGAGE", 742500000]] as const)

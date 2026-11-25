@@ -14,4 +14,9 @@ public class BottomNavigationStateTest {
         assertEquals(R.id.nav_home, BottomNavigationState.defaultItemFor(R.id.customerHome));
         assertEquals(R.id.nav_profile, BottomNavigationState.defaultItemFor(R.id.profile));
     }
+
+    @Test public void officerCustomerManagementRoutesShareTheWalletTab() {
+        assertEquals(R.id.nav_wallet, BottomNavigationState.defaultItemFor(R.id.officerCheckingAccounts));
+        assertEquals(R.id.nav_wallet, BottomNavigationState.defaultItemFor(R.id.officerCustomers));
+    }
 }

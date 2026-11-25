@@ -15,6 +15,7 @@ export const templateFields: Record<string, readonly string[]> = {
     "customerId",
     "uidRef",
     "customerNo",
+    "nationalIdNumber",
     "kycStatus",
     "address",
     "createdBy",
@@ -30,6 +31,7 @@ export const templateFields: Record<string, readonly string[]> = {
   accounts: [
     "accountId",
     "ownerUid",
+    "ownerNameSearch",
     "type",
     "currency",
     "status",

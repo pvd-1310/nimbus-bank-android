@@ -161,6 +161,12 @@ public final class AccountListFragment extends Fragment {
                         uid = signedInUid;
                         role = authState.getUser().getRole();
                         updateScreenTitle();
+                        if (role == UserRole.OFFICER && activeNavItem == R.id.nav_wallet
+                                && Navigation.findNavController(view).getCurrentDestination() != null
+                                && Navigation.findNavController(view).getCurrentDestination().getId() == R.id.accountList) {
+                            Navigation.findNavController(view).navigate(R.id.officerCheckingAccounts);
+                            return;
+                        }
                         load();
                     }
                 });
@@ -747,7 +753,7 @@ public final class AccountListFragment extends Fragment {
         LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52));
         btnParams.bottomMargin = dp(18);
         addCustomerBtn.setLayoutParams(btnParams);
-        addCustomerBtn.setOnClickListener(v -> showProvisionCustomerDialog());
+        addCustomerBtn.setOnClickListener(v -> openOfficerCustomerForm(v, "create", ""));
         binding.content.addView(addCustomerBtn);
 
         for (JSONObject customer : customers) {
@@ -758,7 +764,7 @@ public final class AccountListFragment extends Fragment {
             row.setText((name.isEmpty() ? customer.optString("customerNo", id) : name)
                     + " · " + customer.optString("kycStatus", "Chưa có eKYC"));
             row.setEnabled(!uid.isEmpty());
-            row.setOnClickListener(v -> showEditCustomerDialog(uid));
+            row.setOnClickListener(v -> openOfficerCustomerForm(v, "edit", uid));
             binding.content.addView(row);
         }
         if (customerCursor != null) {
@@ -768,6 +774,13 @@ public final class AccountListFragment extends Fragment {
             next.setOnClickListener(v -> loadDirectory(customerCursor));
             binding.content.addView(next);
         }
+    }
+
+    private void openOfficerCustomerForm(View anchor, String mode, String customerId) {
+        Bundle args = new Bundle();
+        args.putString("mode", mode);
+        args.putString("customerId", customerId);
+        Navigation.findNavController(anchor).navigate(R.id.officerCustomerForm, args);
     }
 
     // ==========================================

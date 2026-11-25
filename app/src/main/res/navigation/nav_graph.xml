@@ -69,10 +69,26 @@
         android:name="com.example.final_term.ui.officer.OfficerHomeFragment"
         android:label="@string/officer_home_title" />
     <fragment
+        android:id="@+id/officerCheckingAccounts"
+        android:name="com.example.final_term.ui.officer.OfficerCheckingAccountsFragment"
+        android:label="Tài khoản thanh toán" />
+    <fragment
+        android:id="@+id/officerCustomers"
+        android:name="com.example.final_term.ui.officer.OfficerCheckingAccountsFragment"
+        android:label="Quản lý khách hàng &amp; tài khoản thanh toán" />
+    <fragment
+        android:id="@+id/officerCustomerForm"
+        android:name="com.example.final_term.ui.officer.OfficerCustomerFormFragment"
+        android:label="Hồ sơ khách hàng">
+        <argument android:name="mode" app:argType="string" android:defaultValue="create" />
+        <argument android:name="customerId" app:argType="string" android:defaultValue="" />
+        <argument android:name="accountNumber" app:argType="string" android:defaultValue="" />
+    </fragment>
+    <fragment
         android:id="@+id/accountList"
         android:name="com.example.final_term.ui.customer.AccountListFragment"
         android:label="Tài khoản và thông báo">
-        <argument android:name="activeNavItem" app:argType="integer" />
+        <argument android:name="activeNavItem" app:argType="reference" android:defaultValue="@id/nav_accounts" />
     </fragment>
     <fragment
         android:id="@+id/transactionHistory"

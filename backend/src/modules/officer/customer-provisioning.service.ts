@@ -3,6 +3,7 @@ import type { Doc } from "../../core/store.js";
 import { digest } from "../../shared/crypto.js";
 import { check, Fault, key } from "../../shared/errors.js";
 import { releaseContactPhone, reserveContactPhone } from "../profile/contact-phone-reservations.js";
+import { normalizeSearchText } from "../../shared/search.js";
 import { type Actor } from "../auth/auth.types.js";
 interface IdentityAdmin {
   exists: (uid: string) => Promise<boolean>;
@@ -18,6 +19,7 @@ export async function provisionCustomer(
   a: Actor,
   input: Doc,
 ) {
+  check(/^\d{12}$/.test(String(input.nationalIdNumber ?? "")), "INVALID_NATIONAL_ID");
   key(input.requestId);
   const uid = "customer_" + digest([a.uid, input.requestId]).slice(0, 40),
     accountId = "acct_" + digest(["checking", uid]).slice(0, 24),
@@ -107,6 +109,7 @@ export async function provisionCustomer(
       uid,
       uidRef: uid,
       customerNo: input.customerNo ?? null,
+      nationalIdNumber: String(input.nationalIdNumber),
       address: input.address ?? null,
       kycStatus: "NOT_SUBMITTED",
       status: "ONBOARDING",
@@ -116,6 +119,7 @@ export async function provisionCustomer(
       accountId,
       ownerUid: uid,
       type: "CHECKING",
+      ownerNameSearch: normalizeSearchText(String(input.fullName)),
       currency: "VND",
       status: "ACTIVE",
       availableMinor: 0,

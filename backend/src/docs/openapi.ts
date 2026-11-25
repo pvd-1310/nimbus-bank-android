@@ -201,6 +201,8 @@ const endpoints: [string, string, string, unknown?][] = [
     ),
   ],
   ["get", "/officer/customers", "Permission CUSTOMER_ADMIN required"],
+  ["get", "/officer/checking-accounts", "Permission CUSTOMER_ADMIN required; paginated checking accounts; q matches exact account ID or normalized owner-name prefix"],
+  ["get", "/officer/customers/{id}", "Permission CUSTOMER_ADMIN required; editable contact fields only; excludes CCCD"],
   [
     "post",
     "/officer/customers",
@@ -210,9 +212,10 @@ const endpoints: [string, string, string, unknown?][] = [
       email: { type: "string", format: "email" },
       fullName: text,
       phoneNumber: { type: "string", pattern: "^(0[0-9]{9}|\\+84[0-9]{9})$" },
+      nationalIdNumber: { type: "string", pattern: "^[0-9]{12}$" },
       customerNo: text,
       address: text,
-    }),
+    }, ["requestId", "email", "fullName", "phoneNumber", "nationalIdNumber"]),
   ],
   ["get", "/officer/customers/{id}/changes", "Permission CUSTOMER_ADMIN required; paginated before/after history"],
   [

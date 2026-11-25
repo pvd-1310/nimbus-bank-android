@@ -64,7 +64,10 @@ public final class BottomNavigationBinder {
         tintItem(root, R.id.nav_profile, activeItem == R.id.nav_profile);
 
         home.setOnClickListener(v -> navigate(navController, homeDestination));
-        wallet.setOnClickListener(v -> selectTab(root, navController, homeDestination, R.id.nav_wallet));
+        wallet.setOnClickListener(v -> {
+            if (officer) navigate(navController, R.id.officerCheckingAccounts);
+            else selectTab(root, navController, homeDestination, R.id.nav_wallet);
+        });
 
         accounts.setOnClickListener(v -> {
             if (officer) {
