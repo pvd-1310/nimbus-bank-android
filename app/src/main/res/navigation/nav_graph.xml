@@ -114,4 +114,8 @@
     <fragment android:id="@+id/officerAudit" android:name="com.example.final_term.ui.officer.OfficerFeatureFragment" android:label="Kiểm tra giao dịch" />
     <fragment android:id="@+id/officerRates" android:name="com.example.final_term.ui.officer.OfficerFeatureFragment" android:label="Chính sách lãi suất" />
     <fragment android:id="@+id/ratePolicyEditor" android:name="com.example.final_term.ui.officer.RatePolicyEditorFragment" android:label="Cập nhật lãi suất" />
+    <fragment
+        android:id="@+id/resetPassword"
+        android:name="com.example.final_term.ui.auth.ResetPasswordFragment"
+        android:label="Đặt lại mật khẩu" />
 </navigation>

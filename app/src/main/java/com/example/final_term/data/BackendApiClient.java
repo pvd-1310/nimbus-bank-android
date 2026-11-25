@@ -70,6 +70,20 @@ public final class BackendApiClient {
         return request("POST", path, jsonBody);
     }
 
+    public Task<Response> postPublic(@NonNull String path, @NonNull String jsonBody) {
+        return Tasks.call(executor, () -> {
+            Request request = new Request.Builder()
+                    .url(BASE_URL + path)
+                    .header("Accept", "application/json")
+                    .post(RequestBody.create(jsonBody, JSON))
+                    .build();
+            try (okhttp3.Response response = http.newCall(request).execute()) {
+                ResponseBody body = response.body();
+                return new Response(response.code(), body == null ? "" : body.string());
+            }
+        });
+    }
+
     public Task<Response> patch(@NonNull String path, @NonNull String jsonBody) {
         return request("PATCH", path, jsonBody);
     }

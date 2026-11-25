@@ -69,8 +69,18 @@ public final class LoginFragment extends Fragment {
                     .show();
         });
         application.getAppContainer().getAuthRepository().observeAuthState().observe(getViewLifecycleOwner(), this::renderState);
+        var currentEntry = androidx.navigation.fragment.NavHostFragment.findNavController(this).getCurrentBackStackEntry();
+        if (currentEntry != null) {
+            currentEntry.getSavedStateHandle().<String>getLiveData(ResetPasswordFragment.ARG_EMAIL)
+                    .observe(getViewLifecycleOwner(), updatedEmail -> {
+                        if (binding != null && updatedEmail != null && !updatedEmail.isEmpty()) {
+                            binding.emailInput.setText(updatedEmail);
+                            binding.passwordInput.setText("");
+                        }
+                    });
+        }
         binding.signInButton.setOnClickListener(v -> signIn());
-        binding.resetPasswordButton.setOnClickListener(v -> sendPasswordReset());
+        binding.resetPasswordButton.setOnClickListener(v -> openResetPassword());
         binding.biometricButton.setOnClickListener(v -> Toast.makeText(
                 requireContext(),
                 "Xác thực sinh trắc học khả dụng sau khi bạn đăng nhập và bật trong Hồ sơ.",
@@ -132,36 +142,13 @@ public final class LoginFragment extends Fragment {
         binding.errorText.setVisibility(View.VISIBLE);
     }
 
-    private void sendPasswordReset() {
+    private void openResetPassword() {
         preserveFaceError = false;
         binding.errorText.setVisibility(View.GONE);
         String email = binding.emailInput.getText() == null ? "" : binding.emailInput.getText().toString().trim();
-        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-            binding.emailInput.setError("Nhập email hợp lệ để nhận liên kết đặt mật khẩu.");
-            return;
-        }
-        binding.resetPasswordButton.setEnabled(false);
-        ((FinalTermApplication) requireActivity().getApplication()).getAppContainer()
-                .getAuthRepository().sendPasswordResetEmail(email)
-                .addOnCompleteListener(task -> {
-                    if (!isAdded() || binding == null) return;
-                    binding.resetPasswordButton.setEnabled(true);
-                    if (task.isSuccessful()) {
-                        Toast.makeText(requireContext(),
-                                "Nếu email đã được đăng ký, liên kết đặt lại mật khẩu đã được gửi đến hộp thư.",
-                                Toast.LENGTH_LONG).show();
-                        return;
-                    }
-                    String err = task.getException() != null && task.getException().getMessage() != null
-                            ? task.getException().getMessage().toUpperCase(java.util.Locale.ROOT) : "";
-                    String msg = err.contains("TOO_MANY") || err.contains("QUOTA")
-                            ? "Gửi yêu cầu quá nhiều lần. Vui lòng thử lại sau."
-                            : err.contains("NETWORK")
-                            ? "Mất kết nối mạng. Vui lòng kiểm tra Wi-Fi/4G và thử lại."
-                            : "Chưa gửi được email đặt mật khẩu. Vui lòng thử lại.";
-                    binding.errorText.setText(msg);
-                    binding.errorText.setVisibility(View.VISIBLE);
-                });
+        Bundle args = new Bundle();
+        args.putString(ResetPasswordFragment.ARG_EMAIL, email);
+        androidx.navigation.fragment.NavHostFragment.findNavController(this).navigate(R.id.resetPassword, args);
     }
 
     private void signIn() {

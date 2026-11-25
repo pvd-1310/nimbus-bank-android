@@ -215,6 +215,10 @@ public final class OtpBottomSheetDialog {
         return dialog.isShowing();
     }
 
+    public void setSubtitle(@NonNull String subtitle) {
+        binding.otpSubtitleText.setText(subtitle);
+    }
+
     public void setDemoCode(@Nullable String code) {
         controller.setCode(code);
         renderDigits();

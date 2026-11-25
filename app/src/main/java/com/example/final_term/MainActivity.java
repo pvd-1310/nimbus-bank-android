@@ -78,7 +78,8 @@ public class MainActivity extends AppCompatActivity {
             navController.navigate(R.id.profile);
         } else if (route == RootViewModel.RootRoute.OFFICER_HOME && current != R.id.officerHome) {
             navController.navigate(R.id.officerHome);
-        } else if (route == RootViewModel.RootRoute.LOGIN && current != R.id.login) {
+        } else if (route == RootViewModel.RootRoute.LOGIN && current != R.id.login
+                && current != R.id.resetPassword) {
             navController.navigate(R.id.login, null,
                     new androidx.navigation.NavOptions.Builder()
                             .setPopUpTo(navController.getGraph().getId(), true)
@@ -94,7 +95,8 @@ public class MainActivity extends AppCompatActivity {
         if (binding == null || navController == null) return;
         boolean onboarding = latestAuthState != null && latestAuthState.getUser() != null
                 && latestAuthState.getUser().isOnboarding();
-        boolean show = destination != R.id.login && destination != R.id.branchLocator
+        boolean show = destination != R.id.login && destination != R.id.resetPassword
+                && destination != R.id.branchLocator
                 && destination != R.id.officerCustomerForm && destination != R.id.transactionFlow
                 && !onboarding;
         android.view.View bottomNavigation = binding.mainBottomNavigation.getRoot();
