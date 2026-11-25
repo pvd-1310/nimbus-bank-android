@@ -116,7 +116,8 @@ public final class AccountListFragment extends Fragment {
 
         androidx.navigation.NavController navController = Navigation.findNavController(view);
         androidx.navigation.NavBackStackEntry previousEntry = navController.getPreviousBackStackEntry();
-        if (previousEntry != null && previousEntry.getDestination().getId() == R.id.customerHome) {
+        if (previousEntry != null && previousEntry.getDestination().getId() == R.id.customerHome
+                && (args == null || !args.containsKey("activeNavItem"))) {
             activeNavItem = R.id.nav_accounts;
             if (navController.getCurrentBackStackEntry() != null) {
                 navController.getCurrentBackStackEntry().getSavedStateHandle()
@@ -176,7 +177,7 @@ public final class AccountListFragment extends Fragment {
         if (role == UserRole.OFFICER) {
             binding.titleText.setText(activeNavItem == R.id.nav_wallet ? "Khách hàng" : "Duyệt & Tài khoản");
         } else {
-            binding.titleText.setText(activeNavItem == R.id.nav_wallet ? "Ví" : "Tài khoản");
+            binding.titleText.setText(activeNavItem == R.id.nav_wallet ? "Ví" : "Thẻ");
         }
     }
 
@@ -310,6 +311,7 @@ public final class AccountListFragment extends Fragment {
             });
             binding.content.addView(stack);
             if (cardAccounts.size() > 1) binding.content.addView(createCardPagination(cardAccounts, selectedIndex));
+            binding.content.addView(createCardActions(selected));
 
             MaterialButton details = new MaterialButton(requireContext());
             details.setText("Chi tiết thẻ  ›");
@@ -499,6 +501,57 @@ public final class AccountListFragment extends Fragment {
             dots.addView(dot, dotParams);
         }
         return dots;
+    }
+
+    private View createCardActions(ReadModels.AccountSummary account) {
+        LinearLayout actions = new LinearLayout(requireContext());
+        actions.setGravity(Gravity.CENTER);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rowParams.bottomMargin = dp(12);
+        actions.setLayoutParams(rowParams);
+        String[] titles = {"NFC", "Hạn mức thẻ", "Khóa thẻ", "Cài đặt"};
+        int[] icons = {R.drawable.ic_nfc, R.drawable.ic_schedule,
+                R.drawable.ic_lock, R.drawable.ic_settings};
+        for (int i = 0; i < titles.length; i++) {
+            final int actionIndex = i;
+            LinearLayout action = new LinearLayout(requireContext());
+            action.setOrientation(LinearLayout.VERTICAL);
+            action.setGravity(Gravity.CENTER);
+            action.setClickable(true);
+            action.setFocusable(true);
+            action.setContentDescription(titles[i]);
+            ImageView icon = new ImageView(requireContext());
+            icon.setImageResource(icons[i]);
+            icon.setImageTintList(ContextCompat.getColorStateList(requireContext(), R.color.navy));
+            icon.setBackgroundResource(R.drawable.circle_action_button);
+            icon.setPadding(dp(15), dp(15), dp(15), dp(15));
+            action.addView(icon, new LinearLayout.LayoutParams(dp(56), dp(56)));
+            TextView label = walletText(titles[i], 11, R.color.ink, true);
+            label.setGravity(Gravity.CENTER);
+            LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            labelParams.topMargin = dp(6);
+            action.addView(label, labelParams);
+            action.setOnClickListener(view -> {
+                if (actionIndex == 1) {
+                    new MaterialAlertDialogBuilder(requireContext())
+                            .setTitle("Hạn mức thẻ")
+                            .setMessage("Dữ liệu minh họa: 20.000.000 ₫ mỗi ngày. Hạn mức thẻ sẽ được cập nhật khi có dữ liệu từ hệ thống.")
+                            .setPositiveButton("Đóng", null).show();
+                } else if (actionIndex == 3) {
+                    openDetails(view, account);
+                } else {
+                    new MaterialAlertDialogBuilder(requireContext())
+                            .setTitle(titles[actionIndex])
+                            .setMessage("Tính năng này chưa được kết nối với hệ thống thẻ.")
+                            .setPositiveButton("Đóng", null).show();
+                }
+            });
+            actions.addView(action, new LinearLayout.LayoutParams(0, dp(88), 1f));
+        }
+        return actions;
     }
 
     private View createOtherAccountRow(ReadModels.AccountSummary account) {

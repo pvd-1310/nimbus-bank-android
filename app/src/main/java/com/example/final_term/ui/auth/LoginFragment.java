@@ -25,6 +25,12 @@ public final class LoginFragment extends Fragment {
     private boolean faceBusy;
     private final FaceGalleryPicker faceGalleryPicker = new FaceGalleryPicker(this, this::signInWithFace, this::faceError);
 
+    @Override
+    public void onResume() {
+        super.onResume();
+        WelcomeGuide.showIfNeeded(this);
+    }
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,

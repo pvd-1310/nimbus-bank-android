@@ -194,6 +194,14 @@
                         android:textColor="@color/ink_muted" android:textSize="11sp" />
                 </LinearLayout>
 
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Hành khách và hạng ghế là thông tin minh họa."
+                    android:textColor="@color/ink_muted"
+                    android:textSize="12sp" />
+
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/search_flights_button"
                     android:layout_width="match_parent"

@@ -28,7 +28,7 @@ public final class BottomNavigationBinder {
 
         ((TextView) root.findViewById(R.id.nav_home_label)).setText(officer ? "Tổng quan" : "Trang chủ");
         ((TextView) root.findViewById(R.id.nav_wallet_label)).setText(officer ? "Khách hàng" : "Ví");
-        ((TextView) root.findViewById(R.id.nav_accounts_label)).setText(officer ? "Duyệt" : "Tài khoản");
+        ((TextView) root.findViewById(R.id.nav_accounts_label)).setText(officer ? "Duyệt" : "Thẻ");
         ((TextView) root.findViewById(R.id.nav_profile_label)).setText(officer ? "Nhân sự" : "Cá nhân");
         quick.setContentDescription(officer ? "Tác vụ vận hành" : "Thao tác nhanh");
 
