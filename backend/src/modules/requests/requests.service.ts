@@ -91,6 +91,7 @@ export class RequestService {
       status: intent.status, expiresAt: intent.expiresAt, faceRequired: intent.faceRequired,
       providerReference: intent.providerReference ?? null, failureCode: intent.failureCode ?? null,
       feeMinor: intent.feeMinor, amountMinor: intent.amountMinor, currency: intent.currency,
+      balanceAfterMinor: intent.balanceAfterMinor ?? null,
       transactionId: intent.status === "COMMITTED" ? intent.id : null,
     };
   }
@@ -156,7 +157,8 @@ export class RequestService {
         : ![bookedMinor, availableMinor, amountMinor].every(Number.isSafeInteger) ? "AMOUNT_OVERFLOW"
         : delta < 0 && amountMinor > (policy?.dailyLimitMinor ?? 50_000_000) ? "DAILY_LIMIT_EXCEEDED"
         : null;
-      const result = { ...intent, status: failureCode ? "FAILED" : "COMMITTED", failureCode };
+      const result = { ...intent, status: failureCode ? "FAILED" : "COMMITTED", failureCode,
+        ...(failureCode ? {} : { balanceAfterMinor: bookedMinor }) };
       await this.updateRequest(t, result, failureCode ? "FAILED" : "DEMO_SETTLED");
       t.set("transactionIntents/" + id, result);
       this.bank.audit(t, a, failureCode ? "DEMO_MOVEMENT_REJECTED" : "DEMO_MOVEMENT_SETTLED", id, intent.requestId);

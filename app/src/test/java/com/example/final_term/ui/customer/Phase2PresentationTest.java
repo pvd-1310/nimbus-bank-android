@@ -16,7 +16,7 @@ public class Phase2PresentationTest {
     }
 
     @Test public void moneyRequestCopyNeverClaimsBalanceMutation() {
-        assertEquals("Chưa kết nối API yêu cầu nạp/rút. Yêu cầu chưa được gửi; số dư chưa thay đổi.",
+        assertEquals("Yêu cầu chưa được gửi; số dư chưa thay đổi.",
                 Phase2Presentation.requestStatusMessage("DEPOSIT"));
     }
 

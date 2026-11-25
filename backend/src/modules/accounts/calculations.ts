@@ -1,4 +1,94 @@
 import { check, minor } from "../../shared/errors.js";
+const DAY_MS = 86400000n;
+const ACT_365_DENOMINATOR = 10000n * 365n * DAY_MS;
+
+export interface SavingsRatePeriod {
+  id: string;
+  effectiveFrom?: number;
+  annualRateBasisPoints: number;
+  version?: number;
+}
+
+export function savingsMonthlyEstimate(
+  principal: number,
+  periodStart: number,
+  periodEnd: number,
+  inputPolicies: SavingsRatePeriod[],
+) {
+  check(Number.isSafeInteger(principal) && principal >= 0, "INVALID_TERMS");
+  check(Number.isSafeInteger(periodStart) && Number.isSafeInteger(periodEnd) && periodEnd > periodStart,
+    "INVALID_TERMS");
+  check(Array.isArray(inputPolicies) && inputPolicies.length > 0, "POLICY_UNAVAILABLE");
+  const policies = inputPolicies
+    .map((policy) => ({
+      ...policy,
+      effectiveFrom: policy.effectiveFrom ?? periodStart,
+    }))
+    .filter((policy) => policy.effectiveFrom < periodEnd)
+    .sort((a, b) => a.effectiveFrom - b.effectiveFrom || (a.version ?? 0) - (b.version ?? 0));
+
+  for (const policy of policies) {
+    check(typeof policy.id === "string" && policy.id.length > 0 &&
+      Number.isInteger(policy.annualRateBasisPoints) &&
+      policy.annualRateBasisPoints >= 0 && policy.annualRateBasisPoints <= 10000,
+    "INVALID_TERMS");
+  }
+
+  let activeIndex = -1;
+  for (let i = 0; i < policies.length; i++) {
+    if (policies[i].effectiveFrom <= periodStart) activeIndex = i;
+    else break;
+  }
+  check(activeIndex >= 0, "POLICY_UNAVAILABLE");
+
+  // For policies sharing an effective instant, the highest version wins.
+  const boundaries: SavingsRatePeriod[] = [];
+  for (const policy of policies) {
+    const previous = boundaries.at(-1);
+    if (previous?.effectiveFrom === policy.effectiveFrom) {
+      if ((policy.version ?? 0) >= (previous.version ?? 0)) boundaries[boundaries.length - 1] = policy;
+    } else {
+      boundaries.push(policy);
+    }
+  }
+  activeIndex = -1;
+  for (let i = 0; i < boundaries.length; i++) {
+    if ((boundaries[i].effectiveFrom ?? periodStart) <= periodStart) activeIndex = i;
+  }
+  check(activeIndex >= 0, "POLICY_UNAVAILABLE");
+
+  let cursor = BigInt(periodStart);
+  const end = BigInt(periodEnd);
+  let numerator = 0n;
+  const policyIds: string[] = [];
+  const accrueUntil = (next: bigint, policy: SavingsRatePeriod) => {
+    if (next <= cursor) return;
+    const duration = next - cursor;
+    numerator += BigInt(principal) * BigInt(policy.annualRateBasisPoints) * duration;
+    if (policyIds.at(-1) !== policy.id) policyIds.push(policy.id);
+    cursor = next;
+  };
+
+  let active = boundaries[activeIndex];
+  for (let i = activeIndex + 1; i < boundaries.length; i++) {
+    const boundary = BigInt(boundaries[i].effectiveFrom ?? periodStart);
+    if (boundary >= end) break;
+    accrueUntil(boundary, active);
+    active = boundaries[i];
+  }
+  accrueUntil(end, active);
+
+  const profitMinor = Number((numerator + ACT_365_DENOMINATOR / 2n) / ACT_365_DENOMINATOR);
+  check(Number.isSafeInteger(profitMinor), "AMOUNT_OVERFLOW");
+  const durationMs = periodEnd - periodStart;
+  check(durationMs % Number(DAY_MS) === 0, "INVALID_TERMS");
+  return {
+    profitMinor,
+    days: durationMs / Number(DAY_MS),
+    policyIds,
+  };
+}
+
 export function savingsEstimate(
   principal: number,
   basisPoints: number,

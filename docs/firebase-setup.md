@@ -41,3 +41,16 @@ The script is intentionally not an in-app admin control. It must run only in a t
 ## Emulator
 
 `firebase.json` contains the Auth and Firestore emulator ports. Emulator wiring can be enabled for local development after the Firebase CLI is installed; no production resource or billing is created by this repository.
+
+## Bank-wide interest policies
+
+Officers with `RATE_UPDATE` can schedule a bank-wide savings rate or loan rate. A savings policy applies to all savings accounts; a loan policy changes projected mortgage installments from its effective date. Existing account rates remain in effect before that date. The backend validates annual rates against the configured range in basis points:
+
+```bash
+SAVINGS_RATE_MIN_BPS=0
+SAVINGS_RATE_MAX_BPS=10000
+```
+
+The defaults preserve the existing 0–100% technical range. Set these values to the bank-approved bounds in the backend runtime environment. Each policy version requires a reason and a future effective date. Legacy product-specific savings rates and account-level mortgage rates remain as fallbacks until the first bank-wide policy of the matching type takes effect.
+
+Savings profit is an estimate for the UTC calendar month using simple daily accrual and the policy effective for each interval. Mortgage payments are projections from current outstanding balance and remaining term; for older records without `remainingTermMonths`, `termMonths` is used until the operational record is updated. Neither estimate changes account balance.

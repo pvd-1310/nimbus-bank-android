@@ -41,12 +41,12 @@ public final class BottomNavigationBinder {
         Bundle args = navController.getCurrentBackStackEntry() == null
                 ? null : navController.getCurrentBackStackEntry().getArguments();
         if (activeDestination == R.id.accountList && navController.getCurrentBackStackEntry() != null) {
-            Integer selectedItem = navController.getCurrentBackStackEntry()
-                    .getSavedStateHandle().get("activeNavItem");
-            if (selectedItem != null) {
-                activeItem = selectedItem;
-            } else if (args != null && args.containsKey("activeNavItem")) {
+            if (args != null && args.containsKey("activeNavItem")) {
                 activeItem = args.getInt("activeNavItem", activeItem);
+            } else {
+                Integer selectedItem = navController.getCurrentBackStackEntry()
+                        .getSavedStateHandle().get("activeNavItem");
+                if (selectedItem != null) activeItem = selectedItem;
             }
         } else if (args != null && args.containsKey("activeNavItem")) {
             activeItem = args.getInt("activeNavItem", activeItem);

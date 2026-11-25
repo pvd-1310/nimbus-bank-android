@@ -41,6 +41,7 @@ public final class TransactionHistoryFragment extends Fragment {
     private FragmentTransactionHistoryBinding binding;
     private FinalTermApplication application;
     private String uid;
+    private String accountFilter = "";
     private UserRole role;
     private List<ReadModels.TransactionSummary> rows;
     private String baseStatus = "";
@@ -64,6 +65,7 @@ public final class TransactionHistoryFragment extends Fragment {
         application = (FinalTermApplication) requireActivity().getApplication();
         thisMonth = state != null ? state.getBoolean("thisMonth")
                 : getArguments() != null && getArguments().getBoolean("thisMonth");
+        accountFilter = getArguments() == null ? "" : getArguments().getString("accountId", "");
 
         binding.backButton.setOnClickListener(v -> Navigation.findNavController(v).navigateUp());
         binding.retryButton.setOnClickListener(v -> load());
@@ -83,9 +85,9 @@ public final class TransactionHistoryFragment extends Fragment {
         });
 
         binding.typeFilter.setAdapter(new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_dropdown_item,
-                new String[]{"ALL", "CREDIT", "DEBIT"}));
+                new String[]{"Tất cả giao dịch", "Tiền vào", "Tiền ra"}));
         binding.statusFilter.setAdapter(new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_dropdown_item,
-                new String[]{"ALL", "SETTLED", "DEMO_SETTLED", "PENDING", "FAILED"}));
+                new String[]{"Mọi trạng thái", "Hoàn tất", "Đang xử lý", "Thất bại"}));
 
         TextWatcher watcher = new TextWatcher() {
             public void beforeTextChanged(CharSequence s, int st, int c, int a) { }
@@ -140,6 +142,7 @@ public final class TransactionHistoryFragment extends Fragment {
         updatePageControls();
         renderFiltered();
         String path = "/transactions?limit=25";
+        if (!accountFilter.isEmpty()) path += "&accountId=" + android.net.Uri.encode(accountFilter);
         if (cursor != null) path += "&cursor=" + android.net.Uri.encode(cursor);
         if (thisMonth) {
             var zone = java.time.ZoneId.systemDefault();
@@ -211,16 +214,17 @@ public final class TransactionHistoryFragment extends Fragment {
         if (rows == null) { binding.statusText.setText(baseStatus); return; }
 
         String query = binding.searchInput.getText() == null ? "" : binding.searchInput.getText().toString();
-        String type = binding.typeFilter.getSelectedItem() == null ? "ALL" : binding.typeFilter.getSelectedItem().toString();
-        String status = binding.statusFilter.getSelectedItem() == null ? "ALL" : binding.statusFilter.getSelectedItem().toString();
-
-        List<ReadModels.TransactionSummary> filtered = TransactionHistoryFilter.apply(rows, query, type, status);
+        int typePosition = binding.typeFilter.getSelectedItemPosition();
+        int statusPosition = binding.statusFilter.getSelectedItemPosition();
+        String type = typePosition == 1 ? "CREDIT" : typePosition == 2 ? "DEBIT" : "ALL";
+        String status = statusPosition == 1 ? "COMPLETED" : statusPosition == 2 ? "PROCESSING" : statusPosition == 3 ? "FAILED" : "ALL";
+        Long from = null, to = null;
         if (thisMonth) {
-            var start = java.time.YearMonth.now().atDay(1).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant();
-            var end = java.time.YearMonth.now().plusMonths(1).atDay(1).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant();
-            filtered.removeIf(tx -> tx.createdAt == null || tx.createdAt.toDate().toInstant().isBefore(start)
-                    || !tx.createdAt.toDate().toInstant().isBefore(end));
+            var zone = java.time.ZoneId.systemDefault();
+            from = java.time.YearMonth.now(zone).atDay(1).atStartOfDay(zone).toInstant().toEpochMilli();
+            to = java.time.YearMonth.now(zone).plusMonths(1).atDay(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1;
         }
+        List<ReadModels.TransactionSummary> filtered = TransactionHistoryFilter.apply(rows, query, type, status, accountFilter, from, to);
         binding.statusText.setText(baseStatus + (thisMonth ? " · Tháng này" : "") + " · " + filtered.size() + " kết quả đã tải");
 
         for (ReadModels.TransactionSummary tx : filtered) {
@@ -229,7 +233,9 @@ public final class TransactionHistoryFragment extends Fragment {
 
             boolean isIncoming = tx.isIncoming();
             rowBinding.titleText.setText(ReadSummaryFormatter.transactionTitle(tx));
-            rowBinding.subtitleText.setText(tx.id);
+            rowBinding.subtitleText.setText(tx.createdAt == null ? tx.accountId
+                    : java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT,
+                    java.util.Locale.forLanguageTag("vi-VN")).format(tx.createdAt.toDate()));
 
             String amountFormatted = ReadSummaryFormatter.formatCurrency(tx.amountMinor, tx.currency);
             if (isIncoming) {
@@ -249,7 +255,6 @@ public final class TransactionHistoryFragment extends Fragment {
                         .setTitle("Chi tiết giao dịch")
                         .setMessage(ReadSummaryFormatter.transactionTitle(tx) + "\n\n"
                                 + ReadSummaryFormatter.transactionDetail(tx)
-                                + "\nMã giao dịch: " + tx.id
                                 + "\nTài khoản: " + tx.accountId)
                         .setPositiveButton("Đóng", null)
                         .show();
@@ -272,7 +277,7 @@ public final class TransactionHistoryFragment extends Fragment {
     private String statusMessage(ReadModelResult<?> result) {
         switch (result.getStatus()) {
             case LOADING: return "Đang tải lịch sử…";
-            case CACHED: return result.getMessage();
+            case CACHED: return "Dữ liệu có thể chưa cập nhật.";
             case ERROR: return "Chưa thể tải lịch sử giao dịch. Vuốt xuống để thử lại.";
             case EMPTY: return "Không có giao dịch.";
             default: return "Lịch sử đã đồng bộ.";

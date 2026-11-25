@@ -157,6 +157,9 @@ it.skipIf(!enabled)(
       await db
         .doc("users/" + uid)
         .set({ role: "CUSTOMER", active: true, fullName: "Smoke user" });
+      await db.doc("accounts/" + uid + "_checking").set({ ownerUid: uid, type: "CHECKING", status: "ACTIVE", currency: "VND", availableMinor: 1000, bookedMinor: 1000 });
+      await db.doc("checkingDetails/" + uid + "_checking").set({ dailyLimitMinor: 500 });
+      await db.doc("accounts/" + uid + "_other").set({ ownerUid: "another-user", type: "CHECKING", status: "ACTIVE", currency: "VND", availableMinor: 100, bookedMinor: 100 });
       let ready = false;
       for (let n = 0; n < 50; n++) {
         try {
@@ -185,6 +188,8 @@ it.skipIf(!enabled)(
       expect(((await profile.json()) as { fullName: string }).fullName).toBe(
         "Smoke user",
       );
+      expect((await fetch("http://127.0.0.1:3197/accounts/" + uid + "_checking/details", { headers: { Authorization: "Bearer " + login.idToken } })).status).toBe(200);
+      expect((await fetch("http://127.0.0.1:3197/accounts/" + uid + "_other/details", { headers: { Authorization: "Bearer " + login.idToken } })).status).toBe(403);
       const denied = await fetch("http://127.0.0.1:3197/officer/audit", {
         headers: { Authorization: "Bearer " + login.idToken },
       });
@@ -232,6 +237,9 @@ it.skipIf(!enabled)(
       expect((await fetch(firestoreUrl + "/accounts/" + uid, { headers })).status).toBe(403);
       expect((await fetch(firestoreUrl + "/auditLogs/" + uid, { headers })).status).toBe(403);
       expect((await fetch("http://127.0.0.1:3197/officer/audit", { headers })).status).toBe(200);
+      expect((await fetch("http://127.0.0.1:3197/officer/rate-policies", { headers })).status).toBe(403);
+      const deniedPolicyUpdate = await fetch("http://127.0.0.1:3197/officer/rate-policies", { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify({ rateType: "SAVINGS", annualRateBasisPoints: 500, effectiveFrom: Date.now() + 60000, reason: "Policy test" }) });
+      expect(deniedPolicyUpdate.status).toBe(403);
     } finally {
       child.kill("SIGTERM");
       await db.terminate();

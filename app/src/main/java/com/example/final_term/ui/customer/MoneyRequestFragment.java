@@ -17,43 +17,21 @@ import com.example.final_term.auth.AuthState;
 import com.example.final_term.auth.UserRole;
 import com.example.final_term.core.AppContainer;
 import com.example.final_term.core.FinalTermApplication;
-import com.example.final_term.data.BackendApiClient;
 import com.example.final_term.data.ReadModelResult;
 import com.example.final_term.data.ReadModels.AccountSummary;
-import com.example.final_term.data.ReadSummaryFormatter;
 import com.example.final_term.databinding.FragmentMoneyRequestBinding;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.UUID;
 
 public final class MoneyRequestFragment extends Fragment {
-    private static final String PATH = "/money-requests";
     private static final String DEPOSIT = "DEPOSIT";
     private static final String WITHDRAWAL = "WITHDRAWAL";
     private final List<String> accountIds = new ArrayList<>();
     private FragmentMoneyRequestBinding binding;
     private LiveData<ReadModelResult<List<AccountSummary>>> accounts;
-    private BackendApiClient api;
     private String uid;
-    private String pendingUid;
-    private String pendingBody;
-    private boolean sending;
-    private boolean readingHistory;
-
-    @Override public void onCreate(@Nullable Bundle state) {
-        super.onCreate(state);
-        if (state != null) {
-            pendingUid = state.getString("pendingUid");
-            pendingBody = state.getString("pendingBody");
-        }
-    }
 
     @Nullable @Override public View onCreateView(@NonNull LayoutInflater inflater,
             @Nullable ViewGroup container, @Nullable Bundle state) {
@@ -64,18 +42,13 @@ public final class MoneyRequestFragment extends Fragment {
     @Override public void onViewCreated(@NonNull View view, @Nullable Bundle state) {
         super.onViewCreated(view, state);
         AppContainer app = ((FinalTermApplication) requireActivity().getApplication()).getAppContainer();
-        api = app.getBackendApiClient();
         String operation = getArguments() == null ? DEPOSIT : getArguments().getString("operation", DEPOSIT);
         binding.operationInput.setAdapter(adapter(List.of("Nạp tiền", "Rút tiền")));
         binding.operationInput.setSelection(WITHDRAWAL.equals(operation) ? 1 : 0);
 
         binding.backButton.setOnClickListener(v -> androidx.navigation.Navigation.findNavController(v).navigateUp());
         binding.helpButton.setOnClickListener(v -> {
-            new MaterialAlertDialogBuilder(requireContext())
-                    .setTitle("Quy trình Nạp / Rút tiền")
-                    .setMessage("Số dư chỉ thay đổi khi giao dịch được xác nhận hoàn tất.")
-                    .setPositiveButton("Đã hiểu", null)
-                    .show();
+            binding.statusText.setText("Số dư thay đổi sau khi giao dịch hoàn tất.");
         });
 
         binding.tabDeposit.setOnClickListener(v -> {
@@ -98,17 +71,27 @@ public final class MoneyRequestFragment extends Fragment {
             }
             @Override public void onNothingSelected(AdapterView<?> parent) { }
         });
-        binding.statusText.setText(pendingBody == null ? "Đang tải tài khoản…" :
-                "Chưa xác nhận được yêu cầu trước. Gửi lại để kiểm tra cùng mã yêu cầu.");
+        binding.statusText.setText("Đang tải tài khoản…");
         binding.demoSettlementButton.setVisibility(View.GONE);
         updateOperationUi();
         binding.submitButton.setOnClickListener(v -> {
-            if (pendingBody != null) {
-                submit();
-                return;
-            }
             Bundle args = new Bundle();
-            args.putString("demoCashOperation", binding.operationInput.getSelectedItemPosition() == 1 ? WITHDRAWAL : DEPOSIT);
+            boolean withdrawal = binding.operationInput.getSelectedItemPosition() == 1;
+            args.putString("demoCashOperation", withdrawal ? WITHDRAWAL : DEPOSIT);
+            if (withdrawal) {
+                int index = binding.accountInput.getSelectedItemPosition();
+                if (index < 0 || index >= accountIds.size()) {
+                    binding.statusText.setText("Chọn tài khoản thanh toán khả dụng.");
+                    return;
+                }
+                String amount = binding.amountInput.getText().toString().trim();
+                if (!Phase2Presentation.validRequestAmount(amount)) {
+                    binding.amountInput.setError("Nhập số tiền VND nguyên hợp lệ, lớn hơn 0.");
+                    return;
+                }
+                args.putString("accountId", accountIds.get(index));
+                args.putString("amountMinor", amount);
+            }
             androidx.navigation.Navigation.findNavController(v).navigate(R.id.transfer, args);
         });
         binding.historyButton.setOnClickListener(v ->
@@ -121,18 +104,14 @@ public final class MoneyRequestFragment extends Fragment {
             if (uid != null && Objects.equals(uid, currentUid)) return;
             if (accounts != null) accounts.removeObservers(getViewLifecycleOwner());
             uid = currentUid;
-            if (uid != null && !Objects.equals(uid, pendingUid)) clearPending();
             accountIds.clear();
             binding.accountInput.setAdapter(null);
-            sending = false;
-            readingHistory = false;
             updateControls();
             if (uid == null) {
                 binding.statusText.setText("Vui lòng đăng nhập bằng tài khoản khách hàng.");
                 return;
             }
-            binding.statusText.setText(pendingBody == null ? "Đang tải tài khoản…" :
-                    "Chưa xác nhận được yêu cầu trước. Gửi lại để kiểm tra cùng mã yêu cầu.");
+            binding.statusText.setText("Đang tải tài khoản…");
             accounts = app.getReadRepository().observeAccounts(uid);
             accounts.observe(getViewLifecycleOwner(), this::renderAccounts);
         });
@@ -165,140 +144,18 @@ public final class MoneyRequestFragment extends Fragment {
         updateControls();
     }
 
-    private void submit() {
-        if (sending || uid == null) return;
-        boolean retry = pendingBody != null;
-        if (!retry) {
-            int index = binding.accountInput.getSelectedItemPosition();
-            if (index < 0 || index >= accountIds.size()) return;
-            String amount = binding.amountInput.getText().toString().trim();
-            if (!Phase2Presentation.validRequestAmount(amount)) {
-                binding.amountInput.setError("Nhập số tiền VND nguyên hợp lệ, lớn hơn 0.");
-                return;
-            }
-            try {
-                pendingBody = new JSONObject()
-                        .put("requestId", UUID.randomUUID().toString())
-                        .put("accountId", accountIds.get(index))
-                        .put("amountMinor", Long.parseLong(amount))
-                        .put("currency", "VND")
-                        .put("type", binding.operationInput.getSelectedItemPosition() == 1 ? WITHDRAWAL : DEPOSIT)
-                        .toString();
-                pendingUid = uid;
-            } catch (JSONException error) {
-                binding.statusText.setText("Không thể tạo dữ liệu yêu cầu.");
-                return;
-            }
-        }
-
-        FragmentMoneyRequestBinding currentView = binding;
-        String currentUid = uid;
-        String requestBody = pendingBody;
-        sending = true;
-        binding.statusText.setText(retry ? "Đang tra cứu yêu cầu cũ…" : "Đang gửi yêu cầu…");
-        updateControls();
-        com.google.android.gms.tasks.Task<BackendApiClient.Response> submission;
-        if (retry) {
-            try {
-                String requestId = new JSONObject(requestBody).getString("requestId");
-                submission = api.get(PATH + "/by-request/" + requestId).continueWithTask(task -> {
-                    if (!task.isSuccessful()) throw task.getException();
-                    return task.getResult().statusCode == 404 ? api.post(PATH, requestBody)
-                            : com.google.android.gms.tasks.Tasks.forResult(task.getResult());
-                });
-            } catch (JSONException error) {
-                sending = false;
-                clearPending();
-                updateControls();
-                binding.statusText.setText("Không đọc được mã yêu cầu cũ.");
-                return;
-            }
-        } else submission = api.post(PATH, requestBody);
-        submission.addOnCompleteListener(task -> {
-            if (binding != currentView || pendingBody != requestBody || !Objects.equals(uid, currentUid)) return;
-            sending = false;
-            if (task.isSuccessful()) {
-                BackendApiClient.Response response = task.getResult();
-                if (response.statusCode >= 200 && response.statusCode < 300) {
-                    try {
-                        JSONObject receipt = new JSONObject(response.body);
-                        String requestId = receipt.getString("requestId");
-                        String id = receipt.getString("id");
-                        if (!id.isEmpty() && "REQUESTED".equals(receipt.getString("status"))
-                                && requestId.equals(new JSONObject(requestBody).getString("requestId"))) {
-                            clearPending();
-                            binding.amountInput.setText("");
-                            binding.statusText.setText("Yêu cầu đã được tiếp nhận. Mã yêu cầu: " + id);
-                            updateControls();
-                            return;
-                        }
-                    } catch (JSONException ignored) {
-                        // Retry with the same request ID when the receipt is invalid.
-                    }
-                } else if (response.statusCode >= 400 && response.statusCode < 500
-                        && response.statusCode != 408 && response.statusCode != 429) {
-                    clearPending();
-                    binding.statusText.setText("Không thể gửi yêu cầu. Vui lòng kiểm tra thông tin rồi thử lại.");
-                    updateControls();
-                    return;
-                }
-            }
-            binding.statusText.setText("Chưa xác nhận được kết quả. Gửi lại sẽ dùng cùng mã yêu cầu.");
-            updateControls();
-        });
-    }
-
-    private void openHistory() {
-        if (uid == null || readingHistory) return;
-        FragmentMoneyRequestBinding currentView = binding;
-        String currentUid = uid;
-        readingHistory = true;
-        updateControls();
-        api.get(PATH + "?limit=25").addOnCompleteListener(task -> {
-            if (binding != currentView || !Objects.equals(uid, currentUid)) return;
-            readingHistory = false;
-            updateControls();
-            String message = "Không thể tải yêu cầu đã gửi. Vui lòng thử lại.";
-            if (task.isSuccessful()) {
-                BackendApiClient.Response response = task.getResult();
-                if (response.statusCode >= 200 && response.statusCode < 300) {
-                    try {
-                        JSONArray items = new JSONObject(response.body).getJSONArray("items");
-                        List<String> rows = new ArrayList<>();
-                        for (int index = 0; index < items.length(); index++) {
-                            JSONObject row = items.getJSONObject(index);
-                            rows.add(operationLabel(row.getString("type")) + " · "
-                                    + ReadSummaryFormatter.money(row.getLong("amountMinor")) + "\n"
-                                    + row.getString("status") + " · " + row.getString("accountId"));
-                        }
-                        message = rows.isEmpty() ? "Chưa có yêu cầu nạp/rút." : String.join("\n\n", rows);
-                    } catch (JSONException ignored) {
-                        // Keep the error message for an invalid response.
-                    }
-                }
-            }
-            new MaterialAlertDialogBuilder(requireContext())
-                    .setTitle("Yêu cầu đã gửi")
-                    .setMessage(message)
-                    .setPositiveButton("Đóng", null)
-                    .show();
-        });
-    }
-
     private ArrayAdapter<String> adapter(List<String> labels) {
         return new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_dropdown_item, labels);
     }
 
     private void updateControls() {
-        boolean retry = pendingBody != null;
-        binding.operationInput.setEnabled(!retry);
-        binding.accountInput.setEnabled(!retry);
-        binding.amountInput.setEnabled(!retry);
-        binding.submitButton.setEnabled(uid != null && !sending && (retry || !accountIds.isEmpty()));
+        binding.operationInput.setEnabled(true);
+        binding.accountInput.setEnabled(true);
+        binding.amountInput.setEnabled(true);
+        binding.submitButton.setEnabled(uid != null && (binding.operationInput.getSelectedItemPosition() == 0 || !accountIds.isEmpty()));
         boolean withdrawal = binding.operationInput.getSelectedItemPosition() == 1;
-        binding.submitButton.setText(retry && !sending ? "Gửi lại yêu cầu"
-                : withdrawal ? "Tiếp tục · rút tiền" : "Nạp tiền bằng thẻ");
-        binding.historyButton.setEnabled(uid != null && !readingHistory);
+        binding.submitButton.setText(withdrawal ? "Tiếp tục · rút tiền" : "Nạp tiền bằng thẻ");
+        binding.historyButton.setEnabled(uid != null);
     }
 
     private void selectOperation(int position) {
@@ -314,11 +171,6 @@ public final class MoneyRequestFragment extends Fragment {
         ((View) binding.accountInput.getParent()).setVisibility(withdrawal ? View.VISIBLE : View.GONE);
         ((View) binding.amountInput.getParent()).setVisibility(withdrawal ? View.VISIBLE : View.GONE);
         updateControls();
-    }
-
-    private void clearPending() {
-        pendingBody = null;
-        pendingUid = null;
     }
 
     private static String operationLabel(String type) {
@@ -347,19 +199,12 @@ public final class MoneyRequestFragment extends Fragment {
         binding.amountInput.setText(String.valueOf(currentVal + delta));
     }
 
-    @Override public void onSaveInstanceState(@NonNull Bundle state) {
-        super.onSaveInstanceState(state);
-        state.putString("pendingUid", pendingUid);
-        state.putString("pendingBody", pendingBody);
-    }
 
     @Override public void onDestroyView() {
         binding = null;
         accounts = null;
         uid = null;
         accountIds.clear();
-        sending = false;
-        readingHistory = false;
         super.onDestroyView();
     }
 }

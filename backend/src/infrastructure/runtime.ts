@@ -54,6 +54,7 @@ export function runtime() {
   const face = faceProvider();
   const bank = new Banking(store, {
     otpSecret: cfg.otpSecret,
+    rateLimits: cfg.rateLimits,
     face,
     faceThresholds: z.record(z.string().regex(/^[A-Z]{3}$/), z.number().int().positive())
       .parse(JSON.parse(process.env.FACE_THRESHOLDS_MINOR ?? '{"VND":100000000}')),

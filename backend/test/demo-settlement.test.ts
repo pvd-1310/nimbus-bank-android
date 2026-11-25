@@ -3,6 +3,53 @@ import { Banking } from "../src/core/banking.js";
 import { MemoryStore } from "./support/memory-store.js";
 import type { Actor } from "../src/modules/auth/auth.types.js";
 
+it("settles a cash withdrawal once and returns the refreshed balance in its receipt", async () => {
+  const store = new MemoryStore();
+  const actor: Actor = { uid: "customer", role: "CUSTOMER", permissions: [] };
+  let now = 100;
+  const bank = new Banking(store, { otpSecret: "test fixture", now: () => now });
+  await store.run(async (t) => {
+    t.set("users/customer", { role: "CUSTOMER", active: true });
+    t.set("accounts/checking", { ownerUid: actor.uid, type: "CHECKING", status: "ACTIVE", currency: "VND", availableMinor: 1000, bookedMinor: 1000, version: 0 });
+  });
+  const input = { requestId: "cash-out", accountId: "checking", type: "WITHDRAWAL", amountMinor: 250, currency: "VND" };
+  const first = await bank.requests.demoIntent(actor, input);
+  expect(await bank.requests.demoIntent(actor, input)).toMatchObject({ id: first.id });
+  const otp = await bank.security.challenge(actor, first.id);
+  await bank.security.verify(actor, first.id, otp.challengeId, otp.code);
+  expect(await bank.requests.commitDemo(actor, first.id)).toMatchObject({ status: "COMMIT_PENDING" });
+  expect(await store.run((t) => t.list("transactions"))).toHaveLength(0);
+  expect((await bank.accounts.get(actor, "checking")).bookedMinor).toBe(1000);
+  now += 5000;
+  const receipt = await bank.requests.reconcileDemo(actor, first.id);
+  expect(receipt).toMatchObject({ status: "COMMITTED", balanceAfterMinor: 750 });
+  expect(await bank.requests.reconcileDemo(actor, first.id)).toMatchObject({ status: "COMMITTED", balanceAfterMinor: 750 });
+  expect((await bank.accounts.get(actor, "checking")).availableMinor).toBe(750);
+  expect(await store.run((t) => t.list("ledgerEntries"))).toHaveLength(2);
+  expect(await store.run((t) => t.list("transactions"))).toMatchObject([expect.objectContaining({ type: "DEMO_WITHDRAWAL", status: "DEMO_SETTLED", balanceAfterMinor: 750 })]);
+});
+
+it("rejects over-limit withdrawals without changing balance or writing a ledger", async () => {
+  const store = new MemoryStore();
+  const actor: Actor = { uid: "customer", role: "CUSTOMER", permissions: [] };
+  let now = 100;
+  const bank = new Banking(store, { otpSecret: "test fixture", now: () => now });
+  await store.run(async (t) => {
+    t.set("users/customer", { role: "CUSTOMER", active: true });
+    t.set("accounts/checking", { ownerUid: actor.uid, type: "CHECKING", status: "ACTIVE", currency: "VND", availableMinor: 1000, bookedMinor: 1000, version: 0 });
+    t.set("checkingDetails/checking", { dailyLimitMinor: 50 });
+  });
+  const intent = await bank.requests.demoIntent(actor, { requestId: "over-limit", accountId: "checking", type: "WITHDRAWAL", amountMinor: 100, currency: "VND" });
+  const otp = await bank.security.challenge(actor, intent.id);
+  await bank.security.verify(actor, intent.id, otp.challengeId, otp.code);
+  await bank.requests.commitDemo(actor, intent.id);
+  now += 5000;
+  expect(await bank.requests.reconcileDemo(actor, intent.id)).toMatchObject({ status: "FAILED", failureCode: "DAILY_LIMIT_EXCEEDED" });
+  expect((await bank.accounts.get(actor, "checking")).availableMinor).toBe(1000);
+  expect(await store.run((t) => t.list("ledgerEntries"))).toHaveLength(0);
+  expect(await store.run((t) => t.list("transactions"))).toHaveLength(0);
+});
+
 it("keeps demo movement pending until reconciliation and posts one balanced settlement", async () => {
   const store = new MemoryStore();
   const actor: Actor = { uid: "customer", role: "CUSTOMER", permissions: [] };

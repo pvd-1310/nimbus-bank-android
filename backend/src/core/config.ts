@@ -29,11 +29,15 @@ export function config(env: NodeJS.ProcessEnv = process.env) {
     !env.STRIPE_SECRET_KEY || env.STRIPE_SECRET_KEY.startsWith("sk_test_"),
     "STRIPE_TEST_KEY_REQUIRED",
   );
+  const rateMinBasisPoints = Number(env.SAVINGS_RATE_MIN_BPS ?? 0);
+  const rateMaxBasisPoints = Number(env.SAVINGS_RATE_MAX_BPS ?? 10000);
+  check(Number.isInteger(rateMinBasisPoints) && Number.isInteger(rateMaxBasisPoints) && rateMinBasisPoints >= 0 && rateMaxBasisPoints <= 10000 && rateMinBasisPoints <= rateMaxBasisPoints, "INVALID_RATE_LIMITS");
   return {
     mode,
     projectId: env.FIREBASE_PROJECT_ID ?? "demo-mobile-banking",
     host: env.HOST ?? "127.0.0.1",
     port,
     otpSecret,
+    rateLimits: { minBasisPoints: rateMinBasisPoints, maxBasisPoints: rateMaxBasisPoints },
   };
 }

@@ -378,7 +378,7 @@
                     android:layout_marginEnd="6dp"
                     android:layout_weight="1"
                     android:backgroundTint="@color/glass_pill"
-                    android:text="Thẻ &amp; Khoản vay"
+                    android:text="Tất cả tài khoản"
                     android:textColor="@color/ink"
                     android:textSize="13sp"
                     app:cornerRadius="18dp"

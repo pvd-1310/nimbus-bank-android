@@ -50,6 +50,7 @@ public final class TransferFragment extends Fragment {
     private boolean commitPending;
     private long authoritativeAmount;
     private long authoritativeFee;
+    private Long authoritativeBalanceAfter;
     private String authoritativeCurrency = "VND";
     private String authoritativeTarget = "";
     private String recipientAccountId;
@@ -58,6 +59,9 @@ public final class TransferFragment extends Fragment {
     private boolean busy;
     private boolean external;
     private String cashOperation;
+    private String initialCashAccount;
+    private String initialCashAmount;
+    private boolean cashArgumentsApplied;
     private String providerReference = "";
     private ReadModelResult<List<ReadModels.AccountSummary>> lastAccounts;
     private String confirmedSource;
@@ -78,6 +82,8 @@ public final class TransferFragment extends Fragment {
         super.onCreate(state);
         faceCamera.restore(state);
         cashOperation = getArguments() == null ? null : getArguments().getString("demoCashOperation");
+        initialCashAccount = getArguments() == null ? null : getArguments().getString("accountId");
+        initialCashAmount = getArguments() == null ? null : getArguments().getString("amountMinor");
         if (state == null) return;
         intentId = state.getString("intentId");
         requestId = state.getString("requestId");
@@ -89,6 +95,7 @@ public final class TransferFragment extends Fragment {
         confirmedSource = state.getString("confirmedSource");
         authoritativeAmount = state.getLong("authoritativeAmount");
         authoritativeFee = state.getLong("authoritativeFee");
+        if (state.containsKey("authoritativeBalanceAfter")) authoritativeBalanceAfter = state.getLong("authoritativeBalanceAfter");
         authoritativeCurrency = state.getString("authoritativeCurrency", "VND");
         authoritativeTarget = state.getString("authoritativeTarget", "");
         recipientAccountId = state.getString("recipientAccountId");
@@ -109,6 +116,7 @@ public final class TransferFragment extends Fragment {
         state.putString("confirmedSource", confirmedSource);
         state.putLong("authoritativeAmount", authoritativeAmount);
         state.putLong("authoritativeFee", authoritativeFee);
+        if (authoritativeBalanceAfter != null) state.putLong("authoritativeBalanceAfter", authoritativeBalanceAfter);
         state.putString("authoritativeCurrency", authoritativeCurrency);
         state.putString("authoritativeTarget", authoritativeTarget);
         state.putString("recipientAccountId", recipientAccountId);
@@ -452,7 +460,7 @@ public final class TransferFragment extends Fragment {
                 ReadSummaryFormatter.formatCurrency(authoritativeFee, authoritativeCurrency) +
                 " · Tổng: " + ReadSummaryFormatter.formatCurrency(amount + authoritativeFee, authoritativeCurrency));
         binding.confirmNoteText.setText(cardTopup() ? "Số dư sẽ được cập nhật sau khi thanh toán hoàn tất."
-                : external ? "Giao dịch thử nghiệm, chưa được gửi tới ngân hàng nhận."
+                : external ? "Giao dịch sẽ được xử lý sau khi bạn xác nhận."
                 : "Số dư sẽ được cập nhật sau khi bạn xác nhận giao dịch."
                 + (note.isEmpty() ? "" : "\nNội dung: " + note));
     }
@@ -463,10 +471,11 @@ public final class TransferFragment extends Fragment {
         binding.successAmountDisplay.setText(ReadSummaryFormatter.formatCurrency(amount, authoritativeCurrency));
         binding.receiptTxId.setVisibility(View.GONE);
         binding.successHeadline.setText(cardTopup() ? "Tiền đã được ghi có vào tài khoản"
-                : "Chuyển khoản thành công");
-        binding.receiptTargetInfo.setText((cardTopup() ? "Tài khoản nhận: " : "Chuyển đến: ") + target + " (Phí: " +
+                : "WITHDRAWAL".equals(cashOperation) ? "Rút tiền thành công" : "Chuyển khoản thành công");
+        binding.receiptTargetInfo.setText((cardTopup() ? "Tài khoản nhận: " : "WITHDRAWAL".equals(cashOperation) ? "Tài khoản đã rút từ: " : "Chuyển đến: ") + target + " (Phí: " +
                 ReadSummaryFormatter.formatCurrency(authoritativeFee, authoritativeCurrency) + ")");
-        binding.receiptTime.setText("Giao dịch đã được xác nhận.");
+        binding.receiptTime.setText(authoritativeBalanceAfter == null ? "Giao dịch đã được xác nhận."
+                : "Số dư mới: " + ReadSummaryFormatter.formatCurrency(authoritativeBalanceAfter, authoritativeCurrency));
     }
 
     private long receiptAmount() {
@@ -479,6 +488,7 @@ public final class TransferFragment extends Fragment {
             JSONObject payload = new JSONObject(payloadKey);
             if (external) return payload.optString("beneficiaryAccount");
             if (cardTopup()) return confirmedSource == null ? "Tài khoản Nimbus" : confirmedSource;
+            if ("WITHDRAWAL".equals(cashOperation)) return confirmedSource == null ? "Tài khoản thanh toán" : confirmedSource;
             if (cashOperation != null) return "Tài khoản Nimbus Bank";
             String phone = payload.optString("destinationPhone", payload.optString("destinationAccountId"));
             return recipientName.isEmpty() ? phone : recipientName + " · " + phone;
@@ -532,6 +542,12 @@ public final class TransferFragment extends Fragment {
         if (labels.isEmpty()) labels.add("Không có tài khoản nguồn khả dụng");
         binding.sourceInput.setAdapter(new ArrayAdapter<>(requireContext(),
                 android.R.layout.simple_spinner_dropdown_item, labels));
+        if (!cashArgumentsApplied && cashOperation != null) {
+            int selected = sourceIds.indexOf(initialCashAccount);
+            if (selected >= 0) binding.sourceInput.setSelection(selected);
+            if (initialCashAmount != null) binding.amountInput.setText(initialCashAmount);
+            cashArgumentsApplied = true;
+        }
         updateSubmitButton();
     }
 
@@ -973,6 +989,7 @@ public final class TransferFragment extends Fragment {
 
     private void renderDemoOutcome(JSONObject result) throws JSONException {
         providerReference = result.optString("providerReference", "");
+        if (!result.isNull("balanceAfterMinor")) authoritativeBalanceAfter = result.getLong("balanceAfterMinor");
         String state = result.getString("status");
         if ("COMMITTED".equals(state)) {
             finishTransfer();

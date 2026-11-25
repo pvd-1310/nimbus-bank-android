@@ -17,6 +17,7 @@ interface Options {
   now?: () => number;
   face?: FaceService;
   faceThresholds?: Record<string, number>;
+  rateLimits?: { minBasisPoints: number; maxBasisPoints: number };
 }
 export class Banking {
   readonly security: IntentSecurity;

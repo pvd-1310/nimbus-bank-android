@@ -71,11 +71,15 @@
     <fragment
         android:id="@+id/accountList"
         android:name="com.example.final_term.ui.customer.AccountListFragment"
-        android:label="Tài khoản và thông báo" />
+        android:label="Tài khoản và thông báo">
+        <argument android:name="activeNavItem" app:argType="integer" />
+    </fragment>
     <fragment
         android:id="@+id/transactionHistory"
         android:name="com.example.final_term.ui.customer.TransactionHistoryFragment"
-        android:label="Lịch sử giao dịch" />
+        android:label="Lịch sử giao dịch">
+        <argument android:name="accountId" app:argType="string" android:defaultValue="" />
+    </fragment>
     <fragment
         android:id="@+id/profile"
         android:name="com.example.final_term.ui.profile.ProfileFragment"
@@ -89,4 +93,5 @@
     <fragment android:id="@+id/officerEkyc" android:name="com.example.final_term.ui.officer.OfficerFeatureFragment" android:label="Hồ sơ eKYC" />
     <fragment android:id="@+id/officerAudit" android:name="com.example.final_term.ui.officer.OfficerFeatureFragment" android:label="Kiểm tra giao dịch" />
     <fragment android:id="@+id/officerRates" android:name="com.example.final_term.ui.officer.OfficerFeatureFragment" android:label="Chính sách lãi suất" />
+    <fragment android:id="@+id/ratePolicyEditor" android:name="com.example.final_term.ui.officer.RatePolicyEditorFragment" android:label="Cập nhật lãi suất" />
 </navigation>

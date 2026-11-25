@@ -20,12 +20,9 @@ export function registerAccountsRoutes(route: Route, d: AppDependencies) {
     d.bank.accounts.savings(
       a,
       String(r.params.id),
-      z.coerce
-        .number()
-        .int()
-        .min(0)
-        .max(36500)
-        .parse(r.query.days ?? 30),
+      r.query.month == null
+        ? undefined
+        : z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).parse(r.query.month),
     ),
   );
   route("get", "/accounts/:id/mortgage-schedule", (a, r) =>

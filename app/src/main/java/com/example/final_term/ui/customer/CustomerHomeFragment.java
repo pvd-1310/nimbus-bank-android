@@ -104,7 +104,11 @@ public final class CustomerHomeFragment extends Fragment {
         });
 
         // Navigation CTA handlers
-        binding.accountButton.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.accountList));
+        binding.accountButton.setOnClickListener(v -> {
+            Bundle args = new Bundle();
+            args.putInt("activeNavItem", R.id.nav_accounts);
+            navigateToAccounts(v, args);
+        });
         binding.historyButton.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.transactionHistory));
         binding.branchLocatorButton.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.branchLocator));
 
@@ -138,8 +142,20 @@ public final class CustomerHomeFragment extends Fragment {
         binding.notificationButton.setOnClickListener(v -> {
             Bundle args = new Bundle();
             args.putInt("activeNavItem", R.id.nav_accounts);
-            Navigation.findNavController(v).navigate(R.id.accountList, args);
+            navigateToAccounts(v, args);
         });
+    }
+
+    private void navigateToAccounts(View source, Bundle args) {
+        androidx.navigation.NavController controller = Navigation.findNavController(source);
+        controller.navigate(R.id.accountList, args);
+        androidx.navigation.NavBackStackEntry entry = controller.getCurrentBackStackEntry();
+        if (entry != null && entry.getDestination().getId() == R.id.accountList) {
+            entry.getSavedStateHandle().set("activeNavItem", R.id.nav_accounts);
+            if (entry.getArguments() != null) {
+                entry.getArguments().putInt("activeNavItem", R.id.nav_accounts);
+            }
+        }
     }
 
     private String computeInitials(String name) {

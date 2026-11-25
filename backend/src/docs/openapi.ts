@@ -183,7 +183,8 @@ const endpoints: [string, string, string, unknown?][] = [
   ["get", "/orders", "Owned orders with payment and fulfillment status"],
   ["get", "/orders/{id}", "Owned order with payment and fulfillment status"],
   ["get", "/orders/by-request/{id}", "Recover an owned order by original request ID"],
-  ["get", "/officer/rate-policies", "List stored rate policy versions with RATE_UPDATE permission"],
+  ["get", "/officer/rate-types", "List bank-wide savings and loan rate categories with RATE_UPDATE permission"],
+  ["get", "/officer/rate-policies", "List stored bank-wide rate policy versions with RATE_UPDATE permission"],
   ["get", "/branches", "Active branch directory"],
   [
     "post",
@@ -230,11 +231,12 @@ const endpoints: [string, string, string, unknown?][] = [
   [
     "post",
     "/officer/rate-policies",
-    "Create future-effective policy version",
+    "Create future-effective bank-wide savings or loan rate version",
     object({
-      productId: id,
+      rateType: { type: "string", enum: ["SAVINGS", "LOAN"] },
       annualRateBasisPoints: { type: "integer", minimum: 0, maximum: 10000 },
       effectiveFrom: integer,
+      reason: text,
     }),
   ],
   [

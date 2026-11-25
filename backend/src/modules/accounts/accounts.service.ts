@@ -3,7 +3,7 @@ import type { Doc } from "../../core/store.js";
 import { check } from "../../shared/errors.js";
 import { queryOptions } from "../../shared/pagination.js";
 import type { Actor } from "../auth/auth.types.js";
-import { mortgageSchedule, savingsEstimate } from "./calculations.js";
+import { mortgageSchedule, savingsMonthlyEstimate } from "./calculations.js";
 export class AccountService {
   constructor(private bank: Banking) {}
   async details(a: Actor, id: string) {
@@ -24,7 +24,7 @@ export class AccountService {
       return { account: acc, details: detail };
     });
   }
-  async savings(a: Actor, id: string, days: number) {
+  async savings(a: Actor, id: string, month?: string) {
     return this.bank.store.run(async (t) => {
       await this.bank.authorize(t, a);
       const acc = await this.bank.owned(t, a, id);
@@ -33,40 +33,78 @@ export class AccountService {
       check(detail, "DETAILS_UNAVAILABLE", 404);
       const pinned = await t.get("ratePolicies/" + detail.ratePolicyVersion);
       check(pinned, "POLICY_UNAVAILABLE");
-      let rate: Doc = { ...pinned, id: detail.ratePolicyVersion };
+      const selectedMonth = month ?? new Date(this.bank.now()).toISOString().slice(0, 7);
+      const monthMatch = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(selectedMonth);
+      check(monthMatch, "INVALID_TERMS");
+      const year = Number(monthMatch[1]);
+      const monthIndex = Number(monthMatch[2]) - 1;
+      const startDate = new Date(0);
+      startDate.setUTCFullYear(year, monthIndex, 1);
+      startDate.setUTCHours(0, 0, 0, 0);
+      const endDate = new Date(0);
+      endDate.setUTCFullYear(year, monthIndex + 1, 1);
+      endDate.setUTCHours(0, 0, 0, 0);
+      const periodStart = startDate.getTime();
+      const periodEnd = endDate.getTime();
+
       const productId = detail.productId ?? pinned.productId;
-      if (productId) {
+      const productPolicies: Doc[] = [];
+      if (typeof productId === "string" && productId.length > 0) {
         let after: string | undefined;
-        const now = this.bank.now();
         do {
           const policies = await t.list("ratePolicies", { productId }, { after, limit: 100 });
-          for (const policy of policies) {
-            if (policy.effectiveFrom <= now &&
-                (rate.effectiveFrom > now || policy.effectiveFrom > (rate.effectiveFrom ?? 0)
-                || (policy.effectiveFrom === rate.effectiveFrom && policy.version > rate.version))) {
-              rate = policy;
-            }
-          }
+          productPolicies.push(...policies);
           after = policies.length === 100 ? policies.at(-1)?.id : undefined;
         } while (after);
       }
-      check(rate.effectiveFrom == null || rate.effectiveFrom <= this.bank.now(), "POLICY_UNAVAILABLE");
+      const bankPolicies = await t.list("ratePolicies", { rateType: "SAVINGS" }, { limit: 1000 });
+      const firstBankEffectiveFrom = bankPolicies.reduce<number | null>((first, policy) =>
+        first == null || policy.effectiveFrom < first ? policy.effectiveFrom : first, null);
+      const ratePolicies = [
+        ...productPolicies.filter((policy) => firstBankEffectiveFrom == null || policy.effectiveFrom < firstBankEffectiveFrom),
+        ...bankPolicies,
+      ];
+      if (ratePolicies.length === 0) {
+        check(pinned.productId == null || pinned.productId === productId, "POLICY_UNAVAILABLE");
+        ratePolicies.push({ ...pinned, id: detail.ratePolicyVersion });
+      }
+      const calculationPolicies = ratePolicies.map((policy) => ({
+        id: String(policy.id),
+        effectiveFrom: Number.isSafeInteger(policy.effectiveFrom)
+          ? policy.effectiveFrom : periodStart,
+        annualRateBasisPoints: policy.annualRateBasisPoints,
+        version: policy.version,
+      }));
+      const estimate = savingsMonthlyEstimate(
+        detail.principalMinor,
+        periodStart,
+        periodEnd,
+        calculationPolicies,
+      );
+      const now = this.bank.now();
+      const currentPolicy = calculationPolicies
+        .filter((policy) => policy.effectiveFrom <= now)
+        .sort((x, y) => x.effectiveFrom - y.effectiveFrom || (x.version ?? 0) - (y.version ?? 0))
+        .at(-1);
+      check(currentPolicy, "POLICY_UNAVAILABLE");
       return {
         demo: acc.demo === true,
         principalMinor: detail.principalMinor,
-        annualRateBasisPoints: rate.annualRateBasisPoints,
-        effectiveFrom: rate.effectiveFrom ?? null,
+        balanceMinor: acc.availableMinor ?? acc.balanceMinor ?? detail.principalMinor,
+        annualRateBasisPoints: currentPolicy.annualRateBasisPoints,
+        effectiveFrom: currentPolicy.effectiveFrom,
         openedAt: detail.openedAt ?? null,
         maturityAt: detail.maturityAt ?? null,
-        days,
-        profitMinor: savingsEstimate(
-          detail.principalMinor,
-          rate.annualRateBasisPoints,
-          days,
-        ),
+        month: selectedMonth,
+        periodStart,
+        periodEnd,
+        days: estimate.days,
+        profitMinor: estimate.profitMinor,
+        monthlyProfitMinor: estimate.profitMinor,
         currency: acc.currency,
         convention: "ACT/365 SIMPLE HALF_UP",
-        ratePolicyVersion: rate.id,
+        ratePolicyVersion: currentPolicy.id,
+        ratePolicyVersions: estimate.policyIds,
         estimate: true,
       };
     });
@@ -78,11 +116,20 @@ export class AccountService {
       check(acc.type === "MORTGAGE", "INVALID_TYPE");
       const terms = await t.get("mortgageDetails/" + acc.id);
       check(terms, "DETAILS_UNAVAILABLE", 404);
-      const annualRateBasisPoints = terms.annualRateBasisPoints ?? Math.round(terms.annualRate * 10000);
-      const principal = terms.loanPrincipalMinor;
+      const bankPolicies = await t.list("ratePolicies", { rateType: "LOAN" }, { limit: 1000 });
+      const currentBankPolicy = bankPolicies
+        .filter((policy) => policy.effectiveFrom <= this.bank.now())
+        .sort((a, b) => a.effectiveFrom - b.effectiveFrom || (a.version ?? 0) - (b.version ?? 0))
+        .at(-1);
+      const annualRateBasisPoints = currentBankPolicy?.annualRateBasisPoints
+        ?? terms.annualRateBasisPoints
+        ?? Math.round(terms.annualRate * 10000);
+      const originalPrincipal = terms.loanPrincipalMinor;
+      const outstanding = terms.outstandingMinor ?? originalPrincipal;
+      const remainingTermMonths = terms.remainingTermMonths ?? terms.termMonths;
       check(["MONTHLY", "BIWEEKLY"].includes(terms.paymentFrequency), "INVALID_TERMS");
-      const monthly = mortgageSchedule(principal, annualRateBasisPoints, terms.termMonths, "MONTHLY");
-      const biweekly = mortgageSchedule(principal, annualRateBasisPoints, terms.termMonths, "BIWEEKLY");
+      const monthly = mortgageSchedule(outstanding, annualRateBasisPoints, remainingTermMonths, "MONTHLY");
+      const biweekly = mortgageSchedule(outstanding, annualRateBasisPoints, remainingTermMonths, "BIWEEKLY");
       const paymentFrequency = frequency ?? terms.paymentFrequency;
       const items = paymentFrequency === "BIWEEKLY" ? biweekly : monthly;
       const totalMinor = items.reduce((total, item) => total + item.totalMinor, 0);
@@ -91,10 +138,13 @@ export class AccountService {
         currency: acc.currency,
         demo: acc.demo === true,
         projected: true,
-        principalMinor: principal,
-        outstandingMinor: terms.outstandingMinor ?? null,
+        principalMinor: originalPrincipal,
+        startingBalanceMinor: outstanding,
+        outstandingMinor: outstanding,
         annualRateBasisPoints,
-        termMonths: terms.termMonths,
+        effectiveFrom: currentBankPolicy?.effectiveFrom ?? null,
+        termMonths: remainingTermMonths,
+        remainingTermMonths,
         paymentFrequency,
         monthlyFirstPaymentMinor: monthly[0].totalMinor,
         biweeklyFirstPaymentMinor: biweekly[0].totalMinor,

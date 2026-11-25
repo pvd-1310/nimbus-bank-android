@@ -16,17 +16,17 @@ public final class ReadSummaryFormatter {
 
     public static String transactionTitle(ReadModels.TransactionSummary transaction) {
         String type = "TOP_UP".equals(transaction.type) ? "Nạp tiền vào tài khoản"
-                : "STRIPE_CREDIT".equals(transaction.type) ? "Tiền vào Stripe Sandbox"
-                : "STRIPE_DEBIT".equals(transaction.type) ? "Tiền ra Stripe"
+                : "STRIPE_CREDIT".equals(transaction.type) ? "Nạp tiền"
+                : "STRIPE_DEBIT".equals(transaction.type) ? "Rút tiền"
                 : "DEMO_DEPOSIT".equals(transaction.type) ? "Nạp tiền"
                 : "DEMO_WITHDRAWAL".equals(transaction.type) ? "Rút tiền"
                 : "DEMO_EXTERNAL_TRANSFER".equals(transaction.type) ? "Chuyển liên ngân hàng"
                 : transaction.isBillPayment() ? "Thanh toán hóa đơn" :
                 transaction.isOutgoing() ? "Chuyển đi" :
                 transaction.isIncoming() ? "Nhận tiền" : transaction.type;
-        String status = "SETTLED".equals(transaction.status) ? "Thành công" :
-                "FAILED".equals(transaction.status) ? "Thất bại" : transaction.status;
-        return type + " · " + ("DEMO_SETTLED".equals(status) ? "Đã ghi sổ mô phỏng" : status);
+        String status = "SETTLED".equals(transaction.status) || "DEMO_SETTLED".equals(transaction.status) ? "Thành công" :
+                "FAILED".equals(transaction.status) ? "Thất bại" : "Đang xử lý";
+        return type + " · " + status;
     }
 
     public static String transactionDetail(ReadModels.TransactionSummary transaction) {
@@ -61,7 +61,7 @@ public final class ReadSummaryFormatter {
             case "DAILY_LIMIT_EXCEEDED": return "Đã vượt hạn mức chuyển tiền trong ngày.";
             case "POLICY_CHANGED": return "Hạn mức hoặc chính sách tài khoản đã thay đổi.";
             case "EXPIRED": return "Giao dịch đã hết hạn.";
-            default: return "Backend từ chối yêu cầu (" + code + ").";
+            default: return "Giao dịch chưa thể hoàn tất. Số dư không thay đổi.";
         }
     }
 

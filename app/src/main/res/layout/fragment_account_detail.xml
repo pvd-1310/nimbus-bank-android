@@ -164,7 +164,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Lãi suất áp dụng"
+                            android:text="Lãi suất hiện tại"
                             android:textColor="@color/ink_muted"
                             android:textSize="14sp" />
 
@@ -250,7 +250,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="Lợi nhuận ước tính · 30 ngày"
+                            android:text="Lãi dự kiến trong tháng"
                         android:textColor="@color/ink"
                         android:textSize="13sp" />
 
@@ -270,7 +270,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:paddingHorizontal="4dp"
-                    android:text="Ước tính theo lãi đơn ACT/365; khoản lãi chưa được cộng vào số dư."
+                    android:text="Khoản lãi dự kiến chưa được cộng vào số dư."
                     android:textColor="@color/ink_muted"
                     android:textSize="11sp" />
             </LinearLayout>
@@ -322,7 +322,7 @@
                             android:layout_width="0dp"
                             android:layout_height="48dp"
                             android:layout_weight="1"
-                            android:text="Hàng tháng"
+                    android:text="Trả hàng tháng"
                             android:textSize="13sp"
                             app:cornerRadius="14dp" />
 
@@ -332,7 +332,7 @@
                             android:layout_width="0dp"
                             android:layout_height="48dp"
                             android:layout_weight="1"
-                            android:text="Mỗi 2 tuần"
+                    android:text="Trả hai tuần một lần"
                             android:textSize="13sp"
                             app:cornerRadius="14dp" />
                     </com.google.android.material.button.MaterialButtonToggleGroup>
@@ -468,7 +468,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     android:paddingHorizontal="4dp"
-                    android:text="Lịch ước tính tính từ gốc khoản vay ban đầu; hệ thống chưa có ngày đến hạn và kỳ còn lại thực tế."
+                        android:text="Dự kiến theo dư nợ hiện tại. Số tiền thực tế có thể thay đổi theo ngày thanh toán."
                     android:textColor="@color/ink_muted"
                     android:textSize="11sp" />
 
@@ -477,7 +477,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="16dp"
                     android:paddingHorizontal="4dp"
-                    android:text="Lịch trả góp"
+                    android:text="Lịch thanh toán dự kiến"
                     android:textColor="@color/ink"
                     android:textSize="16sp"
                     android:textStyle="bold" />
@@ -542,7 +542,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:paddingHorizontal="4dp"
-                    android:text="Lịch sử giao dịch"
+                    android:id="@+id/history_title"
+                    android:text="Lịch sử giao dịch · Xem tất cả"
                     android:textColor="@color/ink"
                     android:textSize="16sp"
                     android:textStyle="bold" />
@@ -557,20 +558,6 @@
                     android:paddingHorizontal="14dp"
                     android:paddingVertical="4dp" />
             </LinearLayout>
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/copy_info_button"
-                style="@style/Widget.Material3.Button.TonalButton"
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:layout_marginTop="18dp"
-                android:backgroundTint="@color/glass_pill"
-                android:text="Sao chép mã tài khoản"
-                android:textColor="@color/navy"
-                android:textSize="14sp"
-                app:cornerRadius="18dp"
-                app:strokeColor="@color/glass_border"
-                app:strokeWidth="1dp" />
 
         </LinearLayout>
     </ScrollView>

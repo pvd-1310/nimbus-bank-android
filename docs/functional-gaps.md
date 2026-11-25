@@ -8,7 +8,7 @@ Tài liệu này chỉ theo dõi các chức năng được yêu cầu trong đ�
 
 **Nguyên tắc phạm vi:** chỉ điều chỉnh chức năng để đáp ứng yêu cầu. Không cần giữ hoặc hoàn thiện màn hình, nút, hiệu ứng hay luồng UI nếu nó không hỗ trợ yêu cầu trong đề bài/SRS; có thể loại bỏ phần UI thừa. Chỉ bổ sung giao diện tối thiểu khi cần để người dùng thực hiện chức năng bắt buộc. Các yêu cầu accessibility và nội dung xác nhận giao dịch được giữ lại vì chúng có trong SRS.
 
-**Kết luận:** ứng dụng chưa đáp ứng toàn bộ yêu cầu. Các phần còn thiếu lớn nhất là chatbot, xác minh khuôn mặt, chuyển liên ngân hàng, thanh toán/tiện ích trên Android và các luồng mua vé/đặt phòng/thương mại điện tử. Một số chức năng có backend nhưng chưa có giao diện hoặc dịch vụ nhà cung cấp được cấu hình.
+**Kết luận:** ứng dụng chưa đáp ứng toàn bộ SRS. Riêng quản lý checking/savings/mortgage, policy lãi suất có phân quyền và audit, lịch sử giao dịch, cùng quyết toán nạp/rút test đã được hoàn thiện trong mã. Các phần còn thiếu lớn nhất vẫn gồm chatbot, xác minh khuôn mặt production, chuyển liên ngân hàng có nhà cung cấp, thanh toán/tiện ích và các luồng mua vé/đặt phòng/thương mại điện tử. Chưa xác minh rules, credentials và nhà cung cấp trên project production.
 
 ## 1. Hồ sơ người dùng và vai trò
 
@@ -55,27 +55,27 @@ Tài liệu này chỉ theo dõi các chức năng được yêu cầu trong đ�
 
 ### 3.1 Chi tiết savings
 
-- Màn chi tiết hiện có thông tin trình bày mẫu (ví dụ lãi suất 5.8%) và lưu ý backend sẽ xác nhận; chưa nối API ước tính lãi vào màn hình.
-- Cần tải gốc tiền gửi, lãi suất policy hiện hành, lợi nhuận tháng, kỳ hạn và mốc hiệu lực từ dữ liệu thật.
-- Công thức phải thống nhất day-count convention, cách làm tròn và phiên bản policy; không dùng số liệu tĩnh làm dữ liệu tài khoản.
+- Đã triển khai trên Android/backend: khách hàng xem số dư, lãi suất hiện tại và khoản lãi ước tính theo tháng lịch. Backend chỉ áp dụng policy đúng sản phẩm và chia kỳ tại thời điểm policy mới có hiệu lực. Officer có quyền `RATE_UPDATE` xem policy hiện tại/sắp áp dụng và tạo phiên bản mới kèm lý do; phiên bản cũ không bị sửa. Giới hạn lãi suất cấu hình bằng `SAVINGS_RATE_MIN_BPS` và `SAVINGS_RATE_MAX_BPS`.
+- Ước tính hiện tại dùng lãi đơn theo ngày trong tháng UTC, ACT/365, làm tròn half-up một lần ở cuối tháng; con số ước tính chưa được cộng vào số dư.
+- Số liệu tài chính phải tiếp tục lấy từ dữ liệu tài khoản và policy thật của môi trường đang chạy; không thay bằng giá trị mẫu trên UI.
 
 ### 3.2 Chi tiết mortgage
 
-- Màn hiện hiển thị nội dung tĩnh/placeholder; chưa nối API lịch trả nợ.
-- Cần hiển thị dư nợ, lãi suất, kỳ hạn, số tiền trả theo tháng và mỗi hai tuần, lịch từng kỳ và tổng tiền dự kiến từ dữ liệu khoản vay.
-- Cần xác định và áp dụng nhất quán quy ước tính lãi, tần suất trả, thời điểm đến hạn và làm tròn.
+- Đã triển khai trên Android/backend: hiển thị dư nợ, gốc ban đầu, lựa chọn trả hàng tháng/hai tuần một lần và lịch dự kiến từ dư nợ hiện tại. Nếu bản ghi cũ thiếu `remainingTermMonths`, backend dùng `termMonths`.
+- Số tiền/kỳ và tổng lịch là dự kiến; chưa phải lệnh thanh toán hay lịch đến hạn đã được ngân hàng xác nhận.
+- Cần bổ sung `remainingTermMonths` vào dữ liệu vận hành để lịch hiện tại khớp chính xác số kỳ còn lại.
 
-### 3.3 Gửi tiết kiệm và rút tiền
+### 3.3 Nạp và rút tiền
 
-- Đã có luồng tạo yêu cầu nạp/rút, nhưng request trạng thái `REQUESTED` không thay đổi số dư.
-- Chưa có bước xử lý/phê duyệt/settlement để biến yêu cầu thành nghiệp vụ tiền hoàn tất.
-- Cần tách yêu cầu khỏi giao dịch đã ghi sổ; chỉ cập nhật số dư/ledger sau xác thực, kiểm tra điều kiện và commit thành công.
+- Android dùng luồng xác nhận, OTP, trạng thái đang xử lý và biên lai sau settlement. Test settlement của rút tiền đối chiếu số dư, hạn mức, ghi bút toán cân bằng và lịch sử giao dịch trong cùng transaction; retry/reconcile lặp trả lại kết quả cũ. Nạp thẻ chỉ ghi có sau webhook thanh toán đã xác minh.
+- Không dùng request-only `REQUESTED` làm biên lai thành công. Test settlement được trình bày như giao dịch hoàn tất thông thường; provider/test detail chỉ ở operator diagnostics.
+- **Còn cần xác minh:** chạy webhook thẻ qua Stripe test mode và kiểm tra cấu hình/đối soát nhà cung cấp cho môi trường triển khai.
 
 ### 3.4 Lịch sử giao dịch
 
-- Có màn lịch sử và bộ lọc ở Android/backend.
-- Cần xác minh phân trang và các bộ lọc ngày/tài khoản chạy trên dữ liệu thật; xử lý lỗi index, offline và trạng thái dữ liệu cũ.
-- Biên lai cần dùng transaction ID/trạng thái authoritative từ backend, không suy ra thành công từ thao tác UI.
+- Đã bổ sung lịch sử gần đây cho cả ba loại tài khoản, màn lịch sử đầy đủ có phân trang và lọc theo tài khoản, thời gian, loại, trạng thái; quyền sở hữu được kiểm tra phía backend.
+- Trạng thái giao dịch được hiển thị bằng tiếng Việt. Dữ liệu cache ghi rõ có thể chưa cập nhật; test settlement hoàn tất dùng cách hiển thị thành công chuẩn.
+- Cần chạy UI walkthrough trên emulator và xác minh Firestore rules đã deploy cho project đích.
 
 ## 4. Chuyển tiền
 
@@ -169,8 +169,9 @@ Tài liệu này chỉ theo dõi các chức năng được yêu cầu trong đ�
 - [ ] eKYC lưu bằng chứng an toàn, có trạng thái review/resubmission và quy trình retention.
 - [ ] Face verification/step-up được triển khai hoặc ghi rõ phạm vi mô phỏng; giao dịch giá trị cao bị backend chặn nếu thiếu bằng chứng.
 - [ ] OTP production hoặc mô phỏng được gắn nhãn rõ, có TTL, giới hạn thử, one-time use và ràng buộc intent.
-- [ ] Màn savings/mortgage lấy số liệu và lịch tính từ backend, không dùng placeholder.
-- [ ] Nạp/rút có quy trình xử lý hoàn tất và ledger; không nhầm request với giao dịch đã ghi sổ.
+- [x] Màn checking/savings/mortgage lấy số dư, lãi suất/lợi nhuận tháng, lịch thanh toán và lịch sử từ backend.
+- [x] Officer cập nhật lãi suất bằng phiên bản mới, thời điểm hiệu lực, giới hạn cấu hình, phân quyền và audit lý do.
+- [x] Nạp/rút có settlement test, kiểm tra hạn mức, idempotency và ledger; request đang chờ không bị coi là đã ghi sổ.
 - [ ] Chuyển nội bộ chống overspend, replay, duplicate và phục hồi được sau mất mạng.
 - [ ] Chuyển liên ngân hàng có provider/simulator, trạng thái pending và đối soát.
 - [ ] Hóa đơn điện/nước, mobile top-up và checkout có quote, OTP, payment, webhook/IPN và fulfillment.

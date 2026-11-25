@@ -29,6 +29,8 @@ beforeEach(async () => {
       type: "SAVINGS",
       status: "ACTIVE",
     });
+    t.set("transactions/checking-recent", { ownerUid: "alice", accountId: "checking", sourceAccountId: "checking", type: "DEMO_WITHDRAWAL", amountMinor: 25, currency: "VND", status: "DEMO_SETTLED", committedAt: Date.UTC(2024, 0, 10) });
+    t.set("transactions/foreign-row", { ownerUid: "bob", accountId: "foreign", type: "TOP_UP", amountMinor: 1000, currency: "VND", status: "SETTLED", committedAt: Date.UTC(2024, 0, 10) });
     t.set("checkingDetails/checking", {
       dailyLimitMinor: 500,
       overdraftPolicy: "NONE",
@@ -36,13 +38,17 @@ beforeEach(async () => {
     t.set("savingsDetails/savings", {
       principalMinor: 365000,
       ratePolicyVersion: "rate",
+      productId: "savings",
     });
     t.set("ratePolicies/rate", {
       productId: "savings",
       annualRateBasisPoints: 500,
+      effectiveFrom: Date.UTC(2024, 0, 1),
+      version: 1,
     });
     t.set("mortgageDetails/mortgage", {
       loanPrincipalMinor: 1000,
+      outstandingMinor: 800,
       annualRateBasisPoints: 0,
       termMonths: 12,
       paymentFrequency: "MONTHLY",
@@ -98,23 +104,45 @@ it("keeps scoped checking details and missing-account behavior", async () => {
       .status,
   ).toBe(404);
 });
-it("preserves savings and mortgage calculation responses", async () => {
+it("returns a calendar-month savings estimate and mortgage schedules from the outstanding balance", async () => {
   const savings = await request(app)
-    .get("/accounts/savings/savings-estimate?days=365")
+    .get("/accounts/savings/savings-estimate?month=2024-01")
     .set("Authorization", auth);
   expect(savings.status).toBe(200);
-  expect(savings.body.profitMinor).toBe(18250);
+  expect(savings.body).toMatchObject({
+    profitMinor: 1550,
+    days: 31,
+    periodStart: Date.UTC(2024, 0, 1),
+    periodEnd: Date.UTC(2024, 1, 1),
+    estimate: true,
+    ratePolicyVersion: "rate",
+  });
   const mortgage = await request(app)
     .get("/accounts/mortgage/mortgage-schedule")
     .set("Authorization", auth);
   expect(mortgage.status).toBe(200);
+  expect(mortgage.body).toMatchObject({ principalMinor: 1000, outstandingMinor: 800, projected: true });
   expect(mortgage.body.items).toHaveLength(12);
   expect(
     mortgage.body.items.reduce(
       (n: number, x: { principalMinor: number }) => n + x.principalMinor,
       0,
     ),
-  ).toBe(1000);
+  ).toBe(800);
+  await request(app)
+    .get("/accounts/savings/savings-estimate?month=2024-13")
+    .set("Authorization", auth)
+    .expect(400);
+});
+it("lets customers review their checking, savings and mortgage details and own transaction history", async () => {
+  for (const [accountId, path] of [["checking", "details"], ["savings", "savings-estimate?month=2024-01"], ["mortgage", "mortgage-schedule"]]) {
+    const response = await request(app).get(`/accounts/${accountId}/${path}`).set("Authorization", auth);
+    expect(response.status).toBe(200);
+  }
+  const history = await request(app).get("/transactions?limit=25").set("Authorization", auth).expect(200);
+  expect(history.body.items).toHaveLength(1);
+  expect(history.body.items[0]).toMatchObject({ accountId: "checking", type: "DEMO_WITHDRAWAL", status: "DEMO_SETTLED" });
+  await request(app).get("/accounts/foreign/details").set("Authorization", auth).expect(403);
 });
 it("keeps profile updates, notification acknowledgement and request-only deposits", async () => {
   expect(

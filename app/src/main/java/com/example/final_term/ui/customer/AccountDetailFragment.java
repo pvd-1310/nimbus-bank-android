@@ -1,8 +1,5 @@
 package com.example.final_term.ui.customer;
 
-import android.content.ClipData;
-import android.content.ClipboardManager;
-import android.content.Context;
 import android.content.Intent;
 import android.graphics.Typeface;
 import android.os.Bundle;
@@ -11,7 +8,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -70,16 +66,14 @@ public class AccountDetailFragment extends Fragment {
         binding.subtitleText.setText(Phase2Presentation.accountSubtitle(currentAccountType));
         binding.balanceText.setText("—");
         binding.statusText.setText("ĐANG TẢI");
-        binding.genericDetails.setVisibility("CHECKING".equals(currentAccountType) ? View.VISIBLE : View.GONE);
+        binding.genericDetails.setVisibility(View.GONE);
         binding.savingsContent.setVisibility("SAVINGS".equals(currentAccountType) ? View.VISIBLE : View.GONE);
         binding.mortgageContent.setVisibility("MORTGAGE".equals(currentAccountType) ? View.VISIBLE : View.GONE);
-        binding.historySection.setVisibility(
-                ("SAVINGS".equals(currentAccountType) || "MORTGAGE".equals(currentAccountType))
-                        ? View.VISIBLE : View.GONE);
+        binding.historySection.setVisibility(View.VISIBLE);
         binding.heroLabel.setText("MORTGAGE".equals(currentAccountType)
                 ? "Dư nợ còn lại" : "SAVINGS".equals(currentAccountType)
                         ? "Tổng tiền gửi tiết kiệm" : "Số dư tài khoản");
-        binding.heroMeta.setText(currentAccountId.isEmpty() ? "" : "Mã tài khoản · " + currentAccountId);
+        binding.heroMeta.setVisibility(View.GONE);
         binding.detailText.setText("");
         binding.historyContainer.setVisibility(binding.historySection.getVisibility() == View.VISIBLE
                 ? View.VISIBLE : View.GONE);
@@ -92,8 +86,12 @@ public class AccountDetailFragment extends Fragment {
         visibleScheduleItems = SCHEDULE_PAGE_SIZE;
 
         binding.backButton.setOnClickListener(v -> Navigation.findNavController(v).navigateUp());
+        binding.historyTitle.setOnClickListener(v -> {
+            Bundle historyArgs = new Bundle();
+            historyArgs.putString("accountId", currentAccountId);
+            Navigation.findNavController(v).navigate(R.id.transactionHistory, historyArgs);
+        });
         binding.shareButton.setOnClickListener(v -> shareAccount());
-        binding.copyInfoButton.setOnClickListener(v -> copyAccountId());
 
         binding.mortgageFrequencyToggle.addOnButtonCheckedListener(
                 (MaterialButtonToggleGroup group, int checkedId, boolean isChecked) -> {
@@ -136,9 +134,8 @@ public class AccountDetailFragment extends Fragment {
             currentCurrency = account.currency;
             binding.titleText.setText(Phase2Presentation.accountTitle(account.type));
             binding.subtitleText.setText(Phase2Presentation.accountSubtitle(account.type));
-            binding.statusText.setText(account.status == null ? "ĐANG HOẠT ĐỘNG" : account.status);
-            binding.heroMeta.setText(("MORTGAGE".equals(account.type) ? "Mã khoản vay · " : "Mã tài khoản · ")
-                    + account.id);
+            binding.statusText.setText("ACTIVE".equals(account.status) ? "ĐANG HOẠT ĐỘNG" : "INACTIVE".equals(account.status) ? "TẠM KHÓA" : "ĐANG CẬP NHẬT");
+            binding.heroMeta.setVisibility(View.GONE);
 
             if ("MORTGAGE".equals(account.type)) {
                 binding.heroLabel.setText("Dư nợ còn lại");
@@ -152,10 +149,8 @@ public class AccountDetailFragment extends Fragment {
                 binding.balanceText.setText(ReadSummaryFormatter.formatCurrency(currentBalance, currentCurrency));
             }
 
-            loadTerms(account.id, account.type);
-            if ("SAVINGS".equals(account.type) || "MORTGAGE".equals(account.type)) {
-                loadAccountHistory(account.id);
-            }
+            if (!"CHECKING".equals(account.type)) loadTerms(account.id, account.type);
+            loadAccountHistory(account.id);
             return;
         }
 
@@ -169,18 +164,15 @@ public class AccountDetailFragment extends Fragment {
     private void loadTerms(String accountId, String type) {
         final String endpoint;
         switch (type) {
-            case "CHECKING": endpoint = "/details"; break;
-            case "SAVINGS": endpoint = "/savings-estimate?days=30"; break;
+            case "CHECKING": endpoint = ""; break;
+            case "SAVINGS": endpoint = "/savings-estimate"; break;
             case "MORTGAGE":
                 String frequency = requestedFrequency == null ? "" : "&frequency=" + requestedFrequency;
                 endpoint = "/mortgage-schedule" + (frequency.isEmpty() ? "" : "?" + frequency.substring(1));
                 break;
             default: endpoint = "";
         }
-        if (endpoint.isEmpty()) {
-            binding.detailText.setText("Mã tài khoản: " + accountId);
-            return;
-        }
+        if (endpoint.isEmpty()) return;
         String key = accountId + ":" + type + ":" + endpoint;
         if (loadedTermsKey.equals(key)) return;
         loadedTermsKey = key;
@@ -205,7 +197,6 @@ public class AccountDetailFragment extends Fragment {
                         JSONObject terms = new JSONObject(task.getResult().body);
                         if ("SAVINGS".equals(type)) renderSavings(terms);
                         else if ("MORTGAGE".equals(type)) renderMortgage(terms);
-                        else renderChecking(terms);
                     } catch (JSONException error) {
                         loadedTermsKey = "";
                         TextView retryTarget = "MORTGAGE".equals(type) ? binding.mortgagePayment
@@ -216,17 +207,10 @@ public class AccountDetailFragment extends Fragment {
                 });
     }
 
-    private void renderChecking(JSONObject terms) throws JSONException {
-        JSONObject details = terms.getJSONObject("details");
-        String currency = terms.getJSONObject("account").getString("currency");
-        binding.detailText.setText(details.isNull("dailyLimitMinor") ? "Chưa có hạn mức ngày."
-                : "Hạn mức ngày: " + formatMoney(details.getLong("dailyLimitMinor"), currency));
-    }
-
     private void renderSavings(JSONObject terms) throws JSONException {
         String currency = terms.getString("currency");
         currentCurrency = currency;
-        currentBalance = terms.getLong("principalMinor");
+        currentBalance = terms.optLong("balanceMinor", terms.getLong("principalMinor"));
         binding.heroLabel.setText("Tổng tiền gửi tiết kiệm");
         binding.balanceText.setText(formatMoney(currentBalance, currency));
 
@@ -235,8 +219,8 @@ public class AccountDetailFragment extends Fragment {
         binding.savingsRate.setText(percent.format(terms.getInt("annualRateBasisPoints") / 10000.0) + "/năm");
         binding.savingsOpened.setText(date(terms, "openedAt"));
         binding.savingsMaturity.setText(date(terms, "maturityAt"));
-        binding.savingsPolicy.setText("Chính sách " + terms.optString("ratePolicyVersion", "—")
-                + " · hiệu lực từ " + date(terms, "effectiveFrom"));
+        binding.savingsPolicy.setText("Kỳ tính lãi: " + date(terms, "periodStart") + " – " + date(terms, "periodEnd"));
+        binding.savingsConvention.setText("Khoản lãi dự kiến chưa được cộng vào số dư.");
         binding.savingsProfit.setText("+" + formatMoney(terms.getLong("profitMinor"), currency));
     }
 
@@ -257,7 +241,7 @@ public class AccountDetailFragment extends Fragment {
         binding.mortgageFrequencyToggle.check("BIWEEKLY".equals(frequency)
                 ? R.id.mortgage_biweekly_button : R.id.mortgage_monthly_button);
         updatingFrequencySelection = false;
-        binding.mortgageFrequencyCaption.setText("Ước tính theo chu kỳ "
+        binding.mortgageFrequencyCaption.setText("Dự kiến theo dư nợ hiện tại · "
                 + ("BIWEEKLY".equals(frequency) ? "hai tuần một lần" : "hàng tháng"));
 
         scheduleItems = terms.getJSONArray("items");
@@ -367,7 +351,7 @@ public class AccountDetailFragment extends Fragment {
 
     private void addTransactionRow(LinearLayout container, JSONObject tx) throws JSONException {
         String type = tx.optString("type", "TRANSACTION");
-        String status = tx.optString("status", "—");
+        String status = transactionStatus(tx.optString("status", ""));
         String currency = tx.optString("currency", currentCurrency);
         long amount = tx.optLong("amountMinor");
         boolean credit = "TRANSFER_RECEIVED".equals(type);
@@ -407,8 +391,18 @@ public class AccountDetailFragment extends Fragment {
             case "UTILITY_PAYMENT": return "Thanh toán tiện ích";
             case "SAVINGS_INTEREST": return "Lãi tiết kiệm";
             case "MORTGAGE_PAYMENT": return "Thanh toán khoản vay";
+            case "DEMO_DEPOSIT": case "TOP_UP": case "STRIPE_CREDIT": return "Nạp tiền";
+            case "DEMO_WITHDRAWAL": case "STRIPE_DEBIT": return "Rút tiền";
+            case "TRANSFER_SENT": case "DEMO_EXTERNAL_TRANSFER": return "Chuyển tiền";
             default: return type.replace('_', ' ');
         }
+    }
+
+    private String transactionStatus(String status) {
+        if ("SETTLED".equals(status) || "DEMO_SETTLED".equals(status)) return "Thành công";
+        if ("PENDING".equals(status)) return "Đang xử lý";
+        if ("FAILED".equals(status)) return "Thất bại";
+        return "Đang cập nhật";
     }
 
     private String transactionDate(JSONObject tx) {
@@ -438,21 +432,12 @@ public class AccountDetailFragment extends Fragment {
     private void shareAccount() {
         String typeLabel = Phase2Presentation.accountTitle(currentAccountType);
         String info = "Tài khoản Nimbus Bank\nLoại: " + typeLabel
-                + "\nMã: " + currentAccountId
                 + (currentBalance == null ? "" : "\n" + ("MORTGAGE".equals(currentAccountType)
                 ? "Dư nợ: " : "Số dư: ") + formatMoney(currentBalance, currentCurrency));
         Intent share = new Intent(Intent.ACTION_SEND);
         share.setType("text/plain");
         share.putExtra(Intent.EXTRA_TEXT, info);
         startActivity(Intent.createChooser(share, "Chia sẻ thông tin tài khoản"));
-    }
-
-    private void copyAccountId() {
-        ClipboardManager manager = (ClipboardManager) requireContext().getSystemService(Context.CLIPBOARD_SERVICE);
-        if (manager != null && !currentAccountId.isEmpty()) {
-            manager.setPrimaryClip(ClipData.newPlainText("Nimbus Account", currentAccountId));
-            Toast.makeText(requireContext(), "Đã sao chép mã tài khoản", Toast.LENGTH_SHORT).show();
-        }
     }
 
     private String formatRate(int basisPoints) {

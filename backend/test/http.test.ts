@@ -13,7 +13,10 @@ async function fixture() {
     t.set("users/alice", { role: "CUSTOMER", active: true });
     t.set("customers/alice", { uidRef: "alice", fullName: "Alice" });
     t.set("users/officer", { role: "OFFICER", active: true });
-    t.set("officers/officer", { active: true, permissions: ["CUSTOMER_ADMIN"] });
+    t.set("officers/officer", { active: true, permissions: ["CUSTOMER_ADMIN", "RATE_UPDATE"] });
+    t.set("users/restricted", { role: "OFFICER", active: true });
+    t.set("officers/restricted", { active: true, permissions: ["AUDIT_READ"] });
+    t.set("savingsDetails/sav-account", { productId: "sav-standard" });
     t.set("bankBranches/central", {
       active: true,
       name: "Central",
@@ -49,7 +52,9 @@ async function fixture() {
     payments: new Payments(b, undefined),
     authenticate: async (token) => {
       if (token === "officer")
-        return { uid: "officer", role: "OFFICER", permissions: ["CUSTOMER_ADMIN"] };
+        return { uid: "officer", role: "OFFICER", permissions: ["CUSTOMER_ADMIN", "RATE_UPDATE"] };
+      if (token === "restricted")
+        return { uid: "restricted", role: "OFFICER", permissions: ["AUDIT_READ"] };
       if (token !== "valid") throw Error("bad token");
       return { uid: "alice", role: "CUSTOMER", permissions: [] };
     },
@@ -138,6 +143,22 @@ it("health is public but accounts require a verified token", async () => {
         .set("Authorization", "Bearer valid")
     ).body.items,
   ).toHaveLength(1);
+});
+it("restricts rate policy catalog and listing to RATE_UPDATE officers and records reasons", async () => {
+  const app = await fixture();
+  await request(app).get("/officer/rate-types").set("Authorization", "Bearer valid").expect(403);
+  await request(app).get("/officer/rate-types").set("Authorization", "Bearer officer").expect(200).expect(({ body }) => expect(body).toEqual([
+    { rateType: "SAVINGS", name: "Lãi suất tiết kiệm" },
+    { rateType: "LOAN", name: "Lãi vay" },
+  ]));
+  const payload = { rateType: "SAVINGS", annualRateBasisPoints: 650, effectiveFrom: Date.now() + 60_000, reason: "Điều chỉnh theo chính sách kỳ hạn" };
+  const created = await request(app).post("/officer/rate-policies").set("Authorization", "Bearer officer").send(payload).expect(200);
+  expect(created.body.version).toBe(1);
+  await request(app).get("/officer/rate-policies").set("Authorization", "Bearer officer").expect(200).expect(({ body }) => expect(body.items[0]).toMatchObject({ ...payload, createdBy: "officer", rateType: "SAVINGS", status: "SCHEDULED" }));
+  await request(app).post("/officer/rate-policies").set("Authorization", "Bearer officer").send({ ...payload, rateType: "UNKNOWN" }).expect(400);
+  await request(app).post("/officer/rate-policies").set("Authorization", "Bearer officer").send({ ...payload, reason: " " }).expect(400);
+  await request(app).get("/officer/rate-policies").set("Authorization", "Bearer restricted").expect(403);
+  await request(app).post("/officer/rate-policies").set("Authorization", "Bearer restricted").send(payload).expect(403);
 });
 it("accepts template transfer input and returns canonical intentId", async () => {
   const app = await fixture();

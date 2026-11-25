@@ -40,6 +40,14 @@ public final class OfficerFeatureFragment extends Fragment {
     private final List<JSONObject> currentEkycItems = new ArrayList<>();
     private int currentEkycFilter = 0; // 0: all, 1: reviewing, 2: verified
 
+    @Override public void onResume() {
+        super.onResume();
+        if (binding != null && binding.titleText.getText().toString().toLowerCase(java.util.Locale.ROOT).contains("lãi suất")) {
+            FinalTermApplication app = (FinalTermApplication) requireActivity().getApplication();
+            renderRatePolicies(app.getAppContainer().getBackendApiClient());
+        }
+    }
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
@@ -518,111 +526,62 @@ public final class OfficerFeatureFragment extends Fragment {
         var current = binding;
         current.itemsContainer.removeAllViews();
         current.statusText.setText("Đang tải chính sách lãi suất…");
+        current.statusText.setOnClickListener(v -> renderRatePolicies(api));
         api.get("/officer/rate-policies?limit=100").addOnCompleteListener(task -> {
             if (binding != current) return;
             try {
-                if (!task.isSuccessful() || task.getResult().statusCode != 200)
+                if (!task.isSuccessful()) {
+                    current.statusText.setText("Không thể kết nối để tải chính sách lãi suất. Chạm để thử lại.");
+                    return;
+                }
+                int statusCode = task.getResult().statusCode;
+                if (statusCode == 401) {
+                    current.statusText.setText("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+                    return;
+                }
+                if (statusCode == 403) {
+                    current.statusText.setText("Tài khoản chưa được cấp quyền quản lý lãi suất. Vui lòng liên hệ quản trị viên.");
+                    current.actionButton.setVisibility(View.GONE);
+                    return;
+                }
+                if (statusCode != 200)
                     throw new JSONException("Unavailable");
                 JSONArray items = new JSONObject(task.getResult().body).getJSONArray("items");
                 for (int i = 0; i < items.length(); i++) {
                     JSONObject policy = items.getJSONObject(i);
                     int bps = policy.getInt("annualRateBasisPoints");
-                    String product = policy.optString("productId");
-                    addRatePolicyCard(product, policy.optString("id"), bps / 100.0 + "% / năm",
-                            bps + " bps", "Phiên bản " + policy.optInt("version"),
-                            "Hiệu lực từ " + new java.util.Date(policy.optLong("effectiveFrom")));
+                    String rateType = policy.optString("rateType", "SAVINGS");
+                    String state = policy.optString("status");
+                    String rateName = "LOAN".equals(rateType) ? "Lãi vay" : "Lãi suất tiết kiệm";
+                    String reason = policy.optString("reason", "");
+                    String creator = policy.optString("createdBy", "");
+                    addRatePolicyCard(rateName, bps / 100.0 + "% / năm",
+                            "Phiên bản " + policy.optInt("version") + (reason.isEmpty() ? "" : " · " + reason)
+                                    + (creator.isEmpty() ? "" : "\nNgười cập nhật: " + creator),
+                            ("CURRENT".equals(state) ? "Đang áp dụng" : "SCHEDULED".equals(state) ? "Sắp áp dụng" : "Đã kết thúc")
+                                    + " · Hiệu lực từ " + new java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault()).format(new java.util.Date(policy.optLong("effectiveFrom"))));
                 }
-                current.statusText.setText(items.length() == 0 ? "Chưa có chính sách lãi suất." : "Đã cập nhật chính sách lãi suất.");
+                current.statusText.setText(items.length() == 0 ? "Chưa có chính sách lãi suất." : "Danh sách chính sách lãi suất đã được cập nhật.");
             } catch (JSONException error) {
-                current.statusText.setText("Không tải được chính sách lãi suất.");
+                current.statusText.setText("Không tải được chính sách lãi suất. Chạm để thử lại.");
             }
         });
 
-        binding.actionButton.setOnClickListener(v -> showCreateRatePolicyDialog(api));
+        binding.actionButton.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.ratePolicyEditor));
     }
 
-    private void addRatePolicyCard(String title, String productId, String rateStr, String bps, String version, String effective) {
+    private void addRatePolicyCard(String title, String rateStr, String version, String effective) {
         View card = LayoutInflater.from(requireContext()).inflate(R.layout.item_transaction_row, binding.itemsContainer, false);
         TextView titleTv = card.findViewById(R.id.title_text);
         TextView subtitleTv = card.findViewById(R.id.subtitle_text);
         TextView amountTv = card.findViewById(R.id.amount_text);
 
         titleTv.setText(title);
-        subtitleTv.setText(version + " · " + bps + " · " + productId + "\n" + effective);
+        subtitleTv.setText(version + " · " + effective);
         amountTv.setText(rateStr);
         amountTv.setTextColor(ContextCompat.getColor(requireContext(), R.color.navy));
 
         binding.itemsContainer.addView(card);
-    }
-
-    private void showCreateRatePolicyDialog(BackendApiClient api) {
-        LinearLayout layout = new LinearLayout(requireContext());
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(40, 20, 40, 10);
-
-        TextView prodLabel = new TextView(requireContext());
-        prodLabel.setText("Chọn sản phẩm:");
-        prodLabel.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
-        layout.addView(prodLabel);
-
-        EditText product = new EditText(requireContext());
-        product.setHint("Mã sản phẩm trong danh sách");
-        product.setSingleLine(true);
-        layout.addView(product);
-
-        TextView rateLabel = new TextView(requireContext());
-        rateLabel.setText("Lãi suất năm (%):");
-        rateLabel.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
-        rateLabel.setPadding(0, 20, 0, 8);
-        layout.addView(rateLabel);
-
-        EditText rateInput = new EditText(requireContext());
-        rateInput.setHint("Ví dụ: 6.20");
-        rateInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
-        layout.addView(rateInput);
-
-        new AlertDialog.Builder(requireContext())
-                .setTitle("Ban hành chính sách lãi suất")
-                .setMessage("Tạo chính sách lãi suất mới theo quyết định điều hành.")
-                .setView(layout)
-                .setPositiveButton("Áp dụng", (d, w) -> {
-                    String rateVal = rateInput.getText().toString().trim();
-                    if (rateVal.isEmpty()) {
-                        Toast.makeText(requireContext(), "Vui lòng nhập lãi suất", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    try {
-                        double ratePercent = Double.parseDouble(rateVal);
-                        int basisPoints = (int) Math.round(ratePercent * 100);
-                        String selectedProduct = product.getText().toString().trim();
-                        if (selectedProduct.isEmpty() || !Double.isFinite(ratePercent)
-                                || ratePercent < 0 || ratePercent > 100) {
-                            Toast.makeText(requireContext(), "Nhập mã sản phẩm và lãi suất từ 0 đến 100%.", Toast.LENGTH_SHORT).show();
-                            return;
-                        }
-
-                        JSONObject req = new JSONObject();
-                        req.put("productId", selectedProduct);
-                        req.put("annualRateBasisPoints", basisPoints);
-                        req.put("effectiveFrom", System.currentTimeMillis() + 60_000L);
-
-                        api.post("/officer/rate-policies", req.toString()).addOnCompleteListener(task -> {
-                            if (!isAdded()) return;
-                            requireActivity().runOnUiThread(() -> {
-                                if (task.isSuccessful() && task.getResult() != null && task.getResult().statusCode >= 200 && task.getResult().statusCode < 300) {
-                                    Toast.makeText(requireContext(), "Đã ban hành chính sách lãi suất " + ratePercent + "% cho " + selectedProduct, Toast.LENGTH_LONG).show();
-                                    renderRatePolicies(api);
-                                } else {
-                                    Toast.makeText(requireContext(), "Chưa thể cập nhật chính sách. Vui lòng thử lại.", Toast.LENGTH_SHORT).show();
-                                }
-                            });
-                        });
-                    } catch (Exception ex) {
-                        Toast.makeText(requireContext(), "Không thể xử lý yêu cầu. Vui lòng kiểm tra thông tin rồi thử lại.", Toast.LENGTH_SHORT).show();
-                    }
-                })
-                .setNegativeButton("Hủy", null)
-                .show();
     }
 
     private void renderGenericFeature() {

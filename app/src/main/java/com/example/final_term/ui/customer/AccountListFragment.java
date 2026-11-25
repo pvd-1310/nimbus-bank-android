@@ -114,6 +114,16 @@ public final class AccountListFragment extends Fragment {
             }
         }
 
+        androidx.navigation.NavController navController = Navigation.findNavController(view);
+        androidx.navigation.NavBackStackEntry previousEntry = navController.getPreviousBackStackEntry();
+        if (previousEntry != null && previousEntry.getDestination().getId() == R.id.customerHome) {
+            activeNavItem = R.id.nav_accounts;
+            if (navController.getCurrentBackStackEntry() != null) {
+                navController.getCurrentBackStackEntry().getSavedStateHandle()
+                        .set("activeNavItem", activeNavItem);
+            }
+        }
+
         if (Navigation.findNavController(view).getCurrentBackStackEntry() != null) {
             Navigation.findNavController(view).getCurrentBackStackEntry()
                     .getSavedStateHandle()
@@ -160,7 +170,7 @@ public final class AccountListFragment extends Fragment {
         if (role == UserRole.OFFICER) {
             binding.titleText.setText(activeNavItem == R.id.nav_wallet ? "Khách hàng" : "Duyệt & Tài khoản");
         } else {
-            binding.titleText.setText(activeNavItem == R.id.nav_wallet ? "Ví" : "Thẻ");
+            binding.titleText.setText(activeNavItem == R.id.nav_wallet ? "Ví" : "Tài khoản");
         }
     }
 
