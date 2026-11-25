@@ -1,138 +1,60 @@
 package com.example.final_term.ui.ekyc;
 
 import android.Manifest;
-import android.content.Context;
-import android.content.ContentResolver;
 import android.content.pm.PackageManager;
-import android.app.Activity;
-import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Color;
+import android.graphics.Bitmap;
 import android.graphics.Matrix;
-import android.graphics.SurfaceTexture;
-import android.graphics.drawable.GradientDrawable;
-import android.hardware.camera2.CameraAccessException;
-import android.hardware.camera2.CameraCaptureSession;
-import android.hardware.camera2.CameraCharacteristics;
-import android.hardware.camera2.CameraDevice;
-import android.hardware.camera2.CameraManager;
-import android.hardware.camera2.CaptureFailure;
-import android.hardware.camera2.CaptureRequest;
-import android.media.Image;
-import android.media.ImageReader;
 import android.media.ExifInterface;
-import android.os.Bundle;
-import android.os.Handler;
-import android.os.HandlerThread;
-import android.os.Looper;
+import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
-import android.util.Size;
+import android.os.Bundle;
 import android.view.Gravity;
-import android.view.Surface;
-import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.Window;
-import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.camera.core.Camera;
+import androidx.camera.core.CameraSelector;
+import androidx.camera.core.ImageCapture;
+import androidx.camera.core.ImageCaptureException;
+import androidx.camera.core.Preview;
+import androidx.camera.lifecycle.ProcessCameraProvider;
+import androidx.camera.view.PreviewView;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.DialogFragment;
-
 import com.example.final_term.R;
 import com.google.android.material.button.MaterialButton;
-
+import com.google.common.util.concurrent.ListenableFuture;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.ByteBuffer;
-import java.nio.file.Files;
-import java.util.Arrays;
-import java.util.Comparator;
 import java.util.UUID;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Full-screen Camera2 preview used for capturing eKYC evidence inside the app. */
+/** In-app eKYC capture using CameraX. Result contract remains compatible with EkycDialogFragment. */
 public final class InAppCameraDialogFragment extends DialogFragment {
     public static final String RESULT_KEY = "ekyc_in_app_camera_result";
-    private static final String ARG_SLOT = "slot";
-    private static final String ARG_FRONT_CAMERA = "front_camera";
-    private static final String ARG_ALLOW_FRONT = "allow_front";
-    private static final String ARG_ALLOW_BACK = "allow_back";
-    private static final String RESULT_SWITCH_SLOT = "switch_slot";
-    private static final String RESULT_PATH = "path";
-    private static final String RESULT_ERROR = "error";
-    private static final ExecutorService PHOTO_IO = Executors.newSingleThreadExecutor();
+    private static final String ARG_SLOT = "slot", ARG_FRONT_CAMERA = "front_camera", ARG_ALLOW_FRONT = "allow_front", ARG_ALLOW_BACK = "allow_back";
+    private static final String RESULT_SWITCH_SLOT = "switch_slot", RESULT_PATH = "path", RESULT_ERROR = "error";
+    private final ExecutorService io = Executors.newSingleThreadExecutor();
+    private final ActivityResultLauncher<String> permission = registerForActivityResult(new ActivityResultContracts.RequestPermission(), ok -> { if (ok) startCamera(); else finishWithError("Cần quyền camera để chụp ảnh định danh."); });
+    private final ActivityResultLauncher<String> gallery = registerForActivityResult(new ActivityResultContracts.GetContent(), this::gallerySelected);
+    private LinearLayout sideSwitcher; private TextView previewStatus; private View captureButton; private MaterialButton flashButton;
+    private PreviewView preview; private ImageView capturedPhoto; private TextView message; private View cameraControls, reviewControls; private MaterialButton capture, flash;
+    private ProcessCameraProvider provider; private ImageCapture imageCapture; private Camera camera; private File pendingPhoto; private boolean resultSent, flashEnabled;
 
-    private final ActivityResultLauncher<String> permission = registerForActivityResult(
-            new ActivityResultContracts.RequestPermission(), granted -> {
-                permissionRequestPending = false;
-                if (granted) {
-                    startCameraThread();
-                    openCamera();
-                } else finishWithError("Cần quyền camera để chụp ảnh định danh.");
-            });
-
-    private TextureView preview;
-    private TextView message;
-    private View captureButton;
-    private View cameraControls;
-    private View reviewControls;
-    private LinearLayout sideSwitcher;
-    private ImageView capturedPhoto;
-    private TextView previewStatus;
-    private MaterialButton flashButton;
-    private HandlerThread cameraThread;
-    private volatile Handler cameraHandler;
-    private volatile CameraDevice camera;
-    private volatile CameraCaptureSession session;
-    private volatile ImageReader imageReader;
-    private CaptureRequest.Builder previewRequest;
-    private Size previewSize;
-    private File cacheDirectory;
-    private File pendingPhoto;
-    private int sensorOrientation;
-    private String cameraId;
-    private volatile boolean capturing;
-    private volatile boolean openingCamera;
-    private volatile boolean flashAvailable;
-    private boolean flashEnabled;
-    private boolean permissionRequestPending;
-    private boolean resultSent;
-    private final Semaphore cameraLock = new Semaphore(1);
-
-    private final ActivityResultLauncher<String> gallery = registerForActivityResult(
-            new ActivityResultContracts.GetContent(), this::gallerySelected);
-
-    public static InAppCameraDialogFragment newInstance(int slot, boolean allowFront, boolean allowBack) {
-        InAppCameraDialogFragment fragment = new InAppCameraDialogFragment();
-        Bundle args = new Bundle();
-        args.putInt(ARG_SLOT, slot);
-        args.putBoolean(ARG_FRONT_CAMERA, slot == 2);
-        args.putBoolean(ARG_ALLOW_FRONT, allowFront);
-        args.putBoolean(ARG_ALLOW_BACK, allowBack);
-        fragment.setArguments(args);
-        return fragment;
-    }
-
-    @Override
-    public void onCreate(@Nullable Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setStyle(STYLE_NO_TITLE, R.style.Theme_Final_term);
-        setCancelable(true);
-    }
-
+    public static InAppCameraDialogFragment newInstance(int slot, boolean allowFront, boolean allowBack) { InAppCameraDialogFragment f = new InAppCameraDialogFragment(); Bundle b = new Bundle(); b.putInt(ARG_SLOT, slot); b.putBoolean(ARG_FRONT_CAMERA, slot == 2); b.putBoolean(ARG_ALLOW_FRONT, allowFront); b.putBoolean(ARG_ALLOW_BACK, allowBack); f.setArguments(b); return f; }
+    @Override public void onCreate(@Nullable Bundle state) { super.onCreate(state); setStyle(STYLE_NO_TITLE, R.style.Theme_Final_term); setCancelable(true); }
     @Nullable
     @Override
     public View onCreateView(@NonNull android.view.LayoutInflater inflater,
@@ -143,7 +65,7 @@ public final class InAppCameraDialogFragment extends DialogFragment {
                 color(R.color.bg_slate_soft), color(R.color.bg_slate),
         };
         root.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, colors));
-        cacheDirectory = requireContext().getCacheDir();
+
 
         LinearLayout page = new LinearLayout(requireContext());
         page.setOrientation(LinearLayout.VERTICAL);
@@ -227,8 +149,8 @@ public final class InAppCameraDialogFragment extends DialogFragment {
                 else outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(24));
             }
         });
-        preview = new TextureView(requireContext());
-        preview.setSurfaceTextureListener(surfaceListener);
+        preview = new PreviewView(requireContext());
+        preview.setImplementationMode(PreviewView.ImplementationMode.COMPATIBLE);
         preview.setOutlineProvider(viewport.getOutlineProvider());
         preview.setClipToOutline(true);
         viewport.addView(preview, new FrameLayout.LayoutParams(
@@ -305,15 +227,23 @@ public final class InAppCameraDialogFragment extends DialogFragment {
         page.addView(cameraControls, controlsParams);
 
         flashButton = new MaterialButton(requireContext());
-        flashButton.setText("Flash");
-        flashButton.setTextSize(11);
-        flashButton.setTextColor(color(R.color.ink));
+        flash = flashButton;
+        flashButton.setIcon(ContextCompat.getDrawable(requireContext(), R.drawable.ic_flash_off));
+        flashButton.setIconTint(android.content.res.ColorStateList.valueOf(color(R.color.ink)));
+        flashButton.setIconSize(dp(22));
+        flashButton.setIconPadding(0);
+        flashButton.setIconGravity(MaterialButton.ICON_GRAVITY_TEXT_START);
+        flashButton.setGravity(Gravity.CENTER);
+        flashButton.setPadding(0, 0, 0, 0);
+        flashButton.setMinWidth(0);
+        flashButton.setInsetTop(0);
+        flashButton.setInsetBottom(0);
         flashButton.setBackground(rounded(0x88FFFFFF, dp(24), 0x99FFFFFF, dp(1)));
         flashButton.setBackgroundTintList(null);
         flashButton.setEnabled(false);
         flashButton.setContentDescription("Bật hoặc tắt đèn flash");
         flashButton.setOnClickListener(v -> toggleFlash());
-        LinearLayout flashColumn = controlColumn(flashButton, "Flash", dp(72));
+        LinearLayout flashColumn = controlColumn(flashButton);
         ((LinearLayout) cameraControls).addView(flashColumn,
                 new LinearLayout.LayoutParams(dp(72), ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -323,25 +253,40 @@ public final class InAppCameraDialogFragment extends DialogFragment {
         capture.setIcon(ContextCompat.getDrawable(requireContext(), R.drawable.ic_photo_camera));
         capture.setIconTint(android.content.res.ColorStateList.valueOf(Color.WHITE));
         capture.setIconSize(dp(28));
+        capture.setIconPadding(0);
+        capture.setIconGravity(MaterialButton.ICON_GRAVITY_TEXT_START);
+        capture.setGravity(Gravity.CENTER);
+        capture.setPadding(0, 0, 0, 0);
+        capture.setMinWidth(0);
+        capture.setInsetTop(0);
+        capture.setInsetBottom(0);
         capture.setContentDescription("Chụp ảnh bằng camera trong ứng dụng");
         capture.setOnClickListener(v -> capturePhoto());
         captureButton = capture;
-        LinearLayout captureColumn = controlColumn(capture, "Chụp ảnh", dp(88));
+        this.capture = capture;
+        LinearLayout captureColumn = controlColumn(capture);
         LinearLayout.LayoutParams captureColumnParams = new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         ((LinearLayout) cameraControls).addView(captureColumn, captureColumnParams);
 
         MaterialButton library = new MaterialButton(requireContext());
-        library.setText("Mở thư viện");
-        library.setTextSize(11);
-        library.setTextColor(color(R.color.ink));
+        library.setIcon(ContextCompat.getDrawable(requireContext(), R.drawable.ic_photo_library));
+        library.setIconTint(android.content.res.ColorStateList.valueOf(color(R.color.ink)));
+        library.setIconSize(dp(22));
+        library.setIconPadding(0);
+        library.setIconGravity(MaterialButton.ICON_GRAVITY_TEXT_START);
+        library.setGravity(Gravity.CENTER);
+        library.setPadding(0, 0, 0, 0);
+        library.setMinWidth(0);
+        library.setInsetTop(0);
+        library.setInsetBottom(0);
         library.setBackground(rounded(0x88FFFFFF, dp(24), 0x99FFFFFF, dp(1)));
         library.setBackgroundTintList(null);
         library.setContentDescription("Tải ảnh CCCD từ thư viện");
         library.setOnClickListener(v -> gallery.launch("image/*"));
-        LinearLayout libraryColumn = controlColumn(library, "Thư viện", dp(82));
+        LinearLayout libraryColumn = controlColumn(library);
         ((LinearLayout) cameraControls).addView(libraryColumn,
-                new LinearLayout.LayoutParams(dp(82), ViewGroup.LayoutParams.WRAP_CONTENT));
+                new LinearLayout.LayoutParams(dp(72), ViewGroup.LayoutParams.WRAP_CONTENT));
         libraryColumn.setVisibility(isFrontCamera() ? View.GONE : View.VISIBLE);
         flashColumn.setVisibility(isFrontCamera() ? View.GONE : View.VISIBLE);
 
@@ -364,569 +309,71 @@ public final class InAppCameraDialogFragment extends DialogFragment {
         page.addView(reviewControls, reviewParams);
 
         String restoredPath = savedInstanceState == null ? null : savedInstanceState.getString("pending_photo");
-        if (restoredPath != null) showPhotoForReview(new File(restoredPath));
+        if (restoredPath != null) showPhoto(new File(restoredPath));
 
         return root;
     }
 
-    @Override
-    public void onSaveInstanceState(@NonNull Bundle outState) {
-        super.onSaveInstanceState(outState);
-        if (pendingPhoto != null && pendingPhoto.isFile()) outState.putString("pending_photo", pendingPhoto.getAbsolutePath());
+    @Override public void onStart() { super.onStart(); if (getDialog() != null && getDialog().getWindow() != null) getDialog().getWindow().setLayout(-1, -1); }
+    @Override public void onResume() { super.onResume(); if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) startCamera(); else permission.launch(Manifest.permission.CAMERA); }
+    @Override public void onPause() { if (provider != null) provider.unbindAll(); imageCapture = null; camera = null; super.onPause(); }
+    @Override public void onSaveInstanceState(@NonNull Bundle out) { super.onSaveInstanceState(out); if (pendingPhoto != null) out.putString("pending_photo", pendingPhoto.getAbsolutePath()); }
+    @Override public void onDestroyView() { if (provider != null) provider.unbindAll(); io.shutdownNow(); preview = null; super.onDestroyView(); }
+    @Override public void onDismiss(@NonNull android.content.DialogInterface d) { if (!resultSent) { if (pendingPhoto != null) pendingPhoto.delete(); publishResult(null, "Đã hủy chụp ảnh."); } super.onDismiss(d); }
+    private void startCamera() { if (!isAdded() || preview == null || imageCapture != null) return; ListenableFuture<ProcessCameraProvider> f = ProcessCameraProvider.getInstance(requireContext()); f.addListener(() -> { try { provider = f.get(); bindCamera(); } catch (Exception e) { finishWithError("Không thể khởi động camera. Vui lòng thử lại."); } }, ContextCompat.getMainExecutor(requireContext())); }
+    private void bindCamera() { if (previewStatus != null) previewStatus.setVisibility(View.GONE); if (provider == null || preview == null) return; provider.unbindAll(); CameraSelector selector = new CameraSelector.Builder().requireLensFacing(isFrontCamera() ? CameraSelector.LENS_FACING_FRONT : CameraSelector.LENS_FACING_BACK).build(); Preview p = new Preview.Builder().build(); p.setSurfaceProvider(preview.getSurfaceProvider()); imageCapture = new ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).setJpegQuality(90).build(); camera = provider.bindToLifecycle(this, selector, p, imageCapture); flash.setEnabled(camera.getCameraInfo().hasFlashUnit() && !isFrontCamera()); }
+    private void capturePhoto() { if (imageCapture == null || pendingPhoto != null) return; capture.setEnabled(false); File file = new File(requireContext().getCacheDir(), "ekyc-capture-" + UUID.randomUUID() + ".jpg"); ImageCapture.OutputFileOptions o = new ImageCapture.OutputFileOptions.Builder(file).build(); imageCapture.takePicture(o, ContextCompat.getMainExecutor(requireContext()), new ImageCapture.OnImageSavedCallback() { @Override public void onImageSaved(@NonNull ImageCapture.OutputFileResults r) { showPhoto(file); } @Override public void onError(@NonNull ImageCaptureException e) { capture.setEnabled(true); message.setText("Chụp chưa thành công. Hãy thử lại."); } }); }
+    private void toggleFlash() {
+        flashEnabled = !flashEnabled;
+        if (imageCapture != null) imageCapture.setFlashMode(flashEnabled ? ImageCapture.FLASH_MODE_ON : ImageCapture.FLASH_MODE_OFF);
+        flash.setIcon(ContextCompat.getDrawable(requireContext(), flashEnabled ? R.drawable.ic_flash_on : R.drawable.ic_flash_off));
+        flash.setContentDescription(flashEnabled ? "Tắt đèn flash" : "Bật đèn flash");
     }
-
-    @Override
-    public void onStart() {
-        super.onStart();
-        Window window = requireDialog().getWindow();
-        if (window != null) {
-            window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-            window.setBackgroundDrawableResource(android.R.color.transparent);
-            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-            window.setStatusBarColor(color(R.color.bg_mist));
-            window.setNavigationBarColor(color(R.color.bg_slate));
-            window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
-        }
+    private void showPhoto(File f) {
+        if (!f.isFile()) return;
+        Bitmap bitmap = decodeReview(f);
+        if (bitmap == null) { message.setText("Không đọc được ảnh. Hãy chụp hoặc chọn ảnh khác."); f.delete(); capture.setEnabled(true); return; }
+        pendingPhoto = f;
+        capturedPhoto.setImageBitmap(bitmap);
+        capturedPhoto.setVisibility(View.VISIBLE); preview.setVisibility(View.GONE); cameraControls.setVisibility(View.GONE); reviewControls.setVisibility(View.VISIBLE); message.setText("Kiểm tra ảnh trước khi tiếp tục.");
     }
-
-    @Override
-    public void onResume() {
-        super.onResume();
-        startCameraThread();
-        if (preview != null && preview.isAvailable()) openCamera();
-    }
-
-    @Override
-    public void onPause() {
-        closeCamera();
-        stopCameraThread();
-        super.onPause();
-    }
-
-    @Override
-    public void onDestroyView() {
-        preview = null;
-        message = null;
-        captureButton = null;
-        cameraControls = null;
-        reviewControls = null;
-        sideSwitcher = null;
-        capturedPhoto = null;
-        previewStatus = null;
-        super.onDestroyView();
-    }
-
-    @Override
-    public void onDismiss(@NonNull android.content.DialogInterface dialog) {
-        super.onDismiss(dialog);
-        if (!resultSent) {
-            if (pendingPhoto != null) pendingPhoto.delete();
-            publishResult(null, "Đã hủy chụp ảnh.");
-        }
-    }
-
-    private final TextureView.SurfaceTextureListener surfaceListener = new TextureView.SurfaceTextureListener() {
-        @Override public void onSurfaceTextureAvailable(@NonNull SurfaceTexture surface, int width, int height) {
-            openCamera();
-        }
-        @Override public void onSurfaceTextureSizeChanged(@NonNull SurfaceTexture surface, int width, int height) {
-            configureTransform(width, height);
-        }
-        @Override public boolean onSurfaceTextureDestroyed(@NonNull SurfaceTexture surface) { return true; }
-        @Override public void onSurfaceTextureUpdated(@NonNull SurfaceTexture surface) {
-            if (previewStatus != null) previewStatus.setVisibility(View.GONE);
-        }
-    };
-
-    private final CameraDevice.StateCallback cameraState = new CameraDevice.StateCallback() {
-        @Override public void onOpened(@NonNull CameraDevice opened) {
-            openingCamera = false;
-            if (!isAdded()) {
-                cameraLock.release();
-                opened.close();
-                return;
-            }
-            camera = opened;
-            cameraLock.release();
-            createPreviewSession();
-        }
-        @Override public void onDisconnected(@NonNull CameraDevice disconnected) {
-            openingCamera = false;
-            cameraLock.release();
-            disconnected.close();
-            if (camera == disconnected) camera = null;
-            finishWithError("Camera đã ngắt kết nối. Vui lòng thử lại.");
-        }
-        @Override public void onError(@NonNull CameraDevice failed, int error) {
-            openingCamera = false;
-            cameraLock.release();
-            failed.close();
-            if (camera == failed) camera = null;
-            finishWithError("Không thể mở camera. Vui lòng thử lại.");
-        }
-    };
-
-    private void startCameraThread() {
-        if (cameraThread != null) return;
-        cameraThread = new HandlerThread("ekyc-camera");
-        cameraThread.start();
-        cameraHandler = new Handler(cameraThread.getLooper());
-    }
-
-    private void stopCameraThread() {
-        if (cameraThread == null) return;
-        cameraThread.quitSafely();
-        try {
-            cameraThread.join(500);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-        cameraThread = null;
-        cameraHandler = null;
-    }
-
-    private void openCamera() {
-        if (!isAdded() || preview == null || !preview.isAvailable()) return;
-        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA)
-                != PackageManager.PERMISSION_GRANTED) {
-            if (!permissionRequestPending) {
-                permissionRequestPending = true;
-                permission.launch(Manifest.permission.CAMERA);
-            }
-            return;
-        }
-        if (camera != null || openingCamera || cameraHandler == null) return;
-        boolean lockAcquired = false;
-        try {
-            CameraManager manager = (CameraManager) requireContext().getSystemService(Context.CAMERA_SERVICE);
-            cameraId = findCamera(manager);
-            if (cameraId == null) {
-                finishWithError("Thiết bị không có camera phù hợp.");
-                return;
-            }
-            CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
-            sensorOrientation = valueOrZero(characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION));
-            flashAvailable = Boolean.TRUE.equals(characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE));
-            Activity activity = getActivity();
-            if (activity != null) activity.runOnUiThread(() -> {
-                if (flashButton != null) flashButton.setEnabled(flashAvailable && !isFrontCamera());
-            });
-            android.hardware.camera2.params.StreamConfigurationMap map =
-                    characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
-            if (map == null) throw new IOException("Camera output is unavailable");
-            previewSize = choosePreviewSize(map.getOutputSizes(SurfaceTexture.class),
-                    preview.getWidth(), preview.getHeight(), isPreviewRotationRequired());
-            Size jpegSize = chooseSize(map.getOutputSizes(android.graphics.ImageFormat.JPEG), 2560);
-            if (previewSize == null || jpegSize == null) throw new IOException("Camera size is unavailable");
-            imageReader = ImageReader.newInstance(jpegSize.getWidth(), jpegSize.getHeight(),
-                    android.graphics.ImageFormat.JPEG, 2);
-            imageReader.setOnImageAvailableListener(this::saveCapturedImage, cameraHandler);
-            if (!cameraLock.tryAcquire(1500, TimeUnit.MILLISECONDS)) {
-                throw new IOException("Camera is busy");
-            }
-            lockAcquired = true;
-            openingCamera = true;
-            manager.openCamera(cameraId, cameraState, cameraHandler);
-            lockAcquired = false;
-        } catch (SecurityException e) {
-            if (lockAcquired) cameraLock.release();
-            openingCamera = false;
-            finishWithError("Cần quyền camera để chụp ảnh định danh.");
-        } catch (CameraAccessException | IOException e) {
-            if (lockAcquired) cameraLock.release();
-            openingCamera = false;
-            finishWithError("Không thể khởi động camera. Vui lòng thử lại.");
-        } catch (InterruptedException e) {
-            if (lockAcquired) cameraLock.release();
-            openingCamera = false;
-            Thread.currentThread().interrupt();
-            finishWithError("Không thể khởi động camera. Vui lòng thử lại.");
-        }
-    }
-
-    private String findCamera(CameraManager manager) throws CameraAccessException {
-        int wanted = isFrontCamera() ? CameraCharacteristics.LENS_FACING_FRONT : CameraCharacteristics.LENS_FACING_BACK;
-        String fallback = null;
-        for (String id : manager.getCameraIdList()) {
-            Integer facing = manager.getCameraCharacteristics(id).get(CameraCharacteristics.LENS_FACING);
-            if (facing != null && facing == wanted) return id;
-            if (fallback == null) fallback = id;
-        }
-        return fallback;
-    }
-
-    private void createPreviewSession() {
-        try {
-            if (camera == null || preview == null || preview.getSurfaceTexture() == null || imageReader == null) return;
-            SurfaceTexture texture = preview.getSurfaceTexture();
-            texture.setDefaultBufferSize(previewSize.getWidth(), previewSize.getHeight());
-            configureTransform(preview.getWidth(), preview.getHeight());
-            Surface surface = new Surface(texture);
-            previewRequest = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
-            previewRequest.addTarget(surface);
-            camera.createCaptureSession(Arrays.asList(surface, imageReader.getSurface()),
-                    new CameraCaptureSession.StateCallback() {
-                        @Override public void onConfigured(@NonNull CameraCaptureSession configured) {
-                            if (camera == null) return;
-                            session = configured;
-                            try {
-                                previewRequest.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO);
-                                previewRequest.set(CaptureRequest.CONTROL_AF_MODE,
-                                        CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
-                                session.setRepeatingRequest(previewRequest.build(), null, cameraHandler);
-                            } catch (CameraAccessException e) {
-                                finishWithError("Không thể hiển thị camera. Vui lòng thử lại.");
-                            }
-                        }
-                        @Override public void onConfigureFailed(@NonNull CameraCaptureSession failed) {
-                            finishWithError("Không thể cấu hình camera. Vui lòng thử lại.");
-                        }
-                    }, cameraHandler);
-        } catch (CameraAccessException | RuntimeException e) {
-            finishWithError("Không thể hiển thị camera. Vui lòng thử lại.");
-        }
-    }
-
-    private void capturePhoto() {
-        if (camera == null || session == null || imageReader == null || capturing) return;
-        capturing = true;
-        if (captureButton != null) captureButton.setEnabled(false);
-        if (message != null) message.setText("Đang chụp ảnh…");
-        try {
-            CaptureRequest.Builder request = camera.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
-            request.addTarget(imageReader.getSurface());
-            request.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO);
-            request.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
-            request.set(CaptureRequest.JPEG_ORIENTATION, jpegOrientation());
-            session.stopRepeating();
-            session.capture(request.build(), new CameraCaptureSession.CaptureCallback() {
-                @Override public void onCaptureFailed(@NonNull CameraCaptureSession failedSession,
-                        @NonNull CaptureRequest failedRequest,
-                        @NonNull CaptureFailure failure) {
-                    capturing = false;
-                    Activity activity = getActivity();
-                    if (activity == null) return;
-                    activity.runOnUiThread(() -> {
-                        if (captureButton != null) captureButton.setEnabled(true);
-                        if (message != null) message.setText("Chụp chưa thành công. Hãy thử lại.");
-                        resumePreview();
-                    });
-                }
-            }, cameraHandler);
-        } catch (CameraAccessException | IllegalStateException e) {
-            capturing = false;
-            if (captureButton != null) captureButton.setEnabled(true);
-            if (message != null) message.setText("Chụp chưa thành công. Hãy thử lại.");
-            resumePreview();
-        }
-    }
-
-    private void saveCapturedImage(ImageReader reader) {
-        Image image = reader.acquireLatestImage();
-        if (image == null) return;
-        try (Image captured = image) {
-            if (!capturing) return;
-            ByteBuffer buffer = captured.getPlanes()[0].getBuffer();
-            byte[] bytes = new byte[buffer.remaining()];
-            buffer.get(bytes);
-            File destination = new File(cacheDirectory, "ekyc-capture-" + UUID.randomUUID() + ".jpg");
-            Files.write(destination.toPath(), bytes);
-            Activity activity = getActivity();
-            if (activity == null) destination.delete();
-            else activity.runOnUiThread(() -> showPhotoForReview(destination));
-        } catch (IOException | IllegalStateException e) {
-            capturing = false;
-            Activity activity = getActivity();
-            if (activity == null) return;
-            activity.runOnUiThread(() -> {
-                if (captureButton != null) captureButton.setEnabled(true);
-                if (message != null) message.setText("Không lưu được ảnh. Hãy thử chụp lại.");
-                resumePreview();
-            });
-        }
-    }
-
-    private void gallerySelected(@Nullable Uri uri) {
-        if (uri == null || isFrontCamera()) return;
-        if (message != null) message.setText("Đang đọc ảnh đã chọn…");
-        ContentResolver resolver = requireContext().getContentResolver();
-        PHOTO_IO.execute(() -> {
-            File selected = new File(cacheDirectory, "ekyc-upload-" + UUID.randomUUID() + ".jpg");
-            try (InputStream input = resolver.openInputStream(uri);
-                 FileOutputStream output = new FileOutputStream(selected)) {
-                if (input == null) throw new IOException("Image unavailable");
-                byte[] chunk = new byte[8192];
-                long total = 0;
-                int count;
-                while ((count = input.read(chunk)) != -1) {
-                    total += count;
-                    if (total > 30_000_000L) throw new IOException("Image is too large");
-                    output.write(chunk, 0, count);
-                }
-                if (total == 0) throw new IOException("Image is empty");
-                new Handler(Looper.getMainLooper()).post(() -> showPhotoForReview(selected));
-            } catch (IOException | SecurityException e) {
-                selected.delete();
-                new Handler(Looper.getMainLooper()).post(() -> {
-                    if (message != null) message.setText("Không đọc được ảnh. Hãy chọn ảnh khác.");
-                });
-            }
-        });
-    }
-
-    private void showPhotoForReview(File image) {
-        pendingPhoto = image;
-        capturing = false;
-        if (cameraControls != null) cameraControls.setVisibility(View.GONE);
-        if (reviewControls != null) reviewControls.setVisibility(View.VISIBLE);
-        if (message != null) message.setText("Kiểm tra ảnh trước khi tiếp tục.");
-        if (previewStatus != null) previewStatus.setVisibility(View.GONE);
-        PHOTO_IO.execute(() -> {
-            Bitmap bitmap = decodePreview(image);
-            new Handler(Looper.getMainLooper()).post(() -> {
-                if (capturedPhoto == null || !isAdded()) {
-                    if (bitmap != null) bitmap.recycle();
-                    return;
-                }
-                if (bitmap == null) {
-                    if (message != null) message.setText("Không xem được ảnh. Hãy chụp hoặc chọn ảnh khác.");
-                    return;
-                }
-                Bitmap previous = capturedPhoto.getDrawable() instanceof android.graphics.drawable.BitmapDrawable
-                        ? ((android.graphics.drawable.BitmapDrawable) capturedPhoto.getDrawable()).getBitmap() : null;
-                capturedPhoto.setImageBitmap(bitmap);
-                capturedPhoto.setVisibility(View.VISIBLE);
-                if (previous != null && previous != bitmap) previous.recycle();
-            });
-        });
-    }
-
-    @Nullable
-    private static Bitmap decodePreview(File image) {
+    @Nullable private Bitmap decodeReview(File file) {
         BitmapFactory.Options bounds = new BitmapFactory.Options();
         bounds.inJustDecodeBounds = true;
-        BitmapFactory.decodeFile(image.getAbsolutePath(), bounds);
+        BitmapFactory.decodeFile(file.getAbsolutePath(), bounds);
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null;
         BitmapFactory.Options options = new BitmapFactory.Options();
         options.inSampleSize = 1;
-        while (Math.max(bounds.outWidth, bounds.outHeight) / options.inSampleSize > 1280) {
-            options.inSampleSize *= 2;
-        }
-        Bitmap decoded = BitmapFactory.decodeFile(image.getAbsolutePath(), options);
-        if (decoded == null) return null;
-
-        int orientation = ExifInterface.ORIENTATION_NORMAL;
-        try {
-            orientation = new ExifInterface(image.getAbsolutePath()).getAttributeInt(
-                    ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
-        } catch (IOException ignored) {
-            // Images without readable EXIF are displayed in their encoded orientation.
-        }
-        Matrix orientationMatrix = new Matrix();
+        while (Math.max(bounds.outWidth, bounds.outHeight) / options.inSampleSize > 1280) options.inSampleSize *= 2;
+        Bitmap bitmap = BitmapFactory.decodeFile(file.getAbsolutePath(), options);
+        if (bitmap == null) return null;
+        int orientation;
+        try { orientation = new ExifInterface(file.getAbsolutePath()).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL); }
+        catch (IOException e) { return bitmap; }
+        Matrix matrix = new Matrix();
         switch (orientation) {
-            case ExifInterface.ORIENTATION_FLIP_HORIZONTAL:
-                orientationMatrix.setScale(-1f, 1f);
-                break;
-            case ExifInterface.ORIENTATION_ROTATE_180:
-                orientationMatrix.setRotate(180f);
-                break;
-            case ExifInterface.ORIENTATION_FLIP_VERTICAL:
-                orientationMatrix.setScale(1f, -1f);
-                break;
-            case ExifInterface.ORIENTATION_TRANSPOSE:
-                orientationMatrix.setScale(-1f, 1f);
-                orientationMatrix.postRotate(270f);
-                break;
-            case ExifInterface.ORIENTATION_ROTATE_90:
-                orientationMatrix.setRotate(90f);
-                break;
-            case ExifInterface.ORIENTATION_TRANSVERSE:
-                orientationMatrix.setScale(-1f, 1f);
-                orientationMatrix.postRotate(90f);
-                break;
-            case ExifInterface.ORIENTATION_ROTATE_270:
-                orientationMatrix.setRotate(270f);
-                break;
-            default:
-                break;
+            case ExifInterface.ORIENTATION_ROTATE_90: matrix.setRotate(90); break;
+            case ExifInterface.ORIENTATION_ROTATE_180: matrix.setRotate(180); break;
+            case ExifInterface.ORIENTATION_ROTATE_270: matrix.setRotate(270); break;
+            case ExifInterface.ORIENTATION_FLIP_HORIZONTAL: matrix.setScale(-1, 1); break;
+            case ExifInterface.ORIENTATION_FLIP_VERTICAL: matrix.setScale(1, -1); break;
+            case ExifInterface.ORIENTATION_TRANSPOSE: matrix.setScale(-1, 1); matrix.postRotate(270); break;
+            case ExifInterface.ORIENTATION_TRANSVERSE: matrix.setScale(-1, 1); matrix.postRotate(90); break;
+            default: return bitmap;
         }
-        Bitmap oriented = Bitmap.createBitmap(decoded, 0, 0, decoded.getWidth(), decoded.getHeight(),
-                orientationMatrix, true);
-        if (oriented != decoded) decoded.recycle();
+        Bitmap oriented = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+        if (oriented != bitmap) bitmap.recycle();
         return oriented;
     }
-
-    private void acceptPhoto() {
-        if (pendingPhoto == null || !pendingPhoto.isFile()) return;
-        String path = pendingPhoto.getAbsolutePath();
-        pendingPhoto = null;
-        publishResult(path, null);
-    }
-
-    private void retakePhoto() {
-        if (pendingPhoto != null) pendingPhoto.delete();
-        pendingPhoto = null;
-        if (capturedPhoto != null) {
-            if (capturedPhoto.getDrawable() instanceof android.graphics.drawable.BitmapDrawable) {
-                Bitmap bitmap = ((android.graphics.drawable.BitmapDrawable) capturedPhoto.getDrawable()).getBitmap();
-                capturedPhoto.setImageDrawable(null);
-                bitmap.recycle();
-            }
-            capturedPhoto.setVisibility(View.GONE);
-        }
-        if (reviewControls != null) reviewControls.setVisibility(View.GONE);
-        if (cameraControls != null) cameraControls.setVisibility(View.VISIBLE);
-        if (captureButton != null) captureButton.setEnabled(true);
-        if (message != null) message.setText(isFrontCamera()
-                ? "Chỉ một khuôn mặt trong ảnh; nhìn thẳng và giữ máy ổn định."
-                : "Đảm bảo ảnh rõ nét, không bị lóa sáng và không mất góc.");
-        capturing = false;
-        resumePreview();
-    }
-
-    private void toggleFlash() {
-        if (!flashAvailable || isFrontCamera() || previewRequest == null || session == null) return;
-        flashEnabled = !flashEnabled;
-        try {
-            previewRequest.set(CaptureRequest.FLASH_MODE,
-                    flashEnabled ? CaptureRequest.FLASH_MODE_TORCH : CaptureRequest.FLASH_MODE_OFF);
-            session.setRepeatingRequest(previewRequest.build(), null, cameraHandler);
-            flashButton.setText(flashEnabled ? "Flash: bật" : "Flash");
-        } catch (CameraAccessException | IllegalStateException e) {
-            flashEnabled = false;
-            flashButton.setText("Flash");
-        }
-    }
-
-    private void publishSlotSwitch(int slot) {
-        if (!allowsSlot(slot)) return;
-        resultSent = true;
-        Bundle result = new Bundle();
-        result.putInt(RESULT_SWITCH_SLOT, slot);
-        getParentFragmentManager().setFragmentResult(RESULT_KEY, result);
-        dismiss();
-    }
-
-    private void resumePreview() {
-        if (session == null || previewRequest == null || cameraHandler == null) return;
-        try {
-            session.setRepeatingRequest(previewRequest.build(), null, cameraHandler);
-        } catch (CameraAccessException | IllegalStateException ignored) {
-            // Keep the capture screen open so the user can retry or cancel.
-        }
-    }
-
-    private int jpegOrientation() {
-        int rotation = displayRotation();
-        int degrees = rotation == Surface.ROTATION_90 ? 90
-                : rotation == Surface.ROTATION_180 ? 180 : rotation == Surface.ROTATION_270 ? 270 : 0;
-        return isFrontCamera() ? (sensorOrientation - degrees + 360) % 360
-                : (sensorOrientation + degrees) % 360;
-    }
-
-    private boolean isPreviewRotationRequired() {
-        int degrees = displayRotation() * 90;
-        int facingSign = isFrontCamera() ? 1 : -1;
-        int relativeRotation = (sensorOrientation - degrees * facingSign + 360) % 360;
-        return relativeRotation % 180 != 0;
-    }
-
-    private void configureTransform(int width, int height) {
-        if (preview == null || previewSize == null || width == 0 || height == 0) return;
-        int rotation = displayRotation();
-        int rotationDegrees = rotation * 90;
-        boolean rotationRequired = isPreviewRotationRequired();
-        float centerX = width / 2f;
-        float centerY = height / 2f;
-
-        // TextureView stretches its buffer to the view by default. Undo that
-        // non-uniform scaling, then apply one uniform center-crop factor. This
-        // accounts for both sensor orientation and display rotation.
-        float scaleX;
-        float scaleY;
-        if (sensorOrientation % 180 == 0) {
-            scaleX = width / (float) (rotationRequired ? previewSize.getWidth() : previewSize.getHeight());
-            scaleY = height / (float) (rotationRequired ? previewSize.getHeight() : previewSize.getWidth());
-        } else {
-            scaleX = width / (float) (rotationRequired ? previewSize.getHeight() : previewSize.getWidth());
-            scaleY = height / (float) (rotationRequired ? previewSize.getWidth() : previewSize.getHeight());
-        }
-        float finalScale = Math.max(scaleX, scaleY);
-        android.graphics.Matrix transform = new android.graphics.Matrix();
-        if (rotationRequired) {
-            transform.setScale(1f / scaleX * finalScale, 1f / scaleY * finalScale, centerX, centerY);
-        } else {
-            transform.setScale(height / (float) width / scaleY * finalScale,
-                    width / (float) height / scaleX * finalScale, centerX, centerY);
-        }
-        transform.postRotate(-rotationDegrees, centerX, centerY);
-        preview.setTransform(transform);
-    }
-
-    private void closeCamera() {
-        try {
-            cameraLock.acquire();
-            if (session != null) {
-                session.close();
-                session = null;
-            }
-            if (camera != null) {
-                camera.close();
-                camera = null;
-            }
-            if (imageReader != null) {
-                imageReader.close();
-                imageReader = null;
-            }
-            openingCamera = false;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        } finally {
-            if (cameraLock.availablePermits() == 0) cameraLock.release();
-        }
-    }
-
-    @SuppressWarnings("deprecation")
-    private int displayRotation() {
-        WindowManager manager = (WindowManager) requireContext().getSystemService(Context.WINDOW_SERVICE);
-        return manager.getDefaultDisplay().getRotation();
-    }
-
-    private void publishResult(@Nullable String path, @Nullable String error) {
-        if (resultSent) return;
-        resultSent = true;
-        Bundle result = new Bundle();
-        result.putInt(ARG_SLOT, getSlot());
-        if (path != null) result.putString(RESULT_PATH, path);
-        if (error != null) result.putString(RESULT_ERROR, error);
-        getParentFragmentManager().setFragmentResult(RESULT_KEY, result);
-        if (isAdded()) dismiss();
-    }
-
-    private void finishWithError(String error) {
-        Activity activity = getActivity();
-        if (activity != null && android.os.Looper.myLooper() != activity.getMainLooper()) {
-            activity.runOnUiThread(() -> finishWithError(error));
-            return;
-        }
-        if (message != null) message.setText(error);
-        if (isAdded()) publishResult(null, error);
-    }
-
-    private boolean isFrontCamera() {
-        return getArguments() != null && getArguments().getBoolean(ARG_FRONT_CAMERA, false);
-    }
-
-    private int getSlot() {
-        return getArguments() == null ? -1 : getArguments().getInt(ARG_SLOT, -1);
-    }
-
-    private boolean allowsSlot(int slot) {
-        if (getArguments() == null) return false;
-        return slot == 0 ? getArguments().getBoolean(ARG_ALLOW_FRONT, false)
-                : slot == 1 && getArguments().getBoolean(ARG_ALLOW_BACK, false);
-    }
-
+    private void retakePhoto() { if (pendingPhoto != null) pendingPhoto.delete(); pendingPhoto = null; capturedPhoto.setImageDrawable(null); capturedPhoto.setVisibility(View.GONE); preview.setVisibility(View.VISIBLE); cameraControls.setVisibility(View.VISIBLE); reviewControls.setVisibility(View.GONE); capture.setEnabled(true); message.setText("Đảm bảo ảnh rõ nét, không bị lóa sáng và không mất góc."); }
+    private void acceptPhoto() { if (pendingPhoto != null && pendingPhoto.isFile()) { String p = pendingPhoto.getAbsolutePath(); pendingPhoto = null; publishResult(p, null); } }
+    private void gallerySelected(@Nullable Uri uri) { if (uri == null || isFrontCamera()) return; File f = new File(requireContext().getCacheDir(), "ekyc-upload-" + UUID.randomUUID() + ".jpg"); io.execute(() -> { try (InputStream in = requireContext().getContentResolver().openInputStream(uri); FileOutputStream out = new FileOutputStream(f)) { if (in == null) throw new IOException(); byte[] b = new byte[8192]; int n; long total = 0; while ((n = in.read(b)) != -1) { total += n; if (total > 30_000_000) throw new IOException(); out.write(b, 0, n); } requireActivity().runOnUiThread(() -> showPhoto(f)); } catch (Exception e) { f.delete(); requireActivity().runOnUiThread(() -> message.setText("Không đọc được ảnh. Hãy chọn ảnh khác.")); } }); }
+    private void publishSlotSwitch(int slot) { if (!allowsSlot(slot)) return; Bundle b = new Bundle(); b.putInt(RESULT_SWITCH_SLOT, slot); getParentFragmentManager().setFragmentResult(RESULT_KEY, b); resultSent = true; dismiss(); }
+    private void publishResult(@Nullable String path, @Nullable String error) { if (resultSent) return; resultSent = true; Bundle b = new Bundle(); b.putInt(ARG_SLOT, getSlot()); if (path != null) b.putString(RESULT_PATH, path); if (error != null) b.putString(RESULT_ERROR, error); getParentFragmentManager().setFragmentResult(RESULT_KEY, b); if (isAdded()) dismiss(); }
+    private void finishWithError(String e) { if (isAdded()) publishResult(null, e); }
+    private boolean isFrontCamera() { return getArguments() != null && getArguments().getBoolean(ARG_FRONT_CAMERA); }
+    private int getSlot() { return getArguments() == null ? -1 : getArguments().getInt(ARG_SLOT, -1); }
+    private boolean allowsSlot(int s) { return getArguments() != null && (s == 0 ? getArguments().getBoolean(ARG_ALLOW_FRONT) : s == 1 && getArguments().getBoolean(ARG_ALLOW_BACK)); }
     private MaterialButton iconButton(int icon, String description) {
         MaterialButton button = new MaterialButton(requireContext());
         button.setBackground(rounded(0x88FFFFFF, dp(24), 0x99FFFFFF, dp(1)));
@@ -934,6 +381,11 @@ public final class InAppCameraDialogFragment extends DialogFragment {
         button.setIcon(ContextCompat.getDrawable(requireContext(), icon));
         button.setIconTint(android.content.res.ColorStateList.valueOf(color(R.color.ink)));
         button.setIconSize(dp(20));
+        button.setIconPadding(0);
+        button.setIconGravity(MaterialButton.ICON_GRAVITY_TEXT_START);
+        button.setGravity(Gravity.CENTER);
+        button.setPadding(0, 0, 0, 0);
+        button.setMinWidth(0);
         button.setContentDescription(description);
         button.setInsetTop(0);
         button.setInsetBottom(0);
@@ -955,19 +407,12 @@ public final class InAppCameraDialogFragment extends DialogFragment {
         return button;
     }
 
-    private LinearLayout controlColumn(View control, String label, int width) {
+    private LinearLayout controlColumn(View control) {
         LinearLayout column = new LinearLayout(requireContext());
         column.setOrientation(LinearLayout.VERTICAL);
         column.setGravity(Gravity.CENTER_HORIZONTAL);
         int controlSize = control == captureButton ? dp(72) : dp(52);
-        int controlWidth = control == captureButton ? dp(72) : width;
-        column.addView(control, new LinearLayout.LayoutParams(controlWidth, controlSize));
-        TextView caption = text(label, 11, color(R.color.ink), false);
-        caption.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams captionParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(20));
-        captionParams.topMargin = dp(3);
-        column.addView(caption, captionParams);
+        column.addView(control, new LinearLayout.LayoutParams(controlSize, controlSize));
         return column;
     }
 
@@ -979,59 +424,8 @@ public final class InAppCameraDialogFragment extends DialogFragment {
         return drawable;
     }
 
-    private int color(int resource) {
-        return ContextCompat.getColor(requireContext(), resource);
-    }
-
-    private TextView text(String value, int sizeSp, int color, boolean bold) {
-        TextView view = new TextView(requireContext());
-        view.setText(value);
-        view.setTextSize(sizeSp);
-        view.setTextColor(color);
-        if (bold) view.setTypeface(view.getTypeface(), android.graphics.Typeface.BOLD);
-        return view;
-    }
-
-    private int dp(int value) {
-        return Math.round(value * getResources().getDisplayMetrics().density);
-    }
-
-    private static int valueOrZero(@Nullable Integer value) {
-        return value == null ? 0 : value;
-    }
-
-    @Nullable
-    private static Size choosePreviewSize(@Nullable Size[] sizes, int viewWidth, int viewHeight,
-                                          boolean rotationRequired) {
-        if (sizes == null || sizes.length == 0) return null;
-        if (viewWidth <= 0 || viewHeight <= 0) return chooseSize(sizes, 1920);
-        float targetRatio = rotationRequired ? (float) viewHeight / viewWidth : (float) viewWidth / viewHeight;
-        Size best = null;
-        double bestRatioError = Double.MAX_VALUE;
-        long bestArea = -1;
-        for (Size candidate : sizes) {
-            int width = candidate.getWidth();
-            int height = candidate.getHeight();
-            if (Math.max(width, height) > 1920) continue;
-            double ratioError = Math.abs((double) width / height - targetRatio);
-            long area = (long) width * height;
-            if (ratioError < bestRatioError || (Math.abs(ratioError - bestRatioError) < 0.0001 && area > bestArea)) {
-                best = candidate;
-                bestRatioError = ratioError;
-                bestArea = area;
-            }
-        }
-        return best != null ? best : chooseSize(sizes, 1920);
-    }
-
-    @Nullable
-    private static Size chooseSize(@Nullable Size[] sizes, int maxEdge) {
-        if (sizes == null || sizes.length == 0) return null;
-        return Arrays.stream(sizes)
-                .filter(size -> Math.max(size.getWidth(), size.getHeight()) <= maxEdge)
-                .max(Comparator.comparingLong(size -> (long) size.getWidth() * size.getHeight()))
-                .orElseGet(() -> Arrays.stream(sizes)
-                        .min(Comparator.comparingLong(size -> (long) size.getWidth() * size.getHeight()))
-                        .orElse(null));
-    }
+    private MaterialButton button(String s) { MaterialButton b = new MaterialButton(requireContext()); b.setText(s); b.setTextSize(12); b.setInsetTop(0); b.setInsetBottom(0); return b; }
+    private TextView text(String s, int size, int c, boolean bold) { TextView t = new TextView(requireContext()); t.setText(s); t.setTextSize(size); t.setTextColor(c); if (bold) t.setTypeface(t.getTypeface(), 1); return t; }
+    private int color(int id) { return ContextCompat.getColor(requireContext(), id); }
+    private int dp(int v) { return Math.round(v * getResources().getDisplayMetrics().density); }
 }
