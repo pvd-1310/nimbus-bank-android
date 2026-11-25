@@ -326,6 +326,7 @@
                     android:paddingBottom="12dp">
 
                     <TextView
+                        android:id="@+id/confirm_amount_label"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Tổng số tiền chuyển"
@@ -344,6 +345,7 @@
                         tools:text="1.500.000 ₫" />
 
                     <TextView
+                        android:id="@+id/confirm_fee_label"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
@@ -367,6 +369,15 @@
                     android:elevation="4dp"
                     android:orientation="vertical"
                     android:padding="18dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="14dp"
+                        android:text="Chi tiết giao dịch"
+                        android:textColor="@color/navy_deep"
+                        android:textSize="17sp"
+                        android:textStyle="bold" />
 
                     <TextView
                         android:id="@+id/confirm_source_text"
@@ -438,12 +449,27 @@
                 android:id="@+id/step_otp_container"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="48dp"
                 android:background="@drawable/glass_panel_card"
-                android:elevation="6dp"
+                android:elevation="16dp"
                 android:orientation="vertical"
-                android:padding="20dp"
+                android:padding="24dp"
                 android:visibility="gone">
+
+                <View
+                    android:layout_width="42dp"
+                    android:layout_height="4dp"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginBottom="22dp"
+                    android:background="@color/ink_faint" />
+
+                <TextView
+                    android:id="@+id/otp_close"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:gravity="end|center_vertical"
+                    android:text="Đóng"
+                    android:textColor="@color/navy" />
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -513,10 +539,14 @@
                     android:layout_height="52dp"
                     android:layout_marginTop="14dp"
                     android:backgroundTint="@color/navy"
-                    android:text="Xác thực OTP"
+                    android:text="Xác nhận"
                     android:textColor="@color/white"
                     android:textSize="15sp"
                     app:cornerRadius="18dp" />
+
+                <TextView android:id="@+id/otp_sheet_status" android:layout_width="match_parent"
+                    android:layout_height="wrap_content" android:gravity="center"
+                    android:textColor="@color/ink_muted" android:accessibilityLiveRegion="polite" />
 
                 <!-- Commit Button wired to commit -->
                 <com.google.android.material.button.MaterialButton

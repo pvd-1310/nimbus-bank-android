@@ -46,6 +46,7 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 public class UtilitiesHubDialogFragment extends DialogFragment {
+    private com.example.final_term.ui.common.TransactionSheet authorizationSheet;
     private DialogUtilitiesHubBinding binding;
     private BackendApiClient api;
     private PaymentSheet paymentSheet;
@@ -72,6 +73,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     private boolean commitPending;
     private boolean busy;
     private boolean completed;
+    private boolean checkoutConfirmed;
 
     // Authoritative intent fields from backend
     private long authoritativeAmount;
@@ -147,6 +149,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         faceCamera.restore(savedInstanceState);
         if (savedInstanceState != null) {
             checkoutOnly = savedInstanceState.getBoolean("checkoutOnly");
+            checkoutConfirmed = savedInstanceState.getBoolean("checkoutConfirmed");
             currentBillId = savedInstanceState.getString("currentBillId");
             currentServiceName = savedInstanceState.getString("currentServiceName", "Hóa đơn dịch vụ");
             currentReference = savedInstanceState.getString("currentReference", "");
@@ -185,6 +188,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         faceCamera.save(outState);
         outState.putString("currentBillId", currentBillId);
         outState.putBoolean("checkoutOnly", checkoutOnly);
+        outState.putBoolean("checkoutConfirmed", checkoutConfirmed);
         outState.putString("currentServiceName", currentServiceName);
         outState.putString("currentReference", currentReference);
         outState.putString("requestId", requestId);
@@ -257,11 +261,18 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
 
         // Checkout controls
         binding.checkoutBtnCancelEdit.setOnClickListener(v -> cancelIntentForEdit());
+        binding.checkoutConfirmButton.setOnClickListener(v -> {
+            checkoutConfirmed = true;
+            renderCheckoutStep();
+            if (faceRequired && !faceVerified) checkoutStatus("Xác minh khuôn mặt để tiếp tục thanh toán.");
+            else requestOtp();
+        });
         binding.checkoutBtnFace.setOnClickListener(v -> {
             if (busy) return;
             faceCamera.open();
         });
         binding.checkoutOtpTimer.setOnClickListener(v -> requestOtp());
+        binding.checkoutOtpClose.setOnClickListener(v -> cancelIntentForEdit());
         binding.checkoutBtnVerifyOtp.setOnClickListener(v -> verifyOtp());
         binding.checkoutBtnRecover.setOnClickListener(v -> {
             if (intentId == null) preparePaymentIntent();
@@ -921,6 +932,8 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         if (binding == null) return;
         binding.hubSelectionContainer.setVisibility(View.GONE);
         binding.checkoutContainer.setVisibility(View.VISIBLE);
+        binding.checkoutConfirmationCard.setVisibility(View.VISIBLE);
+        binding.checkoutSuccessContainer.setVisibility(View.GONE);
         binding.hubMainTitle.setText("Thanh toán dịch vụ");
         binding.hubSubtitle.setVisibility(View.VISIBLE);
         binding.hubSubtitle.setText("Thanh toán bằng thẻ");
@@ -1012,13 +1025,22 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                 : ReadSummaryFormatter.formatCurrency(authoritativeFee, authoritativeCurrency));
         binding.checkoutTotalText.setText(quoted
                 ? ReadSummaryFormatter.formatCurrency(authoritativeAmount + authoritativeFee, authoritativeCurrency) : "—");
+        binding.checkoutConfirmationAmount.setText(quoted
+                ? ReadSummaryFormatter.formatCurrency(authoritativeAmount + authoritativeFee, authoritativeCurrency) : "—");
         binding.checkoutIntentIdText.setVisibility(View.GONE);
 
-        boolean needFace = quoted && faceRequired && !faceVerified && !commitPending;
+        binding.checkoutConfirmButton.setVisibility(quoted && !checkoutConfirmed && !commitPending && !completed
+                ? View.VISIBLE : View.GONE);
+        boolean needFace = checkoutConfirmed && quoted && faceRequired && !faceVerified && !commitPending;
         binding.checkoutFaceStepContainer.setVisibility(needFace ? View.VISIBLE : View.GONE);
 
-        boolean canOtp = quoted && intentId != null && (!faceRequired || faceVerified) && !commitPending && !completed;
-        binding.checkoutOtpStepContainer.setVisibility(canOtp ? View.VISIBLE : View.GONE);
+        boolean canOtp = checkoutConfirmed && quoted && intentId != null && (!faceRequired || faceVerified) && !commitPending && !completed;
+        if (canOtp && authorizationSheet == null) {
+            authorizationSheet = new com.example.final_term.ui.common.TransactionSheet(requireContext(), binding.checkoutOtpStepContainer);
+        } else if (!canOtp && authorizationSheet != null) {
+            authorizationSheet.close();
+            authorizationSheet = null;
+        }
         binding.checkoutBtnVerifyOtp.setEnabled(!busy && challengeId != null);
 
         binding.checkoutCommitContainer.setVisibility(commitPending ? View.VISIBLE : View.GONE);
@@ -1070,12 +1092,15 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
             }
             try {
                 JSONObject res = new JSONObject(response.body);
+                if (!"DEMO_DISPLAY_CODE".equals(res.getString("method"))) throw new IllegalStateException();
+                String code = res.getString("code");
+                if (!code.matches("[0-9]{6}")) throw new IllegalStateException();
                 challengeId = res.getString("challengeId");
-                binding.checkoutDemoCode.setText(res.getString("code"));
-                binding.checkoutOtpInput.setText("");
+                binding.checkoutDemoCode.setText("Mã OTP demo đã được điền tự động");
+                binding.checkoutOtpInput.setText(code);
                 startOtpTimer();
                 renderCheckoutStep();
-                checkoutStatus("Nhập mã đang hiển thị để xác nhận thanh toán.");
+                checkoutStatus("Mã OTP demo đã được điền. Bấm xác nhận để tiếp tục.");
             } catch (Exception e) {
                 checkoutStatus("Phản hồi mã OTP không hợp lệ.");
             }
@@ -1315,7 +1340,8 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                         && (!faceRequired || faceVerified)) {
                     commitPayment();
                 } else if ("REQUIRED".equalsIgnoreCase(challenge)) {
-                    requestOtp();
+                    if (checkoutConfirmed && (!faceRequired || faceVerified)) requestOtp();
+                    else checkoutStatus("Kiểm tra thông tin và xác nhận để tiếp tục.");
                 } else if ("EXPIRED".equalsIgnoreCase(challenge)) {
                     checkoutStatus("Mã xác nhận đã hết hạn. Bấm tạo mã mới.");
                 } else if ("LOCKED".equalsIgnoreCase(challenge)) {
@@ -1323,7 +1349,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                 } else if (faceRequired && !faceVerified) {
                     checkoutStatus("Xác minh khuôn mặt để tiếp tục thanh toán.");
                 } else if ("AWAITING_CODE".equalsIgnoreCase(challenge) && challengeId != null) {
-                    checkoutStatus("Nhập mã đang hiển thị để xác nhận thanh toán.");
+                    checkoutStatus("Kiểm tra mã OTP demo và bấm xác nhận để tiếp tục.");
                 } else {
                     checkoutStatus("Bấm tạo mã mới để tiếp tục xác thực thanh toán.");
                 }
@@ -1361,6 +1387,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
 
     private void returnToHub() {
         if (binding == null) return;
+        if (authorizationSheet != null) { authorizationSheet.close(); authorizationSheet = null; }
         if (checkoutOnly) {
             dismiss();
             return;
@@ -1391,9 +1418,11 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         requestId = null;
         intentId = null;
         challengeId = null;
+        checkoutConfirmed = false;
         faceRequired = false;
         faceVerified = false;
         commitPending = false;
+        completed = false;
         preparingPreviously = false;
         authoritativeAmount = 0;
         authoritativeFee = 0;
@@ -1411,18 +1440,23 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         completed = true;
         commitPending = false;
         if (binding == null) return;
+        if (authorizationSheet != null) { authorizationSheet.close(); authorizationSheet = null; }
+        binding.checkoutConfirmationCard.setVisibility(View.GONE);
         binding.checkoutFaceStepContainer.setVisibility(View.GONE);
         binding.checkoutOtpStepContainer.setVisibility(View.GONE);
         binding.checkoutCommitContainer.setVisibility(View.GONE);
         binding.checkoutSuccessContainer.setVisibility(View.VISIBLE);
+        binding.checkoutSuccessTitle.setText("Thanh toán thành công");
         binding.receiptAmountDisplay.setText(ReadSummaryFormatter.formatCurrency(authoritativeAmount + authoritativeFee, authoritativeCurrency));
         binding.receiptDetailsText.setText("Dịch vụ: " + currentServiceName + "\nTham chiếu: " + currentReference +
-                "\nThanh toán bằng thẻ đã được xác nhận.");
+                "\nMã giao dịch: " + (intentId == null ? requestId : intentId) +
+                "\nThanh toán đã được xác nhận. Kiểm tra đơn hàng để xem trạng thái thực hiện.");
         checkoutStatus("");
     }
 
     private void checkoutStatus(String msg) {
         if (binding != null) {
+            binding.checkoutOtpStatus.setText(msg);
             binding.checkoutStatusText.setText(msg);
         }
     }
@@ -1508,6 +1542,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
 
     @Override
     public void onDestroyView() {
+        if (authorizationSheet != null) { authorizationSheet.close(); authorizationSheet = null; }
         if (otpTimer != null) {
             otpTimer.cancel();
             otpTimer = null;

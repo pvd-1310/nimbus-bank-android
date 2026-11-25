@@ -557,8 +557,35 @@
             android:orientation="vertical"
             android:visibility="gone">
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Xác nhận giao dịch"
+                    android:textColor="@color/ink_muted"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/checkout_confirmation_amount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="sans-serif-light"
+                    android:textColor="@color/ink"
+                    android:textSize="38sp"
+                    android:text="—" />
+            </LinearLayout>
+
             <!-- Checkout Header Card -->
             <LinearLayout
+                android:id="@+id/checkout_confirmation_card"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
@@ -690,6 +717,16 @@
                     android:visibility="gone"
                     android:textColor="@color/ink_faint"
                     android:textSize="10sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/checkout_confirm_button"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="20dp"
+                    android:text="Xác nhận &amp; nhập OTP"
+                    android:backgroundTint="@color/navy"
+                    android:textColor="@color/white"
+                    app:cornerRadius="18dp" />
             </LinearLayout>
 
             <!-- Face Verification Step (if faceRequired) -->
@@ -704,6 +741,7 @@
                 android:visibility="gone">
 
                 <TextView
+                    android:id="@+id/checkout_success_title"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Xác minh khuôn mặt"
@@ -740,6 +778,14 @@
                 android:orientation="vertical"
                 android:padding="16dp"
                 android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/checkout_otp_close"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:gravity="end|center_vertical"
+                    android:text="Đóng"
+                    android:textColor="@color/navy" />
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -827,6 +873,10 @@
                     android:text="Xác nhận và thanh toán"
                     android:textColor="@color/white"
                     app:cornerRadius="16dp" />
+
+                <TextView android:id="@+id/checkout_otp_status" android:layout_width="match_parent"
+                    android:layout_height="wrap_content" android:gravity="center"
+                    android:textColor="@color/ink_muted" android:accessibilityLiveRegion="polite" />
             </LinearLayout>
 
             <!-- Commit & Settlement Status Box -->

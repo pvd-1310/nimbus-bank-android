@@ -41,6 +41,7 @@ import java.util.Locale;
 import java.util.UUID;
 
 public final class TransferFragment extends Fragment {
+    private com.example.final_term.ui.common.TransactionSheet authorizationSheet;
     private FragmentTransferBinding binding;
     private BackendApiClient api;
     private String intentId;
@@ -174,6 +175,7 @@ public final class TransferFragment extends Fragment {
 
         // Step 3 OTP -> Verify OTP & Commit
         binding.otpResendTimer.setOnClickListener(v -> requestOtp());
+        binding.otpClose.setOnClickListener(v -> handleBackNavigation());
         binding.verifyButton.setOnClickListener(v -> verifyOtp());
         binding.commitButton.setOnClickListener(v -> {
             if (cardTopup() && commitPending) createTopupPayment();
@@ -377,9 +379,17 @@ public final class TransferFragment extends Fragment {
         currentStep = step;
         if (binding == null) return;
 
+        if (step != Step.OTP && authorizationSheet != null) {
+            authorizationSheet.close();
+            authorizationSheet = null;
+        }
+
         binding.stepInputContainer.setVisibility(step == Step.INPUT ? View.VISIBLE : View.GONE);
-        binding.stepConfirmContainer.setVisibility(step == Step.CONFIRM ? View.VISIBLE : View.GONE);
-        binding.stepOtpContainer.setVisibility(step == Step.OTP ? View.VISIBLE : View.GONE);
+        binding.stepConfirmContainer.setVisibility(step == Step.CONFIRM || step == Step.OTP ? View.VISIBLE : View.GONE);
+        binding.submitButton.setEnabled(step == Step.CONFIRM && !busy);
+        binding.btnBackToEdit.setEnabled(step == Step.CONFIRM && !busy);
+        if (step == Step.OTP && authorizationSheet == null)
+            authorizationSheet = new com.example.final_term.ui.common.TransactionSheet(requireContext(), binding.stepOtpContainer);
         binding.stepSuccessContainer.setVisibility(step == Step.SUCCESS ? View.VISIBLE : View.GONE);
 
         if (step == Step.INPUT) {
@@ -393,8 +403,7 @@ public final class TransferFragment extends Fragment {
             binding.headerTitle.setText(R.string.otp_title);
             renderAuthorization();
         } else if (step == Step.SUCCESS) {
-            binding.headerTitle.setText(cardTopup() ? "Nạp tiền thành công"
-                    : getString(R.string.transfer_success_title));
+            binding.headerTitle.setText("Biên lai giao dịch");
             bindSuccessView();
         }
         updateSubmitButton();
@@ -480,6 +489,11 @@ public final class TransferFragment extends Fragment {
                 : recipientName.isEmpty() ? target : recipientName + " · " + target;
 
         binding.confirmAmountDisplay.setText(ReadSummaryFormatter.formatCurrency(amount, authoritativeCurrency));
+        binding.confirmAmountLabel.setText(cardTopup() ? "Tổng tiền nạp" : cashOperation != null
+                ? "WITHDRAWAL".equals(cashOperation) ? "Tổng tiền rút" : "Tổng tiền nạp"
+                : "Tổng số tiền chuyển");
+        binding.confirmFeeLabel.setText("Phí dịch vụ: " + ReadSummaryFormatter.formatCurrency(authoritativeFee, authoritativeCurrency)
+                + (authoritativeFee == 0 ? " (Miễn phí)" : ""));
         binding.confirmSourceText.setText((cardTopup() ? "Tài khoản nhận: " : "Tài khoản nguồn: ") + sourceId);
         String recipient = cardTopup() ? "Nguồn thanh toán: thẻ"
                 : cashOperation != null ? "Tài khoản đối ứng: Nimbus Bank"
@@ -500,7 +514,9 @@ public final class TransferFragment extends Fragment {
         String target = external ? receiptTarget()
                 : demoMode() && !authoritativeTarget.isEmpty() ? authoritativeTarget : receiptTarget();
         binding.successAmountDisplay.setText(ReadSummaryFormatter.formatCurrency(amount, authoritativeCurrency));
-        binding.receiptTxId.setVisibility(View.GONE);
+        binding.receiptTxId.setVisibility(View.VISIBLE);
+        binding.receiptTxId.setText("Mã giao dịch: " +
+                (providerReference.isEmpty() ? (intentId == null ? "—" : intentId) : providerReference));
         binding.successHeadline.setText(cardTopup() ? "Tiền đã được ghi có vào tài khoản"
                 : "WITHDRAWAL".equals(cashOperation) ? "Rút tiền thành công" : "Chuyển khoản thành công");
         binding.receiptTargetInfo.setText((cardTopup() ? "Tài khoản nhận: " : "WITHDRAWAL".equals(cashOperation) ? "Tài khoản đã rút từ: " : "Chuyển đến: ") + target + " (Phí: " +
@@ -736,11 +752,13 @@ public final class TransferFragment extends Fragment {
                 JSONObject result = new JSONObject(response.body);
                 if (!"DEMO_DISPLAY_CODE".equals(result.getString("method"))) throw new IllegalStateException();
                 challengeId = result.getString("challengeId");
-                binding.demoCode.setText(result.getString("code"));
-                binding.otpInput.setText("");
+                String code = result.getString("code");
+                if (!code.matches("[0-9]{6}")) throw new IllegalStateException();
+                binding.demoCode.setText("Mã OTP demo đã được điền tự động");
+                binding.otpInput.setText(code);
                 startOtpCountdown();
                 renderAuthorization();
-                status("Nhập mã đang hiển thị để xác nhận.");
+                status("Mã OTP demo đã được điền. Bấm xác nhận để tiếp tục.");
             } catch (Exception error) {
                 status("Không thể đọc kết quả. Vui lòng thử lại.");
             }
@@ -1098,6 +1116,7 @@ public final class TransferFragment extends Fragment {
     }
 
     private void status(String message) {
+        if (binding != null) binding.otpSheetStatus.setText(message);
         if (binding != null) binding.statusText.setText(message);
     }
 
@@ -1107,6 +1126,7 @@ public final class TransferFragment extends Fragment {
 
     @Override
     public void onDestroyView() {
+        if (authorizationSheet != null) { authorizationSheet.close(); authorizationSheet = null; }
         if (otpTimer != null) {
             otpTimer.cancel();
             otpTimer = null;
