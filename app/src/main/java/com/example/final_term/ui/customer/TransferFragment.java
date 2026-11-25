@@ -75,6 +75,7 @@ public final class TransferFragment extends Fragment {
     private boolean completed;
     private final List<String> sourceIds = new ArrayList<>();
     private CountDownTimer otpTimer;
+    private com.example.final_term.ui.transaction.OtpBottomSheetDialog sharedOtp;
     private PaymentSheet paymentSheet;
     private int topupPollsRemaining;
 
@@ -379,6 +380,7 @@ public final class TransferFragment extends Fragment {
     private void showStep(Step step) {
         currentStep = step;
         if (binding == null) return;
+        if (step != Step.OTP) dismissSharedOtp();
 
         if (step != Step.OTP && authorizationSheet != null) {
             authorizationSheet.close();
@@ -623,11 +625,13 @@ public final class TransferFragment extends Fragment {
 
     private void startOtpCountdown() {
         if (otpTimer != null) otpTimer.cancel();
+        if (sharedOtp != null) sharedOtp.setCountdownText("Gửi lại sau 00:30", false);
         binding.otpResendTimer.setClickable(false);
         otpTimer = new CountDownTimer(30_000, 1000) {
             @Override
             public void onTick(long millisUntilFinished) {
                 if (binding != null) {
+                    if (sharedOtp != null) sharedOtp.setCountdownText(String.format(Locale.getDefault(), "Gửi lại sau 00:%02d", millisUntilFinished / 1000), false);
                     binding.otpResendTimer.setText(String.format(Locale.getDefault(),
                             "Tạo mã mới sau 00:%02d", millisUntilFinished / 1000));
                 }
@@ -636,6 +640,7 @@ public final class TransferFragment extends Fragment {
             @Override
             public void onFinish() {
                 if (binding != null) {
+                    if (sharedOtp != null) sharedOtp.setCountdownText("Gửi lại mã OTP", true);
                     binding.otpResendTimer.setText("Tạo mã mới");
                     binding.otpResendTimer.setClickable(true);
                     binding.otpResendTimer.setOnClickListener(v -> requestOtp());
@@ -770,6 +775,7 @@ public final class TransferFragment extends Fragment {
     }
 
     private void renderAuthorization() {
+        if (commitPending) dismissSharedOtp();
         boolean canEnterCode = (!faceRequired || faceVerified) && !commitPending;
         binding.faceStepUpButton.setVisibility(faceRequired && !commitPending ? View.VISIBLE : View.GONE);
         binding.faceStepUpButton.setEnabled(!busy);
@@ -809,6 +815,14 @@ public final class TransferFragment extends Fragment {
 
     private void requestOtp() {
         if (busy || intentId == null || commitPending || (faceRequired && !faceVerified)) return;
+        if (sharedOtp == null) {
+            sharedOtp = new com.example.final_term.ui.transaction.OtpBottomSheetDialog(requireContext(), new com.example.final_term.ui.transaction.OtpBottomSheetDialog.Listener() {
+                @Override public void onSubmitOtp(@NonNull String code) { binding.otpInput.setText(code); verifyOtp(); }
+                @Override public void onResendRequested() { requestOtp(); }
+                @Override public void onDismissRequested() { dismissSharedOtp(); cancelForEdit(); }
+            });
+        }
+        sharedOtp.show();
         FragmentTransferBinding view = binding;
         setBusy(true);
         status("Đang tạo mã xác nhận…");
@@ -833,6 +847,7 @@ public final class TransferFragment extends Fragment {
                 if (!code.matches("[0-9]{6}")) throw new IllegalStateException();
                 binding.demoCode.setText("Mã OTP demo đã được điền tự động");
                 binding.otpInput.setText(code);
+                if (sharedOtp != null) sharedOtp.setDemoCode(code);
                 startOtpCountdown();
                 renderAuthorization();
                 status("Mã OTP demo đã được điền. Bấm xác nhận để tiếp tục.");
@@ -1178,6 +1193,7 @@ public final class TransferFragment extends Fragment {
 
     private void setBusy(boolean busy) {
         this.busy = busy;
+        if (sharedOtp != null) sharedOtp.setBusy(busy);
         updateSubmitButton();
         if (binding != null) renderAuthorization();
     }
@@ -1193,6 +1209,7 @@ public final class TransferFragment extends Fragment {
     }
 
     private void status(String message) {
+        if (sharedOtp != null && sharedOtp.isShowing()) sharedOtp.setStatusMessage(message);
         if (binding != null) binding.otpSheetStatus.setText(message);
         if (binding != null) binding.statusText.setText(message);
     }
@@ -1203,6 +1220,7 @@ public final class TransferFragment extends Fragment {
 
     @Override
     public void onDestroyView() {
+        dismissSharedOtp();
         if (authorizationSheet != null) { authorizationSheet.close(); authorizationSheet = null; }
         if (otpTimer != null) {
             otpTimer.cancel();
@@ -1213,5 +1231,9 @@ public final class TransferFragment extends Fragment {
         completed = false;
         busy = false;
         super.onDestroyView();
+    }
+
+    private void dismissSharedOtp() {
+        if (sharedOtp != null) { sharedOtp.dismiss(); sharedOtp = null; }
     }
 }

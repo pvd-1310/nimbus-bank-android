@@ -47,6 +47,7 @@ import java.util.function.Consumer;
 
 public class UtilitiesHubDialogFragment extends DialogFragment {
     private com.example.final_term.ui.common.TransactionSheet authorizationSheet;
+    private com.example.final_term.ui.transaction.OtpBottomSheetDialog sharedOtp;
     private DialogUtilitiesHubBinding binding;
     private BackendApiClient api;
     private PaymentSheet paymentSheet;
@@ -1035,6 +1036,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         binding.checkoutFaceStepContainer.setVisibility(needFace ? View.VISIBLE : View.GONE);
 
         boolean canOtp = checkoutConfirmed && quoted && intentId != null && (!faceRequired || faceVerified) && !commitPending && !completed;
+        if (!canOtp) dismissSharedOtp();
         if (canOtp && authorizationSheet == null) {
             authorizationSheet = new com.example.final_term.ui.common.TransactionSheet(requireContext(), binding.checkoutOtpStepContainer);
         } else if (!canOtp && authorizationSheet != null) {
@@ -1075,6 +1077,14 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
 
     private void requestOtp() {
         if (busy || intentId == null || commitPending || (faceRequired && !faceVerified)) return;
+        if (sharedOtp == null) {
+            sharedOtp = new com.example.final_term.ui.transaction.OtpBottomSheetDialog(requireContext(), new com.example.final_term.ui.transaction.OtpBottomSheetDialog.Listener() {
+                @Override public void onSubmitOtp(@NonNull String code) { binding.checkoutOtpInput.setText(code); verifyOtp(); }
+                @Override public void onResendRequested() { requestOtp(); }
+                @Override public void onDismissRequested() { dismissSharedOtp(); cancelIntentForEdit(); }
+            });
+        }
+        sharedOtp.show();
         setBusy(true);
         checkoutStatus("Đang tạo mã xác nhận…");
         api.post("/intents/" + intentId + "/otp", "{}").addOnCompleteListener(task -> {
@@ -1098,6 +1108,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                 challengeId = res.getString("challengeId");
                 binding.checkoutDemoCode.setText("Mã OTP demo đã được điền tự động");
                 binding.checkoutOtpInput.setText(code);
+                if (sharedOtp != null) sharedOtp.setDemoCode(code);
                 startOtpTimer();
                 renderCheckoutStep();
                 checkoutStatus("Mã OTP demo đã được điền. Bấm xác nhận để tiếp tục.");
@@ -1109,11 +1120,13 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
 
     private void startOtpTimer() {
         if (otpTimer != null) otpTimer.cancel();
+        if (sharedOtp != null) sharedOtp.setCountdownText("Gửi lại sau 00:30", false);
         binding.checkoutOtpTimer.setClickable(false);
         otpTimer = new CountDownTimer(30000, 1000) {
             @Override
             public void onTick(long millisUntilFinished) {
                 if (binding != null) {
+                    if (sharedOtp != null) sharedOtp.setCountdownText(String.format(Locale.getDefault(), "Gửi lại sau 00:%02d", millisUntilFinished / 1000), false);
                     binding.checkoutOtpTimer.setText(String.format(Locale.getDefault(),
                             "Tạo mã mới sau 00:%02d", millisUntilFinished / 1000));
                 }
@@ -1121,6 +1134,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
             @Override
             public void onFinish() {
                 if (binding != null) {
+                    if (sharedOtp != null) sharedOtp.setCountdownText("Gửi lại mã OTP", true);
                     binding.checkoutOtpTimer.setText("Tạo mã mới");
                     binding.checkoutOtpTimer.setClickable(true);
                     binding.checkoutOtpTimer.setOnClickListener(v -> requestOtp());
@@ -1455,6 +1469,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     }
 
     private void checkoutStatus(String msg) {
+        if (sharedOtp != null && sharedOtp.isShowing()) sharedOtp.setStatusMessage(msg);
         if (binding != null) {
             binding.checkoutOtpStatus.setText(msg);
             binding.checkoutStatusText.setText(msg);
@@ -1463,6 +1478,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
 
     private void setBusy(boolean busy) {
         this.busy = busy;
+        if (sharedOtp != null) sharedOtp.setBusy(busy);
         if (binding != null) {
             binding.btnProceedTopup.setEnabled(!busy);
             binding.topupCarrierPicker.setEnabled(!busy);
@@ -1542,6 +1558,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
 
     @Override
     public void onDestroyView() {
+        dismissSharedOtp();
         if (authorizationSheet != null) { authorizationSheet.close(); authorizationSheet = null; }
         if (otpTimer != null) {
             otpTimer.cancel();
@@ -1552,5 +1569,9 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         busy = false;
         completed = false;
         super.onDestroyView();
+    }
+
+    private void dismissSharedOtp() {
+        if (sharedOtp != null) { sharedOtp.dismiss(); sharedOtp = null; }
     }
 }
