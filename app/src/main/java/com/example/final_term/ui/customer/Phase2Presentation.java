@@ -18,7 +18,15 @@ public final class Phase2Presentation {
     }
 
     public static String requestStatusMessage(String operation) {
-        return "Chưa thể gửi yêu cầu lúc này. Số dư chưa thay đổi; vui lòng thử lại.";
+        return "Chưa kết nối API yêu cầu nạp/rút. Yêu cầu chưa được gửi; số dư chưa thay đổi.";
+    }
+
+    public static boolean usesRequestForm(String operation) {
+        return "WITHDRAWAL".equalsIgnoreCase(operation);
+    }
+
+    public static boolean requiresRecipientLookup(String cashOperation, boolean external) {
+        return !external && cashOperation == null;
     }
 
     public static boolean validRequestAmount(String value) {

@@ -109,7 +109,7 @@ public class AccountDetailFragment extends Fragment {
         });
 
         if (currentAccountId.isEmpty()) {
-            binding.statusText.setText("THIẾU MÃ TÀI KHOẢN");
+            binding.statusText.setText("Thiếu mã tài khoản");
             return;
         }
 

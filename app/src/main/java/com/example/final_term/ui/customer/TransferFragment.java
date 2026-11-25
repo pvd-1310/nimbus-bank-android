@@ -400,7 +400,7 @@ public final class TransferFragment extends Fragment {
             return;
         }
         confirmedSource = sourceIds.get(sourceIndex);
-        if (demoMode()) {
+        if (!Phase2Presentation.requiresRecipientLookup(cashOperation, external)) {
             showStep(Step.CONFIRM);
             return;
         }
@@ -556,7 +556,9 @@ public final class TransferFragment extends Fragment {
                     .put("currency", "VND");
             if (external) body.put("bankCode", "DEMO_BANK").put("beneficiaryAccount", target);
             else if (cashOperation != null && !cardTopup()) body.put("type", cashOperation);
-            else body.put("destinationPhone", target).put("recipientAccountId", recipientAccountId);
+            else if (Phase2Presentation.requiresRecipientLookup(cashOperation, external)) {
+                body.put("destinationPhone", target).put("recipientAccountId", recipientAccountId);
+            }
             String payload = body.toString();
             if (!payload.equals(payloadKey) || requestId == null) {
                 requestId = UUID.randomUUID().toString();

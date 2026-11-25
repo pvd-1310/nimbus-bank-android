@@ -66,10 +66,8 @@ public final class MoneyRequestFragment extends Fragment {
         AppContainer app = ((FinalTermApplication) requireActivity().getApplication()).getAppContainer();
         api = app.getBackendApiClient();
         String operation = getArguments() == null ? DEPOSIT : getArguments().getString("operation", DEPOSIT);
-        binding.titleText.setText(operationLabel(operation));
         binding.operationInput.setAdapter(adapter(List.of("Nạp tiền", "Rút tiền")));
         binding.operationInput.setSelection(WITHDRAWAL.equals(operation) ? 1 : 0);
-        updateTabStyles(WITHDRAWAL.equals(operation) ? 1 : 0);
 
         binding.backButton.setOnClickListener(v -> androidx.navigation.Navigation.findNavController(v).navigateUp());
         binding.helpButton.setOnClickListener(v -> {
@@ -81,13 +79,11 @@ public final class MoneyRequestFragment extends Fragment {
         });
 
         binding.tabDeposit.setOnClickListener(v -> {
-            binding.operationInput.setSelection(0);
-            updateTabStyles(0);
+            selectOperation(0);
         });
 
         binding.tabWithdrawal.setOnClickListener(v -> {
-            binding.operationInput.setSelection(1);
-            updateTabStyles(1);
+            selectOperation(1);
         });
 
         binding.chipReq500k.setOnClickListener(v -> appendRequestAmount(500000));
@@ -97,18 +93,15 @@ public final class MoneyRequestFragment extends Fragment {
         binding.operationInput.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(AdapterView<?> parent, View selected, int position, long id) {
                 if (binding != null) {
-                    binding.titleText.setText(operationLabel(position == 1 ? WITHDRAWAL : DEPOSIT));
-                    updateTabStyles(position);
+                    updateOperationUi();
                 }
             }
             @Override public void onNothingSelected(AdapterView<?> parent) { }
         });
         binding.statusText.setText(pendingBody == null ? "Đang tải tài khoản…" :
                 "Chưa xác nhận được yêu cầu trước. Gửi lại để kiểm tra cùng mã yêu cầu.");
-        binding.submitButton.setText(WITHDRAWAL.equals(operation) ? "Tiếp tục · rút tiền" : "Nạp tiền bằng thẻ");
         binding.demoSettlementButton.setVisibility(View.GONE);
-        ((View) binding.accountInput.getParent()).setVisibility(View.GONE);
-        ((View) binding.amountInput.getParent()).setVisibility(View.GONE);
+        updateOperationUi();
         binding.submitButton.setOnClickListener(v -> {
             if (pendingBody != null) {
                 submit();
@@ -306,6 +299,21 @@ public final class MoneyRequestFragment extends Fragment {
         binding.submitButton.setText(retry && !sending ? "Gửi lại yêu cầu"
                 : withdrawal ? "Tiếp tục · rút tiền" : "Nạp tiền bằng thẻ");
         binding.historyButton.setEnabled(uid != null && !readingHistory);
+    }
+
+    private void selectOperation(int position) {
+        binding.operationInput.setSelection(position);
+        updateOperationUi();
+    }
+
+    private void updateOperationUi() {
+        int position = binding.operationInput.getSelectedItemPosition() == 1 ? 1 : 0;
+        boolean withdrawal = Phase2Presentation.usesRequestForm(position == 1 ? WITHDRAWAL : DEPOSIT);
+        binding.titleText.setText(operationLabel(withdrawal ? WITHDRAWAL : DEPOSIT));
+        updateTabStyles(position);
+        ((View) binding.accountInput.getParent()).setVisibility(withdrawal ? View.VISIBLE : View.GONE);
+        ((View) binding.amountInput.getParent()).setVisibility(withdrawal ? View.VISIBLE : View.GONE);
+        updateControls();
     }
 
     private void clearPending() {

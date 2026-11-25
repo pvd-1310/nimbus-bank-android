@@ -19,4 +19,16 @@ public class Phase2PresentationTest {
         assertEquals("Chưa kết nối API yêu cầu nạp/rút. Yêu cầu chưa được gửi; số dư chưa thay đổi.",
                 Phase2Presentation.requestStatusMessage("DEPOSIT"));
     }
+
+    @Test public void withdrawalUsesRequestFormWhileDepositUsesCardFlow() {
+        org.junit.Assert.assertTrue(Phase2Presentation.usesRequestForm("WITHDRAWAL"));
+        org.junit.Assert.assertFalse(Phase2Presentation.usesRequestForm("DEPOSIT"));
+    }
+
+    @Test public void cashAndCardFlowsSkipRecipientLookup() {
+        org.junit.Assert.assertFalse(Phase2Presentation.requiresRecipientLookup("DEPOSIT", false));
+        org.junit.Assert.assertFalse(Phase2Presentation.requiresRecipientLookup("WITHDRAWAL", false));
+        org.junit.Assert.assertTrue(Phase2Presentation.requiresRecipientLookup(null, false));
+        org.junit.Assert.assertFalse(Phase2Presentation.requiresRecipientLookup(null, true));
+    }
 }
