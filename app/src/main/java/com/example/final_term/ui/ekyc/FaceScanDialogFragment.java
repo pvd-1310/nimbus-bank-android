@@ -80,9 +80,11 @@ public final class FaceScanDialogFragment extends DialogFragment {
     private static final String ARG_ALLOW_GALLERY = "allow_gallery";
     private static final String ARG_DISMISS_ERROR = "dismiss_error";
     private static final String ARG_SLOT = "slot";
+    private static final String ARG_REQUIRED_STABLE_FRAMES = "required_stable_frames";
 
     private static final long ANALYSIS_INTERVAL_MS = 150L;
-    private static final int REQUIRED_STABLE_FRAMES = 3;
+    private static final int DEFAULT_REQUIRED_STABLE_FRAMES = 3;
+    private static final int EKYC_REQUIRED_STABLE_FRAMES = 9;
     private static final int MAX_DIMENSION_PX = 1080;
 
     private DialogFaceScanBinding binding;
@@ -101,6 +103,7 @@ public final class FaceScanDialogFragment extends DialogFragment {
     private volatile boolean resultSent;
     private long lastAnalysisTimeMs;
     private int stableFrames;
+    private int requiredStableFrames = DEFAULT_REQUIRED_STABLE_FRAMES;
     private int currentRingColor;
 
     private final ActivityResultLauncher<String> cameraPermission = registerForActivityResult(
@@ -130,6 +133,7 @@ public final class FaceScanDialogFragment extends DialogFragment {
         args.putBoolean(ARG_ALLOW_GALLERY, false);
         args.putString(ARG_DISMISS_ERROR, "Đã hủy chụp ảnh.");
         args.putInt(ARG_SLOT, 2);
+        args.putInt(ARG_REQUIRED_STABLE_FRAMES, EKYC_REQUIRED_STABLE_FRAMES);
         fragment.setArguments(args);
         return fragment;
     }
@@ -139,6 +143,10 @@ public final class FaceScanDialogFragment extends DialogFragment {
         super.onCreate(savedInstanceState);
         setStyle(STYLE_NO_TITLE, R.style.Theme_Final_term);
         setCancelable(true);
+        Bundle args = getArguments();
+        requiredStableFrames = args != null
+                ? Math.max(1, args.getInt(ARG_REQUIRED_STABLE_FRAMES, DEFAULT_REQUIRED_STABLE_FRAMES))
+                : DEFAULT_REQUIRED_STABLE_FRAMES;
         FaceDetectorOptions options = new FaceDetectorOptions.Builder()
                 .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
                 .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_NONE)
@@ -436,14 +444,14 @@ public final class FaceScanDialogFragment extends DialogFragment {
         }
 
         stableFrames++;
-        int progress = Math.min(100, (stableFrames * 100) / REQUIRED_STABLE_FRAMES);
+        int progress = Math.min(100, (stableFrames * 100) / requiredStableFrames);
         updateScanUi(true, progress,
-                stableFrames >= REQUIRED_STABLE_FRAMES
+                stableFrames >= requiredStableFrames
                         ? "Đã nhận diện rõ! Đang xác thực..."
                         : "Giữ yên giây lát, đang quét khuôn mặt...",
                 false);
 
-        if (stableFrames >= REQUIRED_STABLE_FRAMES && !capturing) {
+        if (stableFrames >= requiredStableFrames && !capturing) {
             capturing = true;
             mainHandler.post(this::triggerAutoCapture);
         }
