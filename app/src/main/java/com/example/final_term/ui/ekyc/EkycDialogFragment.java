@@ -161,8 +161,14 @@ public final class EkycDialogFragment extends DialogFragment {
     private void showCameraForReservedSlot() {
         cameraDialogOpen = true;
         render();
-        InAppCameraDialogFragment.newInstance(state.pendingSlot(), state.canSelect(0), state.canSelect(1))
-                .show(getChildFragmentManager(), CAMERA_TAG);
+        int pendingSlot = state.pendingSlot();
+        if (pendingSlot == SELFIE) {
+            FaceScanDialogFragment.newForEkycSelfie()
+                    .show(getChildFragmentManager(), CAMERA_TAG);
+        } else {
+            InAppCameraDialogFragment.newInstance(pendingSlot, state.canSelect(0), state.canSelect(1))
+                    .show(getChildFragmentManager(), CAMERA_TAG);
+        }
     }
 
     private void maybeOpenCameraForCurrentStep() {
@@ -251,7 +257,7 @@ public final class EkycDialogFragment extends DialogFragment {
         visible(binding.layoutRetakeAction, ready);
         visible(binding.layoutCaptureActions, !ready);
         visible(binding.btnUpload, !ready && slot != SELFIE && !demo);
-        binding.btnShutter.setText(slot == SELFIE ? "Chụp selfie" : "Chụp bằng camera");
+        binding.btnShutter.setText(slot == SELFIE ? "Quét khuôn mặt tự động" : "Chụp bằng camera");
         binding.btnShutter.setEnabled(canEdit);
         binding.btnUpload.setEnabled(canEdit);
         binding.btnRetake.setEnabled(canEdit);

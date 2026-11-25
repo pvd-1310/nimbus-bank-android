@@ -75,6 +75,11 @@ public final class FaceScanDialogFragment extends DialogFragment {
     public static final String RESULT_KEY = "face_auto_scan_result";
     public static final String RESULT_PATH = "path";
     public static final String RESULT_ERROR = "error";
+    private static final String ARG_TITLE = "title";
+    private static final String ARG_RESULT_KEY = "result_key";
+    private static final String ARG_ALLOW_GALLERY = "allow_gallery";
+    private static final String ARG_DISMISS_ERROR = "dismiss_error";
+    private static final String ARG_SLOT = "slot";
 
     private static final long ANALYSIS_INTERVAL_MS = 150L;
     private static final int REQUIRED_STABLE_FRAMES = 3;
@@ -117,6 +122,18 @@ public final class FaceScanDialogFragment extends DialogFragment {
         new FaceScanDialogFragment().show(host.getParentFragmentManager(), TAG);
     }
 
+    public static FaceScanDialogFragment newForEkycSelfie() {
+        FaceScanDialogFragment fragment = new FaceScanDialogFragment();
+        Bundle args = new Bundle();
+        args.putString(ARG_TITLE, "Định danh eKYC");
+        args.putString(ARG_RESULT_KEY, InAppCameraDialogFragment.RESULT_KEY);
+        args.putBoolean(ARG_ALLOW_GALLERY, false);
+        args.putString(ARG_DISMISS_ERROR, "Đã hủy chụp ảnh.");
+        args.putInt(ARG_SLOT, 2);
+        fragment.setArguments(args);
+        return fragment;
+    }
+
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -136,11 +153,21 @@ public final class FaceScanDialogFragment extends DialogFragment {
                              @Nullable Bundle savedInstanceState) {
         binding = DialogFaceScanBinding.inflate(inflater, container, false);
         configureCircularViewport();
+        Bundle args = getArguments();
+        String title = args != null ? args.getString(ARG_TITLE, "Đăng nhập khuôn mặt") : "Đăng nhập khuôn mặt";
+        boolean allowGallery = args == null || args.getBoolean(ARG_ALLOW_GALLERY, true);
+        binding.faceScanTitle.setText(title);
+        if (!allowGallery) {
+            binding.btnGallery.setVisibility(View.GONE);
+            ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) binding.btnCancel.getLayoutParams();
+            lp.setMarginStart(0);
+            binding.btnCancel.setLayoutParams(lp);
+        }
         binding.btnBack.setOnClickListener(v -> dismiss());
         binding.btnCancel.setOnClickListener(v -> dismiss());
         binding.btnHelp.setOnClickListener(v -> new MaterialAlertDialogBuilder(requireContext())
                 .setTitle("Hướng dẫn quét khuôn mặt")
-                .setMessage("Giữ điện thoại ngang tầm mắt, đưa toàn bộ khuôn mặt vào giữa vòng tròn và giữ yên khoảng 1 giây. Hệ thống sẽ tự động chụp và đăng nhập.")
+                .setMessage("Giữ điện thoại ngang tầm mắt, đưa toàn bộ khuôn mặt vào giữa vòng tròn và giữ yên khoảng 1 giây. Hệ thống sẽ tự động chụp khi ảnh rõ nét.")
                 .setPositiveButton("Đã hiểu", null)
                 .show());
         binding.btnGallery.setOnClickListener(v -> {
@@ -244,7 +271,9 @@ public final class FaceScanDialogFragment extends DialogFragment {
     @Override
     public void onDismiss(@NonNull DialogInterface dialog) {
         if (!resultSent) {
-            publishResult(null, null);
+            Bundle args = getArguments();
+            String dismissError = args != null ? args.getString(ARG_DISMISS_ERROR) : null;
+            publishResult(null, dismissError);
         }
         super.onDismiss(dialog);
     }
@@ -629,11 +658,15 @@ public final class FaceScanDialogFragment extends DialogFragment {
     private void publishResult(@Nullable String path, @Nullable String error) {
         if (resultSent) return;
         resultSent = true;
+        Bundle args = getArguments();
+        String resultKey = args != null ? args.getString(ARG_RESULT_KEY, RESULT_KEY) : RESULT_KEY;
+        int slot = args != null ? args.getInt(ARG_SLOT, -1) : -1;
         Bundle result = new Bundle();
+        if (slot >= 0) result.putInt(ARG_SLOT, slot);
         if (path != null) result.putString(RESULT_PATH, path);
         if (error != null) result.putString(RESULT_ERROR, error);
         if (isAdded()) {
-            getParentFragmentManager().setFragmentResult(RESULT_KEY, result);
+            getParentFragmentManager().setFragmentResult(resultKey, result);
             dismissAllowingStateLoss();
         }
     }
