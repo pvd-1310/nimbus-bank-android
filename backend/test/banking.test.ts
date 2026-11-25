@@ -211,6 +211,7 @@ describe("banking invariants", () => {
     expect(audit.some((row) => row.action === "RATE_UPDATE" && row.beforeAfterSummary?.after?.annualRateBasisPoints === 650 && row.beforeAfterSummary?.after?.reason === input.reason)).toBe(true);
   });
   it("applies savings and loan rate policies immediately when their effective date is today", async () => {
+    now = Date.UTC(2024, 0, 16);
     await s.run(async (t) => {
       t.set("accounts/savings-today", { ownerUid: "alice", type: "SAVINGS", currency: "VND", status: "ACTIVE", availableMinor: 10000000, balanceMinor: 10000000 });
       t.set("savingsDetails/savings-today", { accountId: "savings-today", principalMinor: 10000000, productId: "sav-standard", ratePolicyVersion: "sav-base" });
@@ -222,7 +223,10 @@ describe("banking invariants", () => {
     const result = await b.rates.create(rateOfficer, { rateType: "LOAN", annualRateBasisPoints: 900, effectiveFrom: now, reason: "Áp dụng lãi vay hôm nay" });
     expect((await s.run((t) => t.get(`ratePolicies/${result.id}`))).effectiveFrom).toBe(now);
     expect((await s.run((t) => t.get(`ratePolicies/${savings.id}`))).effectiveFrom).toBe(now);
-    expect((await b.accounts.savings(customer, "savings-today")).annualRateBasisPoints).toBe(600);
+    expect((await b.accounts.savings(customer, "savings-today"))).toMatchObject({
+      annualRateBasisPoints: 600,
+      profitMinor: 50000,
+    });
     expect((await b.accounts.mortgage(customer, "loan-today")).annualRateBasisPoints).toBe(900);
   });
   it("creates bank-wide savings and loan rate versions and applies them to every matching account after effectiveness", async () => {
@@ -258,23 +262,21 @@ describe("banking invariants", () => {
   });
 });
 describe("calculations", () => {
-  it("uses VND minor units directly for ACT/365 estimate", () =>
-    expect(savingsEstimate(365000, 500, 365)).toBe(18250));
-  it.each([
-    ["February 2023", Date.UTC(2023, 1, 1), Date.UTC(2023, 2, 1), 28, 1400],
-    ["February 2024", Date.UTC(2024, 1, 1), Date.UTC(2024, 2, 1), 29, 1450],
-    ["April 2024", Date.UTC(2024, 3, 1), Date.UTC(2024, 4, 1), 30, 1500],
-    ["January 2024", Date.UTC(2024, 0, 1), Date.UTC(2024, 1, 1), 31, 1550],
-  ])("estimates savings interest for %s using its calendar days", (_label, start, end, days, profit) => {
+  it("matches the six-month savings example in the monthly formula", () => {
+    expect(savingsEstimate(100000000, 500, 6)).toBe(2500000);
+  });
+  it("estimates a single month's interest as one twelfth of the annual rate", () => {
+    const start = Date.UTC(2024, 0, 1);
+    const end = Date.UTC(2024, 1, 1);
     expect(savingsMonthlyEstimate(365000, start, end, [
       { id: "policy-1", effectiveFrom: start, annualRateBasisPoints: 500, version: 1 },
-    ])).toMatchObject({ days, profitMinor: profit });
+    ])).toMatchObject({ days: 31, profitMinor: 1521 });
   });
   it("rounds a half minor unit half up and returns zero for zero principal", () => {
     const start = Date.UTC(2024, 0, 1);
-    const end = Date.UTC(2025, 0, 1);
-    const policy = [{ id: "policy-1", effectiveFrom: start, annualRateBasisPoints: 5000, version: 1 }];
-    expect(savingsMonthlyEstimate(1, start, end, policy).profitMinor).toBe(1);
+    const end = Date.UTC(2024, 1, 1);
+    const policy = [{ id: "policy-1", effectiveFrom: start, annualRateBasisPoints: 10000, version: 1 }];
+    expect(savingsMonthlyEstimate(6, start, end, policy).profitMinor).toBe(1);
     expect(savingsMonthlyEstimate(0, start, end, policy).profitMinor).toBe(0);
   });
   it("splits a monthly estimate at the exact effective time of a new policy", () => {
@@ -285,7 +287,7 @@ describe("calculations", () => {
       { id: "policy-1", effectiveFrom: start, annualRateBasisPoints: 500, version: 1 },
       { id: "policy-2", effectiveFrom: change, annualRateBasisPoints: 1000, version: 2 },
     ]);
-    expect(result).toMatchObject({ days: 31, profitMinor: 2350, policyIds: ["policy-1", "policy-2"] });
+    expect(result).toMatchObject({ days: 31, profitMinor: 2306, policyIds: ["policy-1", "policy-2"] });
   });
   it("does not apply a future policy before its effective time", () => {
     const start = Date.UTC(2024, 0, 1);
@@ -295,7 +297,7 @@ describe("calculations", () => {
       { id: "policy-2", effectiveFrom: effective, annualRateBasisPoints: 1000, version: 2 },
     ]);
     expect(result.policyIds).toEqual(["policy-1"]);
-    expect(result.profitMinor).toBe(1550);
+    expect(result.profitMinor).toBe(1521);
   });
   it("requires a policy in effect at the beginning of the accrual period", () => {
     const start = Date.UTC(2024, 0, 1);
@@ -333,13 +335,14 @@ describe("calculations", () => {
     const result = await b.accounts.savings(customer, "savings", "2024-01");
     expect(result).toMatchObject({
       annualRateBasisPoints: 500,
-      profitMinor: 2350,
+      profitMinor: 1521,
       periodStart: Date.UTC(2024, 0, 1),
       periodEnd: Date.UTC(2024, 1, 1),
       days: 31,
       estimate: true,
     });
     expect(result.ratePolicyVersion).toBe("savings-v1");
+    expect(result.ratePolicyVersions).toEqual(["savings-v1"]);
     await expect(b.accounts.savings({ ...customer, uid: "bob" }, "savings", "2024-01"))
       .rejects.toMatchObject({ code: "FORBIDDEN" });
   });

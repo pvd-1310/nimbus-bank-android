@@ -75,18 +75,21 @@ export class AccountService {
         annualRateBasisPoints: policy.annualRateBasisPoints,
         version: policy.version,
       }));
-      const estimate = savingsMonthlyEstimate(
-        detail.principalMinor,
-        periodStart,
-        periodEnd,
-        calculationPolicies,
-      );
       const now = this.bank.now();
       const currentPolicy = calculationPolicies
         .filter((policy) => policy.effectiveFrom <= now)
         .sort((x, y) => x.effectiveFrom - y.effectiveFrom || (x.version ?? 0) - (y.version ?? 0))
         .at(-1);
       check(currentPolicy, "POLICY_UNAVAILABLE");
+      const estimatePolicies = selectedMonth === new Date(now).toISOString().slice(0, 7)
+        ? [{ ...currentPolicy, effectiveFrom: periodStart }]
+        : calculationPolicies;
+      const estimate = savingsMonthlyEstimate(
+        detail.principalMinor,
+        periodStart,
+        periodEnd,
+        estimatePolicies,
+      );
       return {
         demo: acc.demo === true,
         principalMinor: detail.principalMinor,
@@ -102,7 +105,7 @@ export class AccountService {
         profitMinor: estimate.profitMinor,
         monthlyProfitMinor: estimate.profitMinor,
         currency: acc.currency,
-        convention: "ACT/365 SIMPLE HALF_UP",
+        convention: "ANNUAL_RATE_DIVIDED_BY_12 SIMPLE HALF_UP",
         ratePolicyVersion: currentPolicy.id,
         ratePolicyVersions: estimate.policyIds,
         estimate: true,

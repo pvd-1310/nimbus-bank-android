@@ -125,7 +125,8 @@ public final class FirestoreReadRepository {
                     document.getString("currency"), longValue(document, "amountMinor"),
                     document.getString("status"),
                     readTimestamp(document.get("createdAt"), document.get("committedAt")),
-                    document.getString("failureCode"), document.getLong("balanceAfterMinor")));
+                    document.getString("failureCode"), document.getLong("balanceAfterMinor"),
+                    document.getString("destinationBankCode")));
         }
         result.sort(java.util.Comparator.comparing(
                 (ReadModels.TransactionSummary item) -> item.createdAt,

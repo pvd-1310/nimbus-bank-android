@@ -54,6 +54,7 @@ public final class ReadModels {
         public final Timestamp createdAt;
         public final String failureCode;
         public final Long balanceAfterMinor;
+        public final String destinationBankCode;
 
         public TransactionSummary(@NonNull String id, String accountId, String type, String currency,
                                    long amountMinor, String status, Timestamp createdAt) {
@@ -63,6 +64,13 @@ public final class ReadModels {
         public TransactionSummary(@NonNull String id, String accountId, String type, String currency,
                                    long amountMinor, String status, Timestamp createdAt,
                                    String failureCode, Long balanceAfterMinor) {
+            this(id, accountId, type, currency, amountMinor, status, createdAt,
+                    failureCode, balanceAfterMinor, null);
+        }
+
+        public TransactionSummary(@NonNull String id, String accountId, String type, String currency,
+                                   long amountMinor, String status, Timestamp createdAt,
+                                   String failureCode, Long balanceAfterMinor, String destinationBankCode) {
             this.id = id;
             this.accountId = accountId == null ? "" : accountId;
             this.type = type == null ? "TRANSACTION" : type;
@@ -72,6 +80,7 @@ public final class ReadModels {
             this.createdAt = createdAt;
             this.failureCode = failureCode;
             this.balanceAfterMinor = balanceAfterMinor;
+            this.destinationBankCode = destinationBankCode == null ? "" : destinationBankCode;
         }
 
         public boolean isBillPayment() { return "BILL_PAYMENT".equals(type); }

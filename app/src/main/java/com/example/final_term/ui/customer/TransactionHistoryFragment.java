@@ -166,7 +166,8 @@ public final class TransactionHistoryFragment extends Fragment {
                             item.getString("type"), item.optString("currency"), item.getLong("amountMinor"),
                             item.getString("status"), time,
                             item.isNull("failureCode") ? null : item.getString("failureCode"),
-                            item.isNull("balanceAfterMinor") ? null : item.getLong("balanceAfterMinor")));
+                            item.isNull("balanceAfterMinor") ? null : item.getLong("balanceAfterMinor"),
+                            item.optString("destinationBankCode", "")));
                 }
                 nextCursor = page.isNull("nextCursor") ? null : page.getString("nextCursor");
                 rows = loaded;

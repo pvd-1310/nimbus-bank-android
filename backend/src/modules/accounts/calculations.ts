@@ -1,6 +1,5 @@
 import { check, minor } from "../../shared/errors.js";
 const DAY_MS = 86400000n;
-const ACT_365_DENOMINATOR = 10000n * 365n * DAY_MS;
 
 export interface SavingsRatePeriod {
   id: string;
@@ -78,7 +77,8 @@ export function savingsMonthlyEstimate(
   }
   accrueUntil(end, active);
 
-  const profitMinor = Number((numerator + ACT_365_DENOMINATOR / 2n) / ACT_365_DENOMINATOR);
+  const monthlyDenominator = 10000n * 12n * BigInt(periodEnd - periodStart);
+  const profitMinor = Number((numerator + monthlyDenominator / 2n) / monthlyDenominator);
   check(Number.isSafeInteger(profitMinor), "AMOUNT_OVERFLOW");
   const durationMs = periodEnd - periodStart;
   check(durationMs % Number(DAY_MS) === 0, "INVALID_TERMS");
@@ -92,22 +92,25 @@ export function savingsMonthlyEstimate(
 export function savingsEstimate(
   principal: number,
   basisPoints: number,
-  days: number,
+  months: number,
 ) {
   minor(principal);
   check(
     Number.isInteger(basisPoints) &&
       basisPoints >= 0 &&
       basisPoints <= 10000 &&
-      Number.isInteger(days) &&
-      days >= 0 &&
-      days <= 36500,
+      Number.isInteger(months) &&
+      months >= 0 &&
+      months <= 1200,
     "INVALID_TERMS",
   );
-  return Number(
-    (BigInt(principal) * BigInt(basisPoints) * BigInt(days) + 1825000n) /
-      3650000n,
+  const denominator = 10000n * 12n;
+  const profitMinor = Number(
+    (BigInt(principal) * BigInt(basisPoints) * BigInt(months) + denominator / 2n) /
+      denominator,
   );
+  check(Number.isSafeInteger(profitMinor), "AMOUNT_OVERFLOW");
+  return profitMinor;
 }
 export function mortgageSchedule(
   principal: number,

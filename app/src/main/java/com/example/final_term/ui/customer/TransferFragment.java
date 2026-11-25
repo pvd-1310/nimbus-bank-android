@@ -7,6 +7,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
+import android.widget.AdapterView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -20,6 +21,7 @@ import com.example.final_term.data.BackendApiClient;
 import com.example.final_term.data.ReadModelResult;
 import com.example.final_term.data.ReadModels;
 import com.example.final_term.data.ReadSummaryFormatter;
+import com.example.final_term.data.ExternalBankCatalog;
 import com.example.final_term.databinding.FragmentTransferBinding;
 import com.example.final_term.domain.DomainDtos.OtpVerification;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -58,6 +60,7 @@ public final class TransferFragment extends Fragment {
     private final FaceCamera faceCamera = new FaceCamera(this, this::verifyFace, this::faceError);
     private boolean busy;
     private boolean external;
+    private String externalBankCode = "";
     private String cashOperation;
     private String initialCashAccount;
     private String initialCashAmount;
@@ -92,6 +95,7 @@ public final class TransferFragment extends Fragment {
         faceRequired = state.getBoolean("faceRequired");
         commitPending = state.getBoolean("commitPending");
         external = state.getBoolean("external");
+        externalBankCode = state.getString("externalBankCode", "");
         confirmedSource = state.getString("confirmedSource");
         authoritativeAmount = state.getLong("authoritativeAmount");
         authoritativeFee = state.getLong("authoritativeFee");
@@ -113,6 +117,7 @@ public final class TransferFragment extends Fragment {
         state.putBoolean("faceRequired", faceRequired);
         state.putBoolean("commitPending", commitPending);
         state.putBoolean("external", external);
+        state.putString("externalBankCode", externalBankCode);
         state.putString("confirmedSource", confirmedSource);
         state.putLong("authoritativeAmount", authoritativeAmount);
         state.putLong("authoritativeFee", authoritativeFee);
@@ -134,6 +139,7 @@ public final class TransferFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle state) {
         super.onViewCreated(view, state);
+        faceCamera.attach();
         FinalTermApplication app = (FinalTermApplication) requireActivity().getApplication();
         api = app.getAppContainer().getBackendApiClient();
         if (BuildConfig.STRIPE_PUBLISHABLE_KEY.startsWith("pk_test_")) {
@@ -149,6 +155,7 @@ public final class TransferFragment extends Fragment {
 
         binding.tabInternal.setOnClickListener(v -> switchMode(false));
         binding.tabExternal.setOnClickListener(v -> switchMode(true));
+        setupExternalBankPicker();
         updateMode();
 
         // Quick amount chips
@@ -292,11 +299,27 @@ public final class TransferFragment extends Fragment {
         binding.tabExternal.setTextColor(androidx.core.content.ContextCompat.getColor(requireContext(), external ? R.color.white : R.color.ink_muted));
         binding.tabInternal.setTextColor(androidx.core.content.ContextCompat.getColor(requireContext(), external ? R.color.ink_muted : R.color.white));
         binding.tabExternal.setText("Ngân hàng khác");
+        binding.externalBankCard.setVisibility(external && cashOperation == null ? View.VISIBLE : View.GONE);
         binding.targetInput.setHint(external ? "Số tài khoản nhận"
                 : "Số điện thoại người nhận");
         binding.targetInput.setInputType(external ? android.text.InputType.TYPE_CLASS_NUMBER
                 : android.text.InputType.TYPE_CLASS_PHONE);
         binding.headerTitle.setText(demoMode() ? demoLabel() : getString(R.string.transfer_title));
+    }
+
+    private void setupExternalBankPicker() {
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(),
+                android.R.layout.simple_spinner_item, ExternalBankCatalog.names());
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        binding.externalBankSpinner.setAdapter(adapter);
+        binding.externalBankSpinner.setSelection(ExternalBankCatalog.positionForCode(externalBankCode), false);
+        binding.externalBankSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                String[] codes = ExternalBankCatalog.codes();
+                if (position >= 0 && position < codes.length) externalBankCode = codes[position];
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) { }
+        });
     }
 
     private boolean validTarget(String target) {
@@ -407,6 +430,10 @@ public final class TransferFragment extends Fragment {
                     : "Kiểm tra số điện thoại người nhận và số tiền VND.");
             return;
         }
+        if (external && externalBankCode.isEmpty()) {
+            status("Vui lòng chọn ngân hàng nhận.");
+            return;
+        }
         confirmedSource = sourceIds.get(sourceIndex);
         if (!Phase2Presentation.requiresRecipientLookup(cashOperation, external)) {
             showStep(Step.CONFIRM);
@@ -448,13 +475,16 @@ public final class TransferFragment extends Fragment {
         String target = text(binding.targetInput.getText());
         String note = text(binding.noteInput.getText());
         long amount = authoritativeAmount > 0 ? authoritativeAmount : getCurrentAmount();
-        String targetText = demoMode() ? (!authoritativeTarget.isEmpty() ? authoritativeTarget : target)
+        String targetText = external ? ExternalBankCatalog.nameForCode(externalBankCode) + " · " + target
+                : demoMode() ? (!authoritativeTarget.isEmpty() ? authoritativeTarget : target)
                 : recipientName.isEmpty() ? target : recipientName + " · " + target;
 
         binding.confirmAmountDisplay.setText(ReadSummaryFormatter.formatCurrency(amount, authoritativeCurrency));
         binding.confirmSourceText.setText((cardTopup() ? "Tài khoản nhận: " : "Tài khoản nguồn: ") + sourceId);
         String recipient = cardTopup() ? "Nguồn thanh toán: thẻ"
                 : cashOperation != null ? "Tài khoản đối ứng: Nimbus Bank"
+                : external ? "Ngân hàng nhận: " + ExternalBankCatalog.nameForCode(externalBankCode)
+                        + "\nTài khoản nhận: " + target
                 : "Tài khoản nhận: " + targetText;
         binding.confirmTargetText.setText(recipient + "\nPhí: " +
                 ReadSummaryFormatter.formatCurrency(authoritativeFee, authoritativeCurrency) +
@@ -467,7 +497,8 @@ public final class TransferFragment extends Fragment {
 
     private void bindSuccessView() {
         long amount = authoritativeAmount > 0 ? authoritativeAmount : receiptAmount();
-        String target = demoMode() && !authoritativeTarget.isEmpty() ? authoritativeTarget : receiptTarget();
+        String target = external ? receiptTarget()
+                : demoMode() && !authoritativeTarget.isEmpty() ? authoritativeTarget : receiptTarget();
         binding.successAmountDisplay.setText(ReadSummaryFormatter.formatCurrency(amount, authoritativeCurrency));
         binding.receiptTxId.setVisibility(View.GONE);
         binding.successHeadline.setText(cardTopup() ? "Tiền đã được ghi có vào tài khoản"
@@ -486,7 +517,8 @@ public final class TransferFragment extends Fragment {
     private String receiptTarget() {
         try {
             JSONObject payload = new JSONObject(payloadKey);
-            if (external) return payload.optString("beneficiaryAccount");
+            if (external) return ExternalBankCatalog.nameForCode(payload.optString("bankCode"))
+                    + " · " + payload.optString("beneficiaryAccount");
             if (cardTopup()) return confirmedSource == null ? "Tài khoản Nimbus" : confirmedSource;
             if ("WITHDRAWAL".equals(cashOperation)) return confirmedSource == null ? "Tài khoản thanh toán" : confirmedSource;
             if (cashOperation != null) return "Tài khoản Nimbus Bank";
@@ -570,7 +602,7 @@ public final class TransferFragment extends Fragment {
                     .put(demoMode() || cardTopup() ? "accountId" : "sourceAccountId", confirmedSource)
                     .put("amountMinor", getCurrentAmount())
                     .put("currency", "VND");
-            if (external) body.put("bankCode", "DEMO_BANK").put("beneficiaryAccount", target);
+            if (external) body.put("bankCode", externalBankCode).put("beneficiaryAccount", target);
             else if (cashOperation != null && !cardTopup()) body.put("type", cashOperation);
             else if (Phase2Presentation.requiresRecipientLookup(cashOperation, external)) {
                 body.put("destinationPhone", target).put("recipientAccountId", recipientAccountId);
@@ -758,6 +790,10 @@ public final class TransferFragment extends Fragment {
             try {
                 JSONObject result = new JSONObject(task.getResult().body);
                 String state = result.getString("status");
+                if (external && !result.optString("bankCode").isEmpty()) {
+                    externalBankCode = result.getString("bankCode");
+                    binding.externalBankSpinner.setSelection(ExternalBankCatalog.positionForCode(externalBankCode), false);
+                }
                 authoritativeAmount = result.optLong("amountMinor", authoritativeAmount);
                 authoritativeFee = result.optLong("feeMinor", authoritativeFee);
                 authoritativeCurrency = result.optString("currency", authoritativeCurrency);

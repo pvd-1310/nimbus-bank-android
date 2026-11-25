@@ -4,6 +4,7 @@ import { digest } from "../../shared/crypto.js";
 import { check, key, minor } from "../../shared/errors.js";
 import { intentDigest } from "../security/intent.js";
 import type { Actor } from "../auth/auth.types.js";
+import { externalBankName, externalBanks } from "./external-banks.js";
 export class RequestService {
   constructor(private bank: Banking) {}
   async create(a: Actor, input: Doc) {
@@ -52,8 +53,10 @@ export class RequestService {
     check(["DEPOSIT", "WITHDRAWAL", "EXTERNAL_TRANSFER"].includes(input.type), "INVALID_TYPE");
     check(input.type !== "DEPOSIT", "TOP_UP_REQUIRES_CARD", 409);
     const external = input.type === "EXTERNAL_TRANSFER";
-    if (external) check(input.bankCode === "DEMO_BANK" && /^0{9}[12]$/.test(input.beneficiaryAccount),
-      "DEMO_BENEFICIARY_REQUIRED");
+    if (external) {
+      check(externalBanks.some((bank) => bank.code === input.bankCode), "INVALID_BANK");
+      check(/^0{9}[12]$/.test(input.beneficiaryAccount), "DEMO_BENEFICIARY_REQUIRED");
+    }
     const id = digest([a.uid, "DEMO_MOVEMENT", input.requestId]);
     const hash = digest(input);
     return this.bank.store.run(async (t) => {
@@ -66,10 +69,12 @@ export class RequestService {
       const account = await this.demoAccount(t, a, input.accountId, input.currency);
       check(input.type === "DEPOSIT" || account.availableMinor >= input.amountMinor, "INSUFFICIENT_FUNDS", 409);
       const now = this.bank.now();
+      const destinationBankName = external ? externalBankName(input.bankCode) : undefined;
       const intent = {
         id, actorUid: a.uid, kind: "DEMO_MOVEMENT", movement: input.type,
         requestId: input.requestId, sourceAccountId: input.accountId,
         destinationAccountId: external ? input.bankCode + "_" + input.beneficiaryAccount : "DEMO_CASH",
+        ...(external ? { bankCode: input.bankCode, destinationBankName, beneficiaryAccount: input.beneficiaryAccount } : {}),
         amountMinor: input.amountMinor, feeMinor: 0, currency: input.currency,
         policyDigest: digest([input.type, hash]),
         payloadDigest: hash, demo: true, status: "CREATED", securityVersion: 1,
@@ -91,6 +96,7 @@ export class RequestService {
       status: intent.status, expiresAt: intent.expiresAt, faceRequired: intent.faceRequired,
       providerReference: intent.providerReference ?? null, failureCode: intent.failureCode ?? null,
       feeMinor: intent.feeMinor, amountMinor: intent.amountMinor, currency: intent.currency,
+      ...(intent.bankCode ? { bankCode: intent.bankCode, beneficiaryAccount: intent.beneficiaryAccount } : {}),
       balanceAfterMinor: intent.balanceAfterMinor ?? null,
       transactionId: intent.status === "COMMITTED" ? intent.id : null,
     };
@@ -151,7 +157,7 @@ export class RequestService {
       const failureCode =
         account.type !== "CHECKING" || account.status !== "ACTIVE" ||
           account.currency !== intent.currency ? "DEMO_ACCOUNT_REQUIRED"
-        : intent.movement === "EXTERNAL_TRANSFER" && intent.destinationAccountId === "DEMO_BANK_0000000002"
+        : intent.movement === "EXTERNAL_TRANSFER" && intent.beneficiaryAccount === "0000000002"
           ? "DEMO_PROVIDER_REJECTED"
         : availableMinor < 0 || bookedMinor < 0 ? "INSUFFICIENT_FUNDS"
         : ![bookedMinor, availableMinor, amountMinor].every(Number.isSafeInteger) ? "AMOUNT_OVERFLOW"
@@ -176,6 +182,11 @@ export class RequestService {
       t.set("transactions/" + id, {
         ownerUid: a.uid, actorUid: a.uid, requestId: intent.requestId, sourceAccountId: account.id,
         destinationAccountId: intent.destinationAccountId, type: "DEMO_" + intent.movement,
+        ...(intent.movement === "EXTERNAL_TRANSFER" ? {
+          destinationBankCode: intent.bankCode,
+          destinationBankName: intent.destinationBankName,
+          beneficiaryAccount: intent.beneficiaryAccount,
+        } : {}),
         amountMinor: intent.amountMinor, currency: intent.currency, status: "DEMO_SETTLED",
         providerReference: intent.providerReference, balanceAfterMinor: bookedMinor, committedAt: now, demo: true,
       });

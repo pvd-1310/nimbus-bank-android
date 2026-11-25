@@ -3,7 +3,6 @@ package com.example.final_term.ui.ekyc;
 import android.os.Bundle;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
-import com.google.android.gms.tasks.Tasks;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -21,6 +20,10 @@ public final class FaceCamera {
 
     public FaceCamera(Fragment fragment, Consumer<byte[]> captured, Consumer<String> failed) {
         this.fragment = fragment; this.captured = captured; this.failed = failed;
+    }
+
+    public void attach() {
+        if (!fragment.isAdded()) return;
         fragment.getParentFragmentManager().setFragmentResultListener(InAppCameraDialogFragment.RESULT_KEY, fragment,
                 (key, result) -> { String path = result.getString("path"); if (path == null) return; IO.execute(() -> { try { byte[] bytes = Files.readAllBytes(new File(path).toPath()); new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> captured.accept(bytes)); } catch (IOException e) { failed.accept("Không đọc được ảnh. Vui lòng chụp lại."); } finally { new File(path).delete(); } }); });
     }

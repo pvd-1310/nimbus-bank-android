@@ -110,7 +110,7 @@ it("returns a calendar-month savings estimate and mortgage schedules from the ou
     .set("Authorization", auth);
   expect(savings.status).toBe(200);
   expect(savings.body).toMatchObject({
-    profitMinor: 1550,
+    profitMinor: 1521,
     days: 31,
     periodStart: Date.UTC(2024, 0, 1),
     periodEnd: Date.UTC(2024, 1, 1),

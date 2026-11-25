@@ -4,12 +4,13 @@ import { digest } from "../../shared/crypto.js";
 import { check } from "../../shared/errors.js";
 import { page } from "../../shared/pagination.js";
 import { amount, currency, id } from "../../shared/validation.js";
+import { externalBankCodes } from "./external-banks.js";
 const demo = z.object({
   requestId: id, accountId: id, amountMinor: amount, currency,
 });
 export function registerRequestsRoutes(route: Route, d: AppDependencies) {
   const cash = demo.extend({ type: z.enum(["DEPOSIT", "WITHDRAWAL"]) }).strict();
-  const external = demo.extend({ bankCode: z.literal("DEMO_BANK"), beneficiaryAccount: z.string().regex(/^0{9}[12]$/) }).strict();
+  const external = demo.extend({ bankCode: z.enum(externalBankCodes), beneficiaryAccount: z.string().regex(/^0{9}[12]$/) }).strict();
   route("post", "/money-requests", (a, r) =>
     d.bank.requests.create(
       a,

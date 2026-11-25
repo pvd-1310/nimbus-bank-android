@@ -249,6 +249,7 @@ export class IntentSecurity {
         ...(i.sourceId === "SIMULATOR" && { demo: true }),
         ...(i.kind === "DEMO_MOVEMENT" && {
           demo: true, providerReference: i.providerReference ?? null,
+          ...(i.bankCode ? { bankCode: i.bankCode, beneficiaryAccount: i.beneficiaryAccount } : {}),
         }),
         status,
         expiresAt: i.expiresAt,

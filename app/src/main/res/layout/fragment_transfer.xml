@@ -133,6 +133,36 @@
                         android:paddingEnd="12dp" />
                 </LinearLayout>
 
+                <!-- Destination bank (external transfers only) -->
+                <LinearLayout
+                    android:id="@+id/external_bank_card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:background="@drawable/glass_panel_card"
+                    android:elevation="4dp"
+                    android:orientation="vertical"
+                    android:padding="16dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Ngân hàng nhận"
+                        android:textColor="@color/ink_muted"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+
+                    <Spinner
+                        android:id="@+id/external_bank_spinner"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/glass_pill_button"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp" />
+                </LinearLayout>
+
                 <!-- Target Account Input -->
                 <LinearLayout
                     android:layout_width="match_parent"

@@ -214,6 +214,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
+        faceCamera.attach();
         FinalTermApplication app = (FinalTermApplication) requireActivity().getApplication();
         api = app.getAppContainer().getBackendApiClient();
         if (BuildConfig.STRIPE_PUBLISHABLE_KEY.startsWith("pk_test_")) {

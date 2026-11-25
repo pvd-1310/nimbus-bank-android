@@ -7,7 +7,7 @@ import { Evidence } from "../src/modules/ekyc/ekyc.service.js";
 import { Payments } from "../src/modules/payments/payment.service.js";
 import { StripeGateway } from "../src/modules/payments/stripe.provider.js";
 import { MemoryStore } from "./support/memory-store.js";
-async function fixture() {
+async function fixture(externalTransfer = false) {
   const s = new MemoryStore();
   await s.run(async (t) => {
     t.set("users/alice", { role: "CUSTOMER", active: true });
@@ -35,6 +35,7 @@ async function fixture() {
       bookedMinor: 100,
       currency: "VND",
       status: "ACTIVE",
+      ...(externalTransfer ? { type: "CHECKING", demo: true } : {}),
     });
     t.set("accounts/b", {
       ownerUid: "bob",
@@ -64,6 +65,18 @@ async function fixture() {
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
+});
+
+it("accepts a supported destination bank on external transfers and rejects unknown banks", async () => {
+  const app = await fixture(true);
+  const body = { requestId: "external-bank", accountId: "a", amountMinor: 25,
+    currency: "VND", bankCode: "BIDV", beneficiaryAccount: "0000000001" };
+  await request(app).post("/external-transfers").set("Authorization", "Bearer valid")
+    .send(body).expect(200).expect(({ body: result }) => expect(result).toMatchObject({
+      bankCode: "BIDV", beneficiaryAccount: "0000000001", status: "CREATED",
+    }));
+  await request(app).post("/external-transfers").set("Authorization", "Bearer valid")
+    .send({ ...body, requestId: "unknown-bank", bankCode: "UNKNOWN" }).expect(400);
 });
 
 it("returns a walking route to the branch selected on the map", async () => {

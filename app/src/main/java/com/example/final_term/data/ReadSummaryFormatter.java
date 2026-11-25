@@ -45,6 +45,9 @@ public final class ReadSummaryFormatter {
             detail.append(amount);
         }
         if (!transaction.accountId.isEmpty()) detail.append("\n").append(transaction.accountId);
+        if ("DEMO_EXTERNAL_TRANSFER".equals(transaction.type) && !transaction.destinationBankCode.isEmpty()) {
+            detail.append("\nNgân hàng nhận: ").append(ExternalBankCatalog.nameForCode(transaction.destinationBankCode));
+        }
         if (("SETTLED".equals(transaction.status) || "DEMO_SETTLED".equals(transaction.status)) && transaction.balanceAfterMinor != null) {
             detail.append("\nSố dư sau giao dịch ")
                     .append(formatCurrency(transaction.balanceAfterMinor, transaction.currency));
