@@ -67,6 +67,20 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+it("requires an authenticated owned eKYC draft before forwarding the CCCD image", async () => {
+  const app = await fixture();
+  vi.stubEnv("FPT_AI_KEY", "test-key");
+  const fetchMock = vi.fn(async () => Response.json({ errorCode: 0, data: [{ type: "new", id: "123456789012", name: "Test User", dob: "01/01/2000" }] }));
+  vi.stubGlobal("fetch", fetchMock);
+  const draft = await request(app).post("/ekyc").set("Authorization", "Bearer valid").send({ consented: true }).expect(200);
+  await request(app).post(`/ekyc/${draft.body.id}/recognize`).set("Content-Type", "image/jpeg").send(Buffer.from("image")).expect(401);
+  await request(app).post("/ekyc/unknown/recognize").set("Authorization", "Bearer valid").set("Content-Type", "image/jpeg").send(Buffer.from("image")).expect(404);
+  expect(fetchMock).not.toHaveBeenCalled();
+  const response = await request(app).post(`/ekyc/${draft.body.id}/recognize`).set("Authorization", "Bearer valid").set("Content-Type", "image/jpeg").send(Buffer.from("image")).expect(200);
+  expect(response.body).toMatchObject({ nationalIdNumber: "123456789012", dateOfBirth: "2000-01-01" });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
 it("accepts a supported destination bank on external transfers and rejects unknown banks", async () => {
   const app = await fixture(true);
   const body = { requestId: "external-bank", accountId: "a", amountMinor: 25,
@@ -80,6 +94,7 @@ it("accepts a supported destination bank on external transfers and rejects unkno
 });
 
 it("returns a walking route to the branch selected on the map", async () => {
+  vi.stubEnv("OPENROUTESERVICE_API_KEY", "");
   vi.stubEnv("GOOGLE_ROUTES_API_KEY", "test-key");
   vi.stubGlobal("fetch", async (url: string, options: RequestInit) => {
     const body = JSON.parse(String(options.body));
@@ -116,6 +131,7 @@ it("returns a walking route to the branch selected on the map", async () => {
 });
 
 it("selects the shortest walking route even when another branch is closer geographically", async () => {
+  vi.stubEnv("OPENROUTESERVICE_API_KEY", "");
   vi.stubEnv("GOOGLE_ROUTES_API_KEY", "test-key");
   vi.stubGlobal("fetch", async (url: string, options: RequestInit) => {
     if (url.endsWith(":computeRouteMatrix"))
@@ -140,6 +156,21 @@ it("selects the shortest walking route even when another branch is closer geogra
   expect(response.status).toBe(200);
   expect(response.body.branch.id).toBe("west");
   expect(response.body.selection).toBe("SHORTEST_WALKING_DISTANCE");
+});
+it("uses openrouteservice walking distances to select and return a route", async () => {
+  vi.stubEnv("OPENROUTESERVICE_API_KEY", "ors-test-key");
+  vi.stubGlobal("fetch", async (url: string, options: RequestInit) => {
+    expect(url).toBe("https://api.heigit.org/openrouteservice/v2/directions/foot-walking/json");
+    expect((options.headers as Record<string, string>).Authorization).toBe("ors-test-key");
+    const body = JSON.parse(String(options.body));
+    expect(body.coordinates[0]).toEqual([106.7009, 10.7769]);
+    expect(body.preference).toBe("shortest");
+    return Response.json({ routes: [{ summary: { distance: body.coordinates[1][0] === 106.68 ? 410 : 500, duration: 390 }, geometry: "_p~iF~ps|U_ulLnnqC" }] });
+  });
+  const response = await request(await fixture()).post("/branches/routes")
+    .set("Authorization", "Bearer valid").send({ latitude: 10.7769, longitude: 106.7009 });
+  expect(response.status).toBe(200);
+  expect(response.body).toMatchObject({ branch: { id: "west" }, distanceMeters: 410, duration: "390s", selection: "SHORTEST_WALKING_DISTANCE" });
 });
 it("health is public but accounts require a verified token", async () => {
   const app = await fixture();

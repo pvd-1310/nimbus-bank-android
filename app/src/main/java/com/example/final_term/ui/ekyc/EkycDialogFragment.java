@@ -15,6 +15,9 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.TextView;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -62,6 +65,7 @@ public final class EkycDialogFragment extends DialogFragment {
     private DialogEkycBinding binding;
     private CaptureState state;
     private boolean cameraDialogOpen;
+    private boolean identityDialogOpen;
 
     private final ActivityResultLauncher<String> gallery = registerForActivityResult(
             new ActivityResultContracts.GetContent(), uri -> {
@@ -172,6 +176,7 @@ public final class EkycDialogFragment extends DialogFragment {
     }
 
     private void maybeOpenCameraForCurrentStep() {
+        if (state.needsIdentity()) { state.autoCameraPending = false; return; }
         if (cameraDialogOpen || !state.autoCameraPending || state.photoBusy() || state.progress != null) return;
         if (state.slot < 0 || state.slot >= PHOTO_COUNT || state.previews[state.slot] != null) {
             state.autoCameraPending = false;
@@ -218,7 +223,119 @@ public final class EkycDialogFragment extends DialogFragment {
 
         // Auto-open must run from render(), since the capture layout is deliberately
         // hidden while the camera handoff is pending.
-        maybeOpenCameraForCurrentStep();
+        if (state.needsIdentity() && !cameraDialogOpen && !state.photoBusy() && state.progress == null) showIdentityPreview();
+        else maybeOpenCameraForCurrentStep();
+    }
+
+    private void showIdentityPreview() {
+        if (identityDialogOpen || !isAdded()) return;
+        identityDialogOpen = true;
+        state.autoCameraPending = false;
+        state.beginProgress("Đang đọc thông tin CCCD…");
+        String draftId = state.saved.get(CaptureState.DRAFT_ID);
+        Tasks.call(state.files, () -> Files.readAllBytes(state.photo(0).toPath()))
+                .continueWithTask(task -> {
+                    if (!task.isSuccessful() || draftId == null) throw new IOException("Cannot read image");
+                    return state.api.recognizeIdentity(draftId, task.getResult());
+                }).addOnCompleteListener(task -> {
+                    if (draftId == null || !state.currentDraft(draftId)) { identityDialogOpen = false; state.finishProgress(); return; }
+                    state.finishProgress();
+                    if (binding == null || !isAdded()) { identityDialogOpen = false; return; }
+                    try {
+                        if (!task.isSuccessful() || task.getResult().statusCode != 200) throw new IOException("Recognition failed");
+                        displayIdentityForm(new JSONObject(task.getResult().body));
+                    } catch (Exception error) {
+                        new MaterialAlertDialogBuilder(requireContext()).setTitle("Không đọc được CCCD")
+                                .setMessage("Kiểm tra kết nối và dịch vụ nhận diện, hoặc chụp lại mặt trước CCCD rõ nét, đủ bốn góc.")
+                                .setCancelable(false)
+                                .setNegativeButton("Chụp lại", (d, w) -> { state.select(0); requestCapture(); identityDialogOpen = false; })
+                                .setPositiveButton("Thử lại", (d, w) -> { identityDialogOpen = false; showIdentityPreview(); })
+                                .show();
+                    }
+                });
+    }
+
+    private void displayIdentityForm(JSONObject values) {
+        if (binding == null || !isAdded()) { identityDialogOpen = false; return; }
+        LinearLayout form = new LinearLayout(requireContext());
+        form.setOrientation(LinearLayout.VERTICAL);
+        int padding = (int) (24 * getResources().getDisplayMetrics().density);
+        form.setPadding(padding, 0, padding, 0);
+        TextView help = new TextView(requireContext());
+        help.setText("Kiểm tra và chỉnh sửa thông tin theo CCCD. FPT.AI có thể đọc sai hoặc bỏ sót.");
+        help.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
+        help.setTextSize(14);
+        help.setPadding(0, 0, 0, (int) (16 * getResources().getDisplayMetrics().density));
+        form.addView(help);
+        String[] labels = {"Số định danh *", "Họ và tên *", "Ngày sinh *", "Giới tính", "Quốc tịch", "Địa chỉ *", "Ngày hết hạn"};
+        String[] keys = {"nationalIdNumber", "fullName", "dateOfBirth", "gender", "nationality", "address", "identityDocumentExpiry"};
+        EditText[] fields = new EditText[keys.length];
+        LinearLayout table = new LinearLayout(requireContext());
+        table.setOrientation(LinearLayout.VERTICAL);
+        table.setBackgroundResource(R.drawable.glass_panel_soft);
+        float density = getResources().getDisplayMetrics().density;
+        for (int i = 0; i < keys.length; i++) {
+            LinearLayout row = new LinearLayout(requireContext());
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            row.setPadding((int) (12 * density), (int) (4 * density), (int) (12 * density), (int) (4 * density));
+            TextView label = new TextView(requireContext());
+            label.setText(labels[i]);
+            label.setTextSize(13);
+            label.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
+            row.addView(label, new LinearLayout.LayoutParams((int) (100 * density), ViewGroup.LayoutParams.WRAP_CONTENT));
+            fields[i] = new EditText(requireContext());
+            fields[i].setSingleLine(!keys[i].equals("address"));
+            fields[i].setMinHeight((int) (48 * density));
+            fields[i].setTextSize(15);
+            fields[i].setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
+            fields[i].setBackgroundColor(android.graphics.Color.TRANSPARENT);
+            fields[i].setPadding((int) (8 * density), 0, 0, 0);
+            fields[i].setHint(keys[i].equals("dateOfBirth") || keys[i].equals("identityDocumentExpiry") ? "YYYY-MM-DD" : "Nhấn để nhập");
+            fields[i].setContentDescription(labels[i]);
+            if (keys[i].equals("nationalIdNumber")) fields[i].setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+            fields[i].setText(values.optString(keys[i], ""));
+            row.addView(fields[i], new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+            table.addView(row);
+            if (i < keys.length - 1) {
+                View divider = new View(requireContext());
+                divider.setBackgroundColor(0x22345678);
+                LinearLayout.LayoutParams separator = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, (int) density));
+                separator.setMargins((int) (12 * density), 0, (int) (12 * density), 0);
+                table.addView(divider, separator);
+            }
+        }
+        form.addView(table);
+        ScrollView scroll = new ScrollView(requireContext());
+        scroll.addView(form);
+        var dialog = new MaterialAlertDialogBuilder(requireContext()).setTitle("Kiểm tra thông tin CCCD")
+                .setView(scroll).setCancelable(false).setNegativeButton("Chụp lại CCCD", (d, w) -> {
+                    state.select(0); requestCapture(); identityDialogOpen = false;
+                }).setPositiveButton("Xác nhận", null).create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            JSONObject identity = new JSONObject();
+            try {
+                for (int i = 0; i < keys.length; i++) identity.put(keys[i], fields[i].getText().toString().trim());
+                if (identity.optString("fullName").length() < 2 || !identity.optString("nationalIdNumber").matches("[0-9]{12}")
+                        || !validDate(identity.optString("dateOfBirth")) || identity.optString("address").isEmpty()
+                        || (!identity.optString("identityDocumentExpiry").isEmpty() && !validDate(identity.optString("identityDocumentExpiry")))) {
+                    help.setText("Vui lòng nhập đủ thông tin bắt buộc, số định danh 12 số và ngày hợp lệ theo YYYY-MM-DD."); return;
+                }
+                state.confirmedIdentity = identity;
+                identityDialogOpen = false;
+                dialog.dismiss();
+                state.slot = SELFIE;
+                state.saved.set("slot", SELFIE);
+                state.autoCameraPending = true;
+                state.changed();
+            } catch (JSONException ignored2) { help.setText("Không thể lưu thông tin. Vui lòng thử lại."); }
+        }));
+        dialog.show();
+    }
+
+    private static boolean validDate(String value) {
+        try { java.time.LocalDate.parse(value, java.time.format.DateTimeFormatter.ISO_LOCAL_DATE); return true; }
+        catch (Exception ignored) { return false; }
     }
 
     private void renderConsent() {
@@ -232,8 +349,8 @@ public final class EkycDialogFragment extends DialogFragment {
             binding.consentHeadline.setText("Thu thập & Xử lý dữ liệu định danh");
             binding.consentSummary.setText("Ảnh định danh được lưu trong vùng riêng tư và chỉ được dùng cho bước xác thực bạn đồng ý thực hiện.");
             binding.consentPurpose.setText("Thu thập ảnh CCCD mặt trước, mặt sau và selfie để lưu hồ sơ định danh, đồng thời tạo mẫu khuôn mặt dùng cho bước xác thực giao dịch.");
-            binding.consentStorage.setText("Ảnh được tải lên bộ nhớ riêng tư bằng URL có thời hạn. Hệ thống kiểm tra chất lượng selfie và tạo mẫu khuôn mặt; ảnh CCCD được lưu làm bằng chứng.");
-            binding.consentLimit.setText("Bạn có thể chụp CCCD bằng camera trong ứng dụng hoặc tải ảnh có sẵn lên; selfie được chụp trong ứng dụng. Hệ thống chưa OCR hoặc xác thực tính thật của CCCD, chưa phát hiện ảnh giả hay ảnh phát lại.");
+            binding.consentStorage.setText("Ảnh CCCD mặt trước được gửi đến FPT.AI để trích xuất thông tin; ảnh được tải lên bộ nhớ riêng tư làm bằng chứng. Selfie được dùng để tạo mẫu khuôn mặt.");
+            binding.consentLimit.setText("Bạn cần kiểm tra và xác nhận thông tin được trích xuất. Hệ thống chưa xác thực tính thật của CCCD, chưa đối chiếu khuôn mặt với thẻ hoặc phát hiện ảnh giả.");
         }
     }
 
@@ -405,6 +522,7 @@ public final class EkycDialogFragment extends DialogFragment {
         private final MutableLiveData<Boolean> changes = new MutableLiveData<>();
 
         private JSONObject latest;
+        private JSONObject confirmedIdentity;
         private String captureMode = "FULL_ID";
         private String submissionStatus = "";
         private boolean started;
@@ -588,6 +706,7 @@ public final class EkycDialogFragment extends DialogFragment {
         private boolean canSelect(int index) {
             if (index < 0 || index >= PHOTO_COUNT) return false;
             if (isDemo()) return index == SELFIE;
+            if (index == SELFIE && confirmedIdentity == null) return false;
             for (int i = 0; i < PHOTO_COUNT; i++) {
                 if (previews[i] == null) return index <= i;
             }
@@ -699,13 +818,14 @@ public final class EkycDialogFragment extends DialogFragment {
                 saved.remove(PENDING_SLOT);
                 saved.remove(RAW_READY);
                 if (task.isSuccessful()) {
+                    if (index != SELFIE) confirmedIdentity = null;
                     clearLaterPhotos(index);
                     if (previews[index] != null) previews[index].recycle();
                     previews[index] = task.getResult();
                     confirmed[index] = false;
                     slot = nextRequiredSlot();
                     saved.set("slot", slot);
-                    autoCameraPending = missingRequiredSlot() != -1;
+                    autoCameraPending = missingRequiredSlot() != -1 && !needsIdentity();
                     notice = null;
                     changed();
                 } else {
@@ -798,6 +918,7 @@ public final class EkycDialogFragment extends DialogFragment {
 
         private boolean allPhotosReady() {
             if (isDemo()) return previews[SELFIE] != null;
+            if (confirmedIdentity == null) return false;
             for (Bitmap preview : previews) if (preview == null) return false;
             return true;
         }
@@ -865,7 +986,10 @@ public final class EkycDialogFragment extends DialogFragment {
 
         private void submitDraft(String draftId) {
             beginProgress(isDemo() ? "Đang kiểm tra ảnh selfie…" : "Đang kiểm tra ảnh định danh…");
-            api.post("/ekyc/" + Uri.encode(draftId) + "/submit", "{}").addOnCompleteListener(task -> {
+            JSONObject payload = new JSONObject();
+            try { if (confirmedIdentity != null) payload.put("identity", confirmedIdentity); }
+            catch (JSONException ignored) { submitFailed("Không thể chuẩn bị thông tin CCCD."); return; }
+            api.post("/ekyc/" + Uri.encode(draftId) + "/submit", payload.toString()).addOnCompleteListener(task -> {
                 if (!currentDraft(draftId)) return;
                 try {
                     if (applySubmitted(readRecord(responseJson(task)), draftId)) return;
@@ -882,6 +1006,10 @@ public final class EkycDialogFragment extends DialogFragment {
                     submitFailed("Chưa xác nhận được việc nộp hồ sơ. Vui lòng thử nộp lại.");
                 });
             });
+        }
+
+        private boolean needsIdentity() {
+            return isDraft() && !isDemo() && previews[0] != null && previews[1] != null && confirmedIdentity == null;
         }
 
         private boolean applySubmitted(@Nullable JSONObject record, String draftId) {
@@ -961,6 +1089,7 @@ public final class EkycDialogFragment extends DialogFragment {
         }
 
         private void clearPhotos() {
+            confirmedIdentity = null;
             saved.remove(PENDING_SLOT);
             saved.remove(RAW_READY);
             slot = 0;

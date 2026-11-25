@@ -14,6 +14,8 @@ import { registerAccountsRoutes } from "./modules/accounts/accounts.routes.js";
 import { registerBranchesRoutes } from "./modules/branches/branches.routes.js";
 import { registerCapabilitiesRoutes } from "./modules/capabilities/capabilities.routes.js";
 import { registerEkycRoutes } from "./modules/ekyc/ekyc.routes.js";
+import { recognizeIdCard } from "./modules/ekyc/id-recognition.js";
+import { check } from "./shared/errors.js";
 import { registerNotificationsRoutes } from "./modules/notifications/notifications.routes.js";
 import { registerOfficerRoutes } from "./modules/officer/officer.routes.js";
 import { registerOrdersRoutes } from "./modules/orders/orders.routes.js";
@@ -36,6 +38,15 @@ export function createApp(d: AppDependencies) {
   app.use(express.json({ limit: "64kb" }));
   registerPasswordResetRoutes(app, d);
   app.use(authenticateRequests(d));
+  let recognitionRequests = 0;
+  app.post("/ekyc/:id/recognize", express.raw({ type: ["image/jpeg", "image/png"], limit: "5mb", inflate: false }), async (req, res) => {
+    await d.evidence.authorizeRecognition(res.locals.actor, String(req.params.id));
+    check(Buffer.isBuffer(req.body), "INVALID_MIME", 415);
+    check(recognitionRequests < 4, "ID_RECOGNITION_BUSY", 429);
+    recognitionRequests++;
+    try { res.json(await recognizeIdCard(req.body, req.is("image/png") ? "image/png" : "image/jpeg")); }
+    finally { recognitionRequests--; }
+  });
   registerFaceStepUp(app, d);
   const route = createRouteRegistrar(app);
   for (const register of [

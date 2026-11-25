@@ -124,6 +124,16 @@ public final class BackendApiClient {
         });
     }
 
+    public Task<Response> recognizeIdentity(@NonNull String draftId, @NonNull byte[] jpeg) {
+        FirebaseUser user = auth == null ? null : auth.getCurrentUser();
+        if (user == null) return Tasks.forException(new IllegalStateException("BACKEND_AUTH_REQUIRED"));
+        return user.getIdToken(false).continueWithTask(task -> {
+            if (!task.isSuccessful() || task.getResult().getToken() == null)
+                throw new IllegalStateException("BACKEND_AUTH_REQUIRED");
+            return postJpeg("/ekyc/" + android.net.Uri.encode(draftId) + "/recognize", jpeg, task.getResult().getToken());
+        });
+    }
+
     private Task<Response> postJpeg(String path, byte[] jpeg, String token) {
         return Tasks.call(executor, () -> {
             Request.Builder request = new Request.Builder().url(BASE_URL + path)

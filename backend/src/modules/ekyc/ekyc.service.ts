@@ -5,6 +5,7 @@ import { check, Fault, key } from "../../shared/errors.js";
 import { page, queryOptions } from "../../shared/pagination.js";
 import { faceTemplatePath, type FaceService } from "../security/face.js";
 import type { Actor } from "../auth/auth.types.js";
+import { normalizeSearchText } from "../../shared/search.js";
 
 type ImageMime = "image/jpeg" | "image/png";
 type CaptureMode = "FULL_ID" | "DEMO_SELFIE_ONLY";
@@ -46,6 +47,7 @@ interface EvidenceRecord {
   reviewedBy?: string | null;
   reviewedAt?: number | null;
   reason?: string;
+  confirmedIdentity?: Doc;
 }
 
 const collection = "ekycRequests";
@@ -95,6 +97,14 @@ export class Evidence {
     const record = await this.get(t, id);
     check(record.customerUid === a.uid, "FORBIDDEN", 403);
     return record;
+  }
+
+  async authorizeRecognition(a: Actor, id: string) {
+    return this.bank.store.run(async (t) => {
+      await this.customer(t, a);
+      const record = await this.owned(t, a, id);
+      check(record.reviewStatus === "DRAFT" && (record.mode ?? "FULL_ID") === "FULL_ID", "INVALID_EKYC_STATE", 409);
+    });
   }
 
   private async listAll(t: Tx, name: string, where: Doc) {
@@ -300,7 +310,7 @@ export class Evidence {
     });
   }
 
-  async submit(a: Actor, id: string) {
+  async submit(a: Actor, id: string, identity?: Doc) {
     const snapshot = await this.bank.store.run(async (t) => {
       await this.customer(t, a);
       const record = await this.owned(t, a, id);
@@ -316,7 +326,8 @@ export class Evidence {
       const selfie = record.slots[2]?.image;
       const mode = record.mode ?? "FULL_ID";
       check(selfie && (mode === "DEMO_SELFIE_ONLY" || (front && back)), "EVIDENCE_REQUIRED", 409);
-      const next: EvidenceRecord = { ...record, mode, reviewStatus: "REVIEWING", submittedAt: this.bank.now(),
+      check(mode === "DEMO_SELFIE_ONLY" || identity, "IDENTITY_CONFIRMATION_REQUIRED", 409);
+      const next: EvidenceRecord = { ...record, mode, ...(identity ? { confirmedIdentity: identity } : {}), reviewStatus: "REVIEWING", submittedAt: this.bank.now(),
         storageRefs: mode === "DEMO_SELFIE_ONLY" ? [selfie] : [front!, back!, selfie] };
       await this.writeStatus(t, next);
       return next;
@@ -362,9 +373,18 @@ export class Evidence {
       check(user?.role === "CUSTOMER" && ["ONBOARDING", "ACTIVE"].includes(user.status), "INVALID_CUSTOMER_STATE", 409);
       const customer = await this.bank.linkedProfile(t, "customers", a.uid);
       check(customer, "CUSTOMER_NOT_FOUND", 404);
-      t.set(`users/${a.uid}`, { ...user, active: true, status: "ACTIVE" });
+      const identity = record.confirmedIdentity;
+      const checkingAccounts = identity ? await t.list("accounts", { ownerUid: a.uid, type: "CHECKING" }, { limit: 100 }) : [];
+      t.set(`users/${a.uid}`, { ...user, ...(identity ? { fullName: identity.fullName } : {}), active: true, status: "ACTIVE" });
       const { id: customerId, _cursor, ...data } = customer;
-      t.set(`customers/${customerId}`, { ...data, status: "ACTIVE", kycStatus: "VERIFIED" });
+      const { fullName: _fullName, ...rawIdentityFields } = identity ?? {};
+      const identityFields = Object.fromEntries(Object.entries(rawIdentityFields).filter(([, value]) => value !== ""));
+      t.set(`customers/${customerId}`, { ...data, ...identityFields, status: "ACTIVE", kycStatus: "VERIFIED" });
+      for (const account of checkingAccounts) {
+        const { id: accountId, _cursor: accountCursor, ...accountData } = account;
+        void accountCursor;
+        t.set(`accounts/${accountId}`, { ...accountData, ownerNameSearch: normalizeSearchText(String(identity!.fullName)) });
+      }
       t.set(faceTemplatePath(a.uid), enrollment!);
       const next: EvidenceRecord = { ...record, reviewStatus: "VERIFIED", reviewedBy: "SYSTEM", reviewedAt: this.bank.now() };
       t.set(requestPath(id), next);

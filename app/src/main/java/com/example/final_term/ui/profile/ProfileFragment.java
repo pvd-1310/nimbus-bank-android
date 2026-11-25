@@ -107,7 +107,7 @@ public final class ProfileFragment extends Fragment {
                 });
 
         getParentFragmentManager().setFragmentResultListener("ekyc_status_changed", getViewLifecycleOwner(),
-                (requestKey, result) -> fetchEkycStatus());
+                (requestKey, result) -> { fetchEkycStatus(); loadProfile(); });
 
         binding.logoutButton.setOnClickListener(v -> app.getAppContainer().getAuthRepository().signOut());
 
@@ -271,6 +271,21 @@ public final class ProfileFragment extends Fragment {
 
     private void showContactEditor() {
         DialogProfileContactBinding form = DialogProfileContactBinding.inflate(getLayoutInflater());
+        String identityName = currentProfile.optString("fullName", "");
+        String identityId = currentProfile.optString("nationalIdNumber", "");
+        if (!identityId.isEmpty()) {
+            android.widget.TextView identity = new android.widget.TextView(requireContext());
+            identity.setText("Thông tin định danh\nHọ tên: " + identityName
+                    + "\nSố định danh: " + identityId
+                    + "\nNgày sinh: " + currentProfile.optString("dateOfBirth", "")
+                    + "\nGiới tính: " + currentProfile.optString("gender", "")
+                    + "\nQuốc tịch: " + currentProfile.optString("nationality", "")
+                    + "\nĐịa chỉ: " + currentProfile.optString("address", "")
+                    + "\nCCCD hết hạn: " + currentProfile.optString("identityDocumentExpiry", ""));
+            identity.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
+            identity.setPadding(0, 0, 0, (int) (12 * getResources().getDisplayMetrics().density));
+            ((android.widget.LinearLayout) form.contactEmailLayout.getParent()).addView(identity, 0);
+        }
         JSONObject preferences = currentProfile.optJSONObject("preferences");
         form.contactEmailInput.setText(currentProfile.optString("contactEmail", ""));
         form.contactPhoneInput.setText(currentProfile.optString("contactPhone", ""));

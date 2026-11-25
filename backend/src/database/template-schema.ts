@@ -1,6 +1,9 @@
 import type { Doc } from "../core/store.js";
 import { check } from "../shared/errors.js";
 
+// Optional identity fields are populated only after the customer confirms eKYC.
+export const optionalCustomerIdentityFields = ["dateOfBirth", "gender", "nationality", "identityDocumentExpiry"] as const;
+
 export const templateFields: Record<string, readonly string[]> = {
   users: [
     "uid",

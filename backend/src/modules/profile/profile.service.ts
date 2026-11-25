@@ -8,7 +8,7 @@ export class ProfileService {
   async get(a: Actor) {
     return this.bank.store.run(async (t) => {
       const u = await this.bank.authorize(t, a, undefined, true);
-      const c = await t.get("customers/" + a.uid);
+      const c = await this.bank.linkedProfile(t, "customers", a.uid);
       return {
         uid: a.uid,
         fullName: u.fullName ?? "",
@@ -17,6 +17,12 @@ export class ProfileService {
         contactEmail: u.contactEmail ?? "",
         contactPhone: u.contactPhone ?? "",
         customerNo: typeof c?.customerNo === "string" ? c.customerNo : "",
+        nationalIdNumber: c?.nationalIdNumber ?? "",
+        dateOfBirth: c?.dateOfBirth ?? "",
+        gender: c?.gender ?? "",
+        nationality: c?.nationality ?? "",
+        address: c?.address ?? "",
+        identityDocumentExpiry: c?.identityDocumentExpiry ?? "",
         tier: typeof c?.tier === "string" ? c.tier : "STANDARD",
         preferences: u.preferences ?? {},
         status: u.status ?? (u.active ? "ACTIVE" : "INACTIVE"),
