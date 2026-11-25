@@ -60,6 +60,22 @@ const routeResultSchema = z.object({
 });
 
 async function walkingRoute(key: string, origin: z.infer<typeof coordinatesSchema>, branch: Doc) {
+  const orsKey = process.env.OPENROUTESERVICE_API_KEY;
+  if (orsKey) {
+    const destination = coordinatesSchema.parse(branch);
+    const result = await fetch("https://api.heigit.org/openrouteservice/v2/directions/foot-walking/json", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: orsKey },
+      body: JSON.stringify({ coordinates: [[origin.longitude, origin.latitude], [destination.longitude, destination.latitude]], preference: "shortest", instructions: false }),
+      signal: AbortSignal.timeout(15000),
+      redirect: "error",
+    }).catch(() => { throw new Fault("ROUTES_PROVIDER_UNAVAILABLE", 502); });
+    if (!result.ok) throw new Fault("ROUTES_PROVIDER_UNAVAILABLE", 502);
+    const raw: unknown = await result.json().catch(() => { throw new Fault("ROUTES_PROVIDER_UNAVAILABLE", 502); });
+    const parsed = z.object({ routes: z.array(z.object({ summary: z.object({ distance: z.number().nonnegative(), duration: z.number().nonnegative() }), geometry: z.string().min(1) })) }).safeParse(raw);
+    if (!parsed.success) throw new Fault("ROUTES_PROVIDER_UNAVAILABLE", 502);
+    return parsed.data.routes.map((route) => ({ branch, distanceMeters: Math.round(route.summary.distance), duration: `${route.summary.duration}s`, encodedPolyline: route.geometry }));
+  }
   const raw = await googlePost(
     "/directions/v2:computeRoutes", key,
     {
@@ -92,7 +108,7 @@ export function registerBranchesRoutes(route: Route, d: AppDependencies) {
   );
   route("post", "/branches/routes", async (_actor, request) => {
     const { branchId, ...origin } = routeSchema.parse(request.body);
-    const key = googleKey();
+    const key = process.env.OPENROUTESERVICE_API_KEY || googleKey();
     const branches = await d.bank.store.run(async (t) => {
       if (branchId) {
         const selected = await t.get("bankBranches/" + branchId);

@@ -8,7 +8,7 @@ export function registerCapabilitiesRoutes(route: Route, d: AppDependencies) {
     face: await d.bank.options.face?.ready() ? "ENABLED" : "SETUP_REQUIRED",
     ekycMode: d.evidence.captureMode,
     externalTransfer: "DEMO_ONLY",
-    routes: process.env.GOOGLE_ROUTES_API_KEY ? "ENABLED" : "SETUP_REQUIRED",
+    routes: process.env.OPENROUTESERVICE_API_KEY || process.env.GOOGLE_ROUTES_API_KEY ? "ENABLED" : "SETUP_REQUIRED",
     chatbot: d.chatbot ? d.chatbotMode ?? "ENABLED" : "SETUP_REQUIRED",
   }));
 }
