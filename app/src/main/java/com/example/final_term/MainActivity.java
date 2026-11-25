@@ -84,7 +84,8 @@ public class MainActivity extends AppCompatActivity {
         boolean onboarding = latestAuthState != null && latestAuthState.getUser() != null
                 && latestAuthState.getUser().isOnboarding();
         boolean show = destination != R.id.login && destination != R.id.branchLocator
-                && destination != R.id.officerCustomerForm && !onboarding;
+                && destination != R.id.officerCustomerForm && destination != R.id.transactionFlow
+                && !onboarding;
         android.view.View bottomNavigation = binding.mainBottomNavigation.getRoot();
         bottomNavigation.setVisibility(show ? android.view.View.VISIBLE : android.view.View.GONE);
         bottomNavigation.bringToFront();
