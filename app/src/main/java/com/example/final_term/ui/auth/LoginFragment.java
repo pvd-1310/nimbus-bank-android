@@ -16,18 +16,20 @@ import com.example.final_term.auth.AuthState;
 import com.example.final_term.core.FinalTermApplication;
 import com.example.final_term.databinding.FragmentLoginBinding;
 
-import com.example.final_term.ui.ekyc.FaceCamera;
-import com.example.final_term.ui.ekyc.FaceGalleryPicker;
+import com.example.final_term.ui.ekyc.FaceScanDialogFragment;
 import com.example.final_term.data.BackendApiClient;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+
+import java.io.File;
+import java.nio.file.Files;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public final class LoginFragment extends Fragment {
+    private static final ExecutorService FACE_IO = Executors.newSingleThreadExecutor();
     private FragmentLoginBinding binding;
     private BackendApiClient api;
     private boolean faceBusy;
     private boolean preserveFaceError;
-    private final FaceGalleryPicker faceGalleryPicker = new FaceGalleryPicker(this, this::signInWithFace, this::faceError);
-    private final FaceCamera faceCamera = new FaceCamera(this, this::signInWithFace, this::faceError);
 
     @Override
     public void onResume() {
@@ -46,27 +48,36 @@ public final class LoginFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        faceCamera.attach();
         binding.emailInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
         FinalTermApplication application = (FinalTermApplication) requireActivity().getApplication();
         api = application.getAppContainer().getBackendApiClient();
+        getParentFragmentManager().setFragmentResultListener(FaceScanDialogFragment.RESULT_KEY,
+                getViewLifecycleOwner(), (key, result) -> {
+                    String path = result.getString(FaceScanDialogFragment.RESULT_PATH);
+                    String error = result.getString(FaceScanDialogFragment.RESULT_ERROR);
+                    if (path != null) {
+                        faceBusy = true;
+                        setFaceBusy();
+                        FACE_IO.execute(() -> {
+                            File file = new File(path);
+                            try {
+                                byte[] bytes = Files.readAllBytes(file.toPath());
+                                requireActivity().runOnUiThread(() -> signInWithFace(bytes));
+                            } catch (Exception e) {
+                                requireActivity().runOnUiThread(() -> faceError("Không đọc được ảnh khuôn mặt. Vui lòng thử lại."));
+                            } finally {
+                                file.delete();
+                            }
+                        });
+                    } else if (error != null && !error.trim().isEmpty()) {
+                        faceError(error);
+                    }
+                });
         binding.faceLoginButton.setEnabled(api != null);
         binding.faceLoginButton.setOnClickListener(v -> {
             preserveFaceError = false;
             binding.errorText.setVisibility(View.GONE);
-            new MaterialAlertDialogBuilder(requireContext())
-                    .setTitle("Đăng nhập bằng khuôn mặt")
-                    .setItems(new String[]{"Chụp ảnh trực tiếp (Camera)", "Chọn ảnh từ thư viện"}, (d, which) -> {
-                        if (which == 0) {
-                            faceCamera.open();
-                        } else {
-                            faceBusy = true;
-                            setFaceBusy();
-                            faceGalleryPicker.open();
-                        }
-                    })
-                    .setNegativeButton("Hủy", null)
-                    .show();
+            FaceScanDialogFragment.open(this);
         });
         application.getAppContainer().getAuthRepository().observeAuthState().observe(getViewLifecycleOwner(), this::renderState);
         var currentEntry = androidx.navigation.fragment.NavHostFragment.findNavController(this).getCurrentBackStackEntry();

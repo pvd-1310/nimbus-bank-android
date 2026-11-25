@@ -15,6 +15,7 @@ playServicesLocation = "21.3.0"
 okhttp = "4.12.0"
 stripeAndroid = "23.26.0"
 camerax = "1.5.1"
+mlkitFaceDetection = "16.1.7"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -38,6 +39,7 @@ camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "
 camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camerax" }
 camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
 camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
+mlkit-face-detection = { group = "com.google.mlkit", name = "face-detection", version.ref = "mlkitFaceDetection" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
