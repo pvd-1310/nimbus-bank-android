@@ -16,14 +16,18 @@ import com.example.final_term.auth.AuthState;
 import com.example.final_term.core.FinalTermApplication;
 import com.example.final_term.databinding.FragmentLoginBinding;
 
+import com.example.final_term.ui.ekyc.FaceCamera;
 import com.example.final_term.ui.ekyc.FaceGalleryPicker;
 import com.example.final_term.data.BackendApiClient;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 public final class LoginFragment extends Fragment {
     private FragmentLoginBinding binding;
     private BackendApiClient api;
     private boolean faceBusy;
+    private boolean preserveFaceError;
     private final FaceGalleryPicker faceGalleryPicker = new FaceGalleryPicker(this, this::signInWithFace, this::faceError);
+    private final FaceCamera faceCamera = new FaceCamera(this, this::signInWithFace, this::faceError);
 
     @Override
     public void onResume() {
@@ -42,15 +46,27 @@ public final class LoginFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
+        faceCamera.attach();
         binding.emailInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
         FinalTermApplication application = (FinalTermApplication) requireActivity().getApplication();
         api = application.getAppContainer().getBackendApiClient();
         binding.faceLoginButton.setEnabled(api != null);
         binding.faceLoginButton.setOnClickListener(v -> {
+            preserveFaceError = false;
             binding.errorText.setVisibility(View.GONE);
-            faceBusy = true;
-            setFaceBusy();
-            faceGalleryPicker.open();
+            new MaterialAlertDialogBuilder(requireContext())
+                    .setTitle("Đăng nhập bằng khuôn mặt")
+                    .setItems(new String[]{"Chụp ảnh trực tiếp (Camera)", "Chọn ảnh từ thư viện"}, (d, which) -> {
+                        if (which == 0) {
+                            faceCamera.open();
+                        } else {
+                            faceBusy = true;
+                            setFaceBusy();
+                            faceGalleryPicker.open();
+                        }
+                    })
+                    .setNegativeButton("Hủy", null)
+                    .show();
         });
         application.getAppContainer().getAuthRepository().observeAuthState().observe(getViewLifecycleOwner(), this::renderState);
         binding.signInButton.setOnClickListener(v -> signIn());
@@ -63,6 +79,7 @@ public final class LoginFragment extends Fragment {
 
     private void signInWithFace(byte[] image) {
         if (binding == null || api == null) return;
+        preserveFaceError = false;
         faceBusy = true;
         setFaceBusy();
         api.signInWithFace(image).addOnCompleteListener(task -> {
@@ -76,14 +93,23 @@ public final class LoginFragment extends Fragment {
             String message;
             if (code.contains("FACE_SETUP_REQUIRED") || code.contains("SETUP_REQUIRED"))
                 message = "Dịch vụ xác minh khuôn mặt chưa sẵn sàng. Vui lòng thử lại sau.";
-            else if (code.contains("RATE_LIMITED")) message = "Quá nhiều lần thử. Vui lòng đợi rồi thử lại.";
+            else if (code.contains("RATE_LIMITED")) message = "Quá nhiều lần thử. Vui lòng đợi vài phút rồi thử lại.";
             else if (code.contains("FACE_BUSY")) message = "Dịch vụ đang bận. Vui lòng thử lại sau giây lát.";
-            else if (code.contains("FACE_LOGIN_FAILED")) message = "Không tìm thấy tài khoản khớp với ảnh hoặc tài khoản chưa đủ điều kiện.";
-            else if (code.contains("FACE_LOW_QUALITY") || code.contains("MULTIPLE_FACES") || code.contains("FACE_NOT_FOUND"))
+            else if (code.contains("FACE_TEMPLATE_OUTDATED"))
+                message = "Mẫu khuôn mặt đã cũ. Vui lòng đăng nhập bằng mật khẩu và định danh lại eKYC.";
+            else if (code.contains("FACE_LOGIN_FAILED"))
+                message = "Không tìm thấy tài khoản khớp với khuôn mặt (cần hoàn tất eKYC và được duyệt).";
+            else if (code.contains("FACE_BLURRY")) message = "Ảnh bị mờ. Vui lòng giữ máy ổn định và thử lại.";
+            else if (code.contains("FACE_EXPOSURE")) message = "Ánh sáng chưa đạt (quá tối hoặc quá chói).";
+            else if (code.contains("FACE_TOO_SMALL") || code.contains("FACE_CROPPED"))
+                message = "Khuôn mặt quá nhỏ hoặc bị cắt góc. Đưa mặt vào giữa khung hình.";
+            else if (code.contains("FACE_LOW_QUALITY") || code.contains("MULTIPLE_FACES")
+                    || code.contains("FACE_NOT_FOUND") || code.contains("FACE_DETECTION_UNCERTAIN")
+                    || code.contains("FACE_LANDMARKS_INVALID") || code.contains("INVALID_IMAGE"))
                 message = "Chọn ảnh có một khuôn mặt rõ, đủ sáng và không bị che.";
             else if (code.contains("NETWORK_ERROR") || code.contains("NETWORK_REQUEST_FAILED")
-                    || code.contains("UNAVAILABLE") || code.contains("TIMED OUT"))
-                message = "Kết nối bị gián đoạn. Kiểm tra mạng rồi thử lại.";
+                    || code.contains("UNAVAILABLE") || code.contains("TIMED OUT") || code.contains("FAILED TO CONNECT"))
+                message = "Không kết nối được tới máy chủ. Kiểm tra mạng hoặc ADB reverse.";
             else if (code.contains("INVALID_CUSTOM_TOKEN") || code.contains("CUSTOM_TOKEN_MISMATCH"))
                 message = "Phiên đăng nhập khuôn mặt không hợp lệ. Vui lòng thử lại.";
             else message = "Không thể đăng nhập bằng ảnh đã chọn.";
@@ -99,6 +125,7 @@ public final class LoginFragment extends Fragment {
 
     private void faceError(String message) {
         faceBusy = false;
+        preserveFaceError = true;
         if (binding == null) return;
         setFaceBusy();
         binding.errorText.setText(message);
@@ -106,6 +133,8 @@ public final class LoginFragment extends Fragment {
     }
 
     private void sendPasswordReset() {
+        preserveFaceError = false;
+        binding.errorText.setVisibility(View.GONE);
         String email = binding.emailInput.getText() == null ? "" : binding.emailInput.getText().toString().trim();
         if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
             binding.emailInput.setError("Nhập email hợp lệ để nhận liên kết đặt mật khẩu.");
@@ -117,13 +146,26 @@ public final class LoginFragment extends Fragment {
                 .addOnCompleteListener(task -> {
                     if (!isAdded() || binding == null) return;
                     binding.resetPasswordButton.setEnabled(true);
-                    Toast.makeText(requireContext(), task.isSuccessful()
-                            ? "Nếu email đã được đăng ký, liên kết đặt mật khẩu sẽ được gửi đến hộp thư."
-                            : "Chưa gửi được email đặt mật khẩu. Vui lòng thử lại.", Toast.LENGTH_LONG).show();
+                    if (task.isSuccessful()) {
+                        Toast.makeText(requireContext(),
+                                "Nếu email đã được đăng ký, liên kết đặt lại mật khẩu đã được gửi đến hộp thư.",
+                                Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    String err = task.getException() != null && task.getException().getMessage() != null
+                            ? task.getException().getMessage().toUpperCase(java.util.Locale.ROOT) : "";
+                    String msg = err.contains("TOO_MANY") || err.contains("QUOTA")
+                            ? "Gửi yêu cầu quá nhiều lần. Vui lòng thử lại sau."
+                            : err.contains("NETWORK")
+                            ? "Mất kết nối mạng. Vui lòng kiểm tra Wi-Fi/4G và thử lại."
+                            : "Chưa gửi được email đặt mật khẩu. Vui lòng thử lại.";
+                    binding.errorText.setText(msg);
+                    binding.errorText.setVisibility(View.VISIBLE);
                 });
     }
 
     private void signIn() {
+        preserveFaceError = false;
         binding.emailInput.setError(null);
         binding.passwordInput.setError(null);
         String email = binding.emailInput.getText() == null ? "" : binding.emailInput.getText().toString().trim();
@@ -158,9 +200,10 @@ public final class LoginFragment extends Fragment {
             binding.signInButton.setEnabled(false);
         }
         if (state.getStatus() == AuthState.Status.ERROR) {
+            preserveFaceError = false;
             binding.errorText.setVisibility(View.VISIBLE);
             binding.errorText.setText(state.getMessage());
-        } else if (!loading) {
+        } else if (!loading && !preserveFaceError) {
             binding.errorText.setVisibility(View.GONE);
         }
     }
