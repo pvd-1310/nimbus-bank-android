@@ -233,7 +233,7 @@ public final class TransactionExecutionFragment extends Fragment {
             binding.confirmFeeText.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
         }
 
-        populateDetailRows(binding.confirmDetailsCard, model.rows);
+        populateDetailRows(binding.confirmDetailsCard, model.rows, false);
 
         boolean showFace = faceRequired && !faceVerified && !commitPending && !completed;
         binding.faceStepUpCard.setVisibility(showFace ? View.VISIBLE : View.GONE);
@@ -259,11 +259,25 @@ public final class TransactionExecutionFragment extends Fragment {
         bindHeroAmount(binding.successAmountValue, binding.successCurrencySymbol,
                 request.amountMinor, request.currency, receipt.amountFormatted);
 
-        populateDetailRows(binding.receiptDetailsCard, receipt.rows);
+        populateDetailRows(binding.receiptDetailsCard, receipt.rows, true);
 
         View.OnClickListener shareListener = v -> shareReceipt(receipt.shareText);
         binding.successShareTopButton.setOnClickListener(shareListener);
         binding.btnShareReceipt.setOnClickListener(shareListener);
+
+        binding.successPulseRing.animate()
+                .scaleX(1.22f)
+                .scaleY(1.22f)
+                .alpha(0f)
+                .setDuration(1100L)
+                .withEndAction(() -> {
+                    if (binding != null) {
+                        binding.successPulseRing.setScaleX(1f);
+                        binding.successPulseRing.setScaleY(1f);
+                        binding.successPulseRing.setAlpha(0.45f);
+                    }
+                })
+                .start();
     }
 
     private void bindHeroAmount(@NonNull TextView amountView, @NonNull TextView symbolView,
@@ -279,7 +293,8 @@ public final class TransactionExecutionFragment extends Fragment {
     }
 
     private void populateDetailRows(@NonNull LinearLayout container,
-                                    @NonNull List<TransactionPresentation.DetailRow> rows) {
+                                    @NonNull List<TransactionPresentation.DetailRow> rows,
+                                    boolean isReceipt) {
         container.removeAllViews();
         LayoutInflater inflater = LayoutInflater.from(requireContext());
         for (int i = 0; i < rows.size(); i++) {
@@ -291,38 +306,52 @@ public final class TransactionExecutionFragment extends Fragment {
             rowBinding.rowLabel.setText(row.label);
             rowBinding.rowValue.setText(row.value);
 
-            if (row.subtitle != null && !row.subtitle.isEmpty()) {
+            if (!isReceipt && row.subtitle != null && !row.subtitle.isEmpty()) {
                 rowBinding.rowSubtitle.setText(row.subtitle);
                 rowBinding.rowSubtitle.setVisibility(View.VISIBLE);
             } else {
                 rowBinding.rowSubtitle.setVisibility(View.GONE);
             }
 
-            if (row.walletIcon) {
+            if (row.walletIcon && !isReceipt) {
                 rowBinding.rowLeadingIcon.setImageResource(R.drawable.ic_nav_wallet);
                 rowBinding.rowLeadingIcon.setColorFilter(ContextCompat.getColor(requireContext(), R.color.navy));
                 rowBinding.rowLeadingIcon.setVisibility(View.VISIBLE);
-            } else if (row.bankIcon) {
+            } else if (row.bankIcon && isReceipt) {
                 rowBinding.rowLeadingIcon.setImageResource(R.drawable.ic_account_balance);
-                rowBinding.rowLeadingIcon.setColorFilter(ContextCompat.getColor(requireContext(), R.color.navy));
+                rowBinding.rowLeadingIcon.setColorFilter(ContextCompat.getColor(requireContext(), R.color.success));
                 rowBinding.rowLeadingIcon.setVisibility(View.VISIBLE);
             } else {
                 rowBinding.rowLeadingIcon.setVisibility(View.GONE);
             }
 
-            rowBinding.rowVerifiedBadge.setVisibility(row.verifiedBadge ? View.VISIBLE : View.GONE);
             rowBinding.rowValue.setTypeface(row.monospace ? Typeface.MONOSPACE : Typeface.DEFAULT);
-
             if (row.methodPill) {
+                rowBinding.rowValue.setText("⚡ " + row.value);
                 rowBinding.rowValue.setBackgroundResource(R.drawable.bg_method_pill);
                 rowBinding.rowValue.setPadding(dp(10), dp(4), dp(10), dp(4));
                 rowBinding.rowValue.setTextColor(ContextCompat.getColor(requireContext(), R.color.navy_deep));
+                rowBinding.rowStatusDot.setVisibility(View.GONE);
+                rowBinding.rowVerifiedBadge.setVisibility(View.GONE);
+            } else if (isReceipt && "Phí dịch vụ".equals(row.label) && row.value.contains("Miễn phí")) {
+                rowBinding.rowValue.setText("0 ₫  •  Miễn phí");
+                rowBinding.rowValue.setBackgroundResource(R.drawable.badge_status_success);
+                rowBinding.rowValue.setPadding(dp(10), dp(4), dp(10), dp(4));
+                rowBinding.rowValue.setTextColor(ContextCompat.getColor(requireContext(), R.color.success));
+                rowBinding.rowStatusDot.setVisibility(View.GONE);
+                rowBinding.rowVerifiedBadge.setVisibility(View.GONE);
+            } else if ("Trạng thái".equals(row.label) && "Hoàn tất".equals(row.value)) {
+                rowBinding.rowValue.setBackgroundResource(R.drawable.badge_status_success);
+                rowBinding.rowValue.setPadding(dp(10), dp(4), dp(10), dp(4));
+                rowBinding.rowValue.setTextColor(ContextCompat.getColor(requireContext(), R.color.success));
                 rowBinding.rowStatusDot.setVisibility(View.VISIBLE);
+                rowBinding.rowVerifiedBadge.setVisibility(View.GONE);
             } else {
                 rowBinding.rowValue.setBackground(null);
                 rowBinding.rowValue.setPadding(0, 0, 0, 0);
                 rowBinding.rowValue.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
                 rowBinding.rowStatusDot.setVisibility(View.GONE);
+                rowBinding.rowVerifiedBadge.setVisibility(!isReceipt && row.verifiedBadge ? View.VISIBLE : View.GONE);
             }
 
             if (row.copyValue != null && !row.copyValue.isEmpty()) {

@@ -163,6 +163,7 @@ public final class TransferFragment extends Fragment {
         binding.chip500k.setOnClickListener(v -> appendAmount(500000));
         binding.chip1m.setOnClickListener(v -> appendAmount(1000000));
         binding.chip5m.setOnClickListener(v -> appendAmount(5000000));
+        loadRecentRecipients();
 
         // Step 1 -> Step 2
         binding.btnProceedToConfirm.setOnClickListener(v -> validateAndProceedToConfirm());
@@ -445,7 +446,7 @@ public final class TransferFragment extends Fragment {
         }
         confirmedSource = sourceIds.get(sourceIndex);
         if (!Phase2Presentation.requiresRecipientLookup(cashOperation, external)) {
-            showStep(Step.CONFIRM);
+            navigateToTransactionFlow(target, getCurrentAmount());
             return;
         }
         var view = binding;
@@ -468,7 +469,7 @@ public final class TransferFragment extends Fragment {
                     recipientAccountId = recipient.getString("accountId");
                     recipientName = recipient.optString("fullName");
                     status("");
-                    showStep(Step.CONFIRM);
+                    navigateToTransactionFlow(target, getCurrentAmount());
                 } catch (JSONException error) {
                     status("Chưa đọc được thông tin người nhận. Vui lòng thử lại.");
                 }
@@ -477,6 +478,82 @@ public final class TransferFragment extends Fragment {
             setBusy(false);
             status("Dữ liệu người nhận không hợp lệ.");
         }
+    }
+
+    private void loadRecentRecipients() {
+        if (api == null || binding == null || cashOperation != null) return;
+        var view = binding;
+        api.get("/transfers/recent-recipients").addOnCompleteListener(task -> {
+            if (binding != view || !task.isSuccessful() || task.getResult() == null
+                    || task.getResult().statusCode != 200) return;
+            try {
+                org.json.JSONArray items = new org.json.JSONObject(task.getResult().body).optJSONArray("items");
+                if (items == null || items.length() == 0) {
+                    binding.recentRecipientsSection.setVisibility(View.GONE);
+                    return;
+                }
+                binding.recentRecipientsContainer.removeAllViews();
+                float density = getResources().getDisplayMetrics().density;
+                int padH = Math.round(12 * density);
+                int padV = Math.round(8 * density);
+                int marginEnd = Math.round(8 * density);
+                for (int i = 0; i < items.length(); i++) {
+                    JSONObject item = items.getJSONObject(i);
+                    String name = item.optString("name", "").trim();
+                    String target = item.optString("target", "").trim();
+                    if (name.isEmpty() || target.isEmpty()) continue;
+                    String displayPhone = target.startsWith("+84") ? "0" + target.substring(3) : target;
+                    android.widget.TextView pill = new android.widget.TextView(requireContext());
+                    pill.setText(name);
+                    pill.setTextSize(12f);
+                    pill.setTypeface(null, android.graphics.Typeface.BOLD);
+                    pill.setTextColor(androidx.core.content.ContextCompat.getColor(requireContext(), R.color.navy));
+                    pill.setBackgroundResource(R.drawable.glass_pill_bg);
+                    pill.setPadding(padH, padV, padH, padV);
+                    android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                    lp.setMarginEnd(marginEnd);
+                    pill.setOnClickListener(v -> {
+                        if (external) switchMode(false);
+                        binding.targetInput.setText(displayPhone);
+                    });
+                    binding.recentRecipientsContainer.addView(pill, lp);
+                }
+                binding.recentRecipientsSection.setVisibility(
+                        binding.recentRecipientsContainer.getChildCount() > 0 ? View.VISIBLE : View.GONE);
+            } catch (Exception ignored) { }
+        });
+    }
+
+    private void navigateToTransactionFlow(String target, long amountMinor) {
+        if (binding == null) return;
+        String note = text(binding.noteInput.getText());
+        com.example.final_term.ui.transaction.TransactionFlowRequest flowRequest;
+        if (cashOperation != null) {
+            flowRequest = cardTopup()
+                    ? com.example.final_term.ui.transaction.TransactionFlowRequest.deposit(confirmedSource, amountMinor, "VND")
+                    : com.example.final_term.ui.transaction.TransactionFlowRequest.withdrawal(confirmedSource, amountMinor, "VND");
+        } else if (external) {
+            flowRequest = com.example.final_term.ui.transaction.TransactionFlowRequest.externalTransfer(
+                    confirmedSource,
+                    amountMinor,
+                    "VND",
+                    externalBankCode,
+                    ExternalBankCatalog.nameForCode(externalBankCode),
+                    "Hội sở chính",
+                    target,
+                    note);
+        } else {
+            flowRequest = com.example.final_term.ui.transaction.TransactionFlowRequest.internalTransfer(
+                    confirmedSource,
+                    amountMinor,
+                    "VND",
+                    recipientAccountId,
+                    recipientName,
+                    target,
+                    note);
+        }
+        Navigation.findNavController(requireView()).navigate(R.id.transactionFlow, flowRequest.toBundle());
     }
 
     private void bindConfirmationView() {

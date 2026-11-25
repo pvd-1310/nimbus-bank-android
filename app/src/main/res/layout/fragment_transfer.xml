@@ -133,6 +133,37 @@
                         android:paddingEnd="12dp" />
                 </LinearLayout>
 
+                <!-- Recent Recipients Strip (Populated from real transfer history) -->
+                <LinearLayout
+                    android:id="@+id/recent_recipients_section"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Người nhận gần đây"
+                        android:textColor="@color/ink"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <HorizontalScrollView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:scrollbars="none">
+
+                        <LinearLayout
+                            android:id="@+id/recent_recipients_container"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal" />
+                    </HorizontalScrollView>
+                </LinearLayout>
+
                 <!-- Destination bank (external transfers only) -->
                 <LinearLayout
                     android:id="@+id/external_bank_card"
@@ -148,7 +179,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Ngân hàng nhận"
+                        android:text="Ngân hàng nhận · Napas 24/7 (Miễn phí)"
                         android:textColor="@color/ink_muted"
                         android:textSize="11sp"
                         android:textStyle="bold" />

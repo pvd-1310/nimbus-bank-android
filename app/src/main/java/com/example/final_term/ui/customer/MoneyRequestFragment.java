@@ -168,8 +168,8 @@ public final class MoneyRequestFragment extends Fragment {
         boolean withdrawal = Phase2Presentation.usesRequestForm(position == 1 ? WITHDRAWAL : DEPOSIT);
         binding.titleText.setText(operationLabel(withdrawal ? WITHDRAWAL : DEPOSIT));
         updateTabStyles(position);
-        ((View) binding.accountInput.getParent()).setVisibility(withdrawal ? View.VISIBLE : View.GONE);
-        ((View) binding.amountInput.getParent()).setVisibility(withdrawal ? View.VISIBLE : View.GONE);
+        ((View) binding.accountInput.getParent()).setVisibility(View.VISIBLE);
+        ((View) binding.amountInput.getParent()).setVisibility(View.VISIBLE);
         updateControls();
     }
 

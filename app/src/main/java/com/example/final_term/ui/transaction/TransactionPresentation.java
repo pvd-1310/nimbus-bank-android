@@ -252,6 +252,7 @@ public final class TransactionPresentation {
         if (!isBlank(req.note)) {
             rows.add(DetailRow.plain("Nội dung", req.note.trim()));
         }
+        rows.add(DetailRow.verified("Trạng thái", "Hoàn tất", true));
 
         String shareId = copyId != null ? copyId : shortId;
         StringBuilder share = new StringBuilder();

@@ -102,6 +102,9 @@ public final class TransactionHistoryFragment extends Fragment {
         };
         binding.typeFilter.setOnItemSelectedListener(selected);
         binding.statusFilter.setOnItemSelectedListener(selected);
+        binding.chipHistAll.setOnClickListener(v -> binding.typeFilter.setSelection(0));
+        binding.chipHistIn.setOnClickListener(v -> binding.typeFilter.setSelection(1));
+        binding.chipHistOut.setOnClickListener(v -> binding.typeFilter.setSelection(2));
 
         application.getAppContainer().getAuthRepository().observeAuthState()
                 .observe(getViewLifecycleOwner(), authState -> {
@@ -121,11 +124,29 @@ public final class TransactionHistoryFragment extends Fragment {
         }
         if (role == UserRole.CUSTOMER) {
             loadPage(null);
+            loadSummary();
         } else {
             FirestoreReadRepository repository = application.getAppContainer().getReadRepository();
             history = repository.observeAllTransactionsForOfficer();
             history.observe(getViewLifecycleOwner(), this::render);
         }
+    }
+
+    private void loadSummary() {
+        if (application == null || binding == null) return;
+        var current = binding;
+        application.getAppContainer().getBackendApiClient().get("/transactions/summary")
+                .addOnCompleteListener(task -> {
+                    if (binding != current || !task.isSuccessful() || task.getResult() == null
+                            || task.getResult().statusCode != 200) return;
+                    try {
+                        JSONObject s = new JSONObject(task.getResult().body);
+                        long inMinor = s.optLong("totalInMinor", 0L);
+                        long outMinor = s.optLong("totalOutMinor", 0L);
+                        binding.summaryInText.setText("+" + ReadSummaryFormatter.formatCurrency(inMinor, "VND"));
+                        binding.summaryOutText.setText("−" + ReadSummaryFormatter.formatCurrency(outMinor, "VND"));
+                    } catch (Exception ignored) { }
+                });
     }
 
     private void loadPage(String cursor) {
@@ -234,21 +255,22 @@ public final class TransactionHistoryFragment extends Fragment {
 
             boolean isIncoming = tx.isIncoming();
             rowBinding.titleText.setText(ReadSummaryFormatter.transactionTitle(tx));
-            rowBinding.subtitleText.setText(tx.createdAt == null ? tx.accountId
+            rowBinding.subtitleText.setText(tx.createdAt == null ? ReadSummaryFormatter.formatRelativeTime(0L, 0)
                     : java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT,
                     java.util.Locale.forLanguageTag("vi-VN")).format(tx.createdAt.toDate()));
+            rowBinding.transactionIcon.setVisibility(View.GONE);
+            rowBinding.avatarInitials.setVisibility(View.VISIBLE);
+            rowBinding.avatarInitials.setText(ReadSummaryFormatter.initialsForTransaction(tx));
 
             String amountFormatted = ReadSummaryFormatter.formatCurrency(tx.amountMinor, tx.currency);
             if (isIncoming) {
                 rowBinding.amountText.setText("+" + amountFormatted);
                 rowBinding.amountText.setTextColor(ContextCompat.getColor(requireContext(), R.color.success));
-                rowBinding.transactionIcon.setImageResource(R.drawable.ic_trending_up);
-                rowBinding.transactionIcon.setColorFilter(ContextCompat.getColor(requireContext(), R.color.success));
+                rowBinding.avatarInitials.setTextColor(ContextCompat.getColor(requireContext(), R.color.success));
             } else {
                 rowBinding.amountText.setText("−" + amountFormatted);
                 rowBinding.amountText.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
-                rowBinding.transactionIcon.setImageResource(R.drawable.ic_nav_send);
-                rowBinding.transactionIcon.setColorFilter(ContextCompat.getColor(requireContext(), R.color.navy));
+                rowBinding.avatarInitials.setTextColor(ContextCompat.getColor(requireContext(), R.color.navy));
             }
 
             rowBinding.getRoot().setOnClickListener(v -> {
