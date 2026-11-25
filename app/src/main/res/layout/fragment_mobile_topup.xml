@@ -284,7 +284,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="5dp"
             android:gravity="center"
-            android:text="Xác nhận an toàn bằng mã OTP"
+            android:text="Bảo mật 2 lớp qua Nimbus Smart OTP"
             android:textColor="@color/ink_muted"
             android:textSize="11sp" />
     </LinearLayout>

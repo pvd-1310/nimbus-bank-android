@@ -66,12 +66,9 @@ public class QuickActionsBottomSheet extends BottomSheetDialogFragment {
         });
 
         binding.qaAi.setOnClickListener(v -> {
+            var manager = getParentFragmentManager();
             dismiss();
-            new MaterialAlertDialogBuilder(requireContext())
-                    .setTitle("Trợ lý AI Nimbus")
-                    .setMessage("Trợ lý AI phân tích tài chính thông minh đang trong giai đoạn hoàn thiện mô hình cục bộ.")
-                    .setPositiveButton("Đóng", null)
-                    .show();
+            new com.example.final_term.ui.customer.ChatbotDialogFragment().show(manager, "Chatbot");
         });
 
         binding.qaHistory.setOnClickListener(v -> {

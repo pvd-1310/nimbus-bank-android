@@ -143,6 +143,10 @@ public final class BranchLocatorFragment extends Fragment {
             marker.showInfoWindow();
         }
         setStatus(label + " · Bấm nút vị trí để tìm đường đi bộ.");
+        String hours = branch.optString("openingHours", "");
+        String phone = branch.optString("phone", "");
+        String meta = hours + (hours.isEmpty() || phone.isEmpty() ? "" : " · ") + phone;
+        if (!meta.isEmpty()) binding.branchMetaText.setText(meta);
     }
 
     private void startRoute() {

@@ -73,7 +73,7 @@ public final class ChatbotDialogFragment extends DialogFragment {
         LinearLayout footer = new LinearLayout(requireContext()); footer.setOrientation(LinearLayout.VERTICAL); footer.setPadding(dp(16), dp(4), dp(16), dp(12));
         HorizontalScrollView suggestions = new HorizontalScrollView(requireContext()); suggestions.setHorizontalScrollBarEnabled(false);
         LinearLayout chips = new LinearLayout(requireContext());
-        for (String prompt : new String[]{"Giao dịch tháng này", "Chuyển khoản", "Hóa đơn", "Nạp điện thoại", "Tìm chi nhánh"}) {
+        for (String prompt : new String[]{"✨ Hạn mức còn lại?", "📊 Giao dịch tháng này", "💸 Chuyển khoản", "⚡ Hóa đơn", "📱 Nạp điện thoại", "📍 Tìm chi nhánh"}) {
             TextView chip = text(prompt, 12, INK, true); chip.setGravity(Gravity.CENTER); chip.setPadding(dp(14), 0, dp(14), 0); chip.setBackground(shape(0xccffffff, 24));
             LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-2, dp(44)); cp.rightMargin = dp(8); chips.addView(chip, cp);
             chip.setOnClickListener(v -> { input.setText(prompt); input.setSelection(input.length()); });

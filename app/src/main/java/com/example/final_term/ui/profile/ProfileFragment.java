@@ -236,6 +236,14 @@ public final class ProfileFragment extends Fragment {
 
     private void renderPreferenceSummaries() {
         if (binding == null) return;
+        if (profileLoaded && currentProfile != null) {
+            String customerNo = currentProfile.optString("customerNo", "").trim();
+            if (!customerNo.isEmpty()) binding.customerNoText.setText("Mã KH: " + customerNo);
+            String tier = currentProfile.optString("tier", "").trim();
+            if (!tier.isEmpty()) {
+                binding.customerTierText.setText("PLATINUM".equalsIgnoreCase(tier) ? "Hạng Platinum" : "Hạng " + tier);
+            }
+        }
         if (!profileLoaded) {
             binding.personalInfoSummary.setText("Chạm để cập nhật email hoặc số điện thoại");
             binding.notificationsStatusText.setText("—");
