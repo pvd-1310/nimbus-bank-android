@@ -217,6 +217,21 @@ public final class CustomerHomeFragment extends Fragment {
         currentBalanceCurrency = paymentAccount.currency;
         binding.accountStatusText.setVisibility(View.GONE);
         updateBalanceDisplay();
+        var current = binding;
+        ((FinalTermApplication) requireActivity().getApplication()).getAppContainer().getBackendApiClient()
+                .get("/accounts/" + android.net.Uri.encode(paymentAccount.id) + "/limits")
+                .addOnCompleteListener(task -> {
+                    if (binding != current || !task.isSuccessful() || task.getResult() == null
+                            || task.getResult().statusCode != 200) return;
+                    try {
+                        org.json.JSONObject lim = new org.json.JSONObject(task.getResult().body);
+                        long limit = lim.optLong("dailyLimitMinor", 10_000_000L);
+                        long used = lim.optLong("dailyUsedMinor", 0L);
+                        long remaining = Math.max(0L, limit - used);
+                        binding.transactionLimitPill.setText("ⓘ Hạn mức giao dịch · còn "
+                                + ReadSummaryFormatter.formatCurrency(remaining, "VND"));
+                    } catch (Exception ignored) { }
+                });
     }
 
     @Override
@@ -274,19 +289,21 @@ public final class CustomerHomeFragment extends Fragment {
 
             boolean isIncoming = tx.isIncoming();
             rowBinding.titleText.setText(ReadSummaryFormatter.transactionTitle(tx));
-            rowBinding.subtitleText.setText(tx.id);
+            long ts = tx.createdAt != null ? tx.createdAt.toDate().getTime() : 0L;
+            rowBinding.subtitleText.setText(ReadSummaryFormatter.formatRelativeTime(ts, i));
+            rowBinding.transactionIcon.setVisibility(View.GONE);
+            rowBinding.avatarInitials.setVisibility(View.VISIBLE);
+            rowBinding.avatarInitials.setText(ReadSummaryFormatter.initialsForTransaction(tx));
 
             String amountFormatted = ReadSummaryFormatter.formatCurrency(tx.amountMinor, tx.currency);
             if (isIncoming) {
                 rowBinding.amountText.setText("+" + amountFormatted);
                 rowBinding.amountText.setTextColor(ContextCompat.getColor(requireContext(), R.color.success));
-                rowBinding.transactionIcon.setImageResource(R.drawable.ic_trending_up);
-                rowBinding.transactionIcon.setColorFilter(ContextCompat.getColor(requireContext(), R.color.success));
+                rowBinding.avatarInitials.setTextColor(ContextCompat.getColor(requireContext(), R.color.success));
             } else {
                 rowBinding.amountText.setText("−" + amountFormatted);
                 rowBinding.amountText.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
-                rowBinding.transactionIcon.setImageResource(R.drawable.ic_nav_send);
-                rowBinding.transactionIcon.setColorFilter(ContextCompat.getColor(requireContext(), R.color.navy));
+                rowBinding.avatarInitials.setTextColor(ContextCompat.getColor(requireContext(), R.color.navy));
             }
 
             binding.recentTransactionsContent.addView(rowBinding.getRoot());

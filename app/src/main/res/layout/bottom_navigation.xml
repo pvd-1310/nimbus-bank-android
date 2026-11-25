@@ -84,15 +84,16 @@
 
         <ImageButton
             android:id="@+id/nav_quick_button"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:layout_gravity="center"
-            android:background="@drawable/nav_center_button"
+            android:background="@drawable/navy_button_pill"
+            android:backgroundTint="@color/navy_deep"
             android:contentDescription="Thao tác nhanh"
             android:elevation="6dp"
-            android:padding="15dp"
+            android:padding="12dp"
             android:src="@drawable/ic_nav_add"
-            app:tint="@color/ink_muted" />
+            app:tint="@color/white" />
     </FrameLayout>
 
     <!-- 4. Accounts / Approvals -->

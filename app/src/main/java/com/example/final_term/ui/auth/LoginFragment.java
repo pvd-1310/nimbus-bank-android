@@ -55,6 +55,10 @@ public final class LoginFragment extends Fragment {
         application.getAppContainer().getAuthRepository().observeAuthState().observe(getViewLifecycleOwner(), this::renderState);
         binding.signInButton.setOnClickListener(v -> signIn());
         binding.resetPasswordButton.setOnClickListener(v -> sendPasswordReset());
+        binding.biometricButton.setOnClickListener(v -> Toast.makeText(
+                requireContext(),
+                "Xác thực sinh trắc học khả dụng sau khi bạn đăng nhập và bật trong Hồ sơ.",
+                Toast.LENGTH_LONG).show());
     }
 
     private void signInWithFace(byte[] image) {

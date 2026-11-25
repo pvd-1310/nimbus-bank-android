@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">Nimbus Bank</string>
-    <string name="login_title">Đăng nhập</string>
-    <string name="login_subtitle">Ngân hàng số tĩnh lặng &amp; tin cậy</string>
+    <string name="login_title">Chào mừng trở lại</string>
+    <string name="login_subtitle">Đăng nhập vào tài khoản của bạn</string>
     <string name="email_label">Email</string>
     <string name="email_hint">name@example.com</string>
     <string name="password_label">Mật khẩu</string>
@@ -42,7 +42,7 @@
     <!-- Navigation Labels -->
     <string name="nav_home">Trang chủ</string>
     <string name="nav_wallet">Ví</string>
-    <string name="nav_accounts">Tài khoản</string>
+    <string name="nav_accounts">Thẻ</string>
     <string name="nav_profile">Cá nhân</string>
     <string name="nav_officer_dashboard">Tổng quan</string>
     <string name="nav_officer_customers">Khách hàng</string>
@@ -88,7 +88,7 @@
     <string name="transfer_confirm_title">Xác nhận chuyển tiền</string>
     <string name="fee_free">Phí dịch vụ: 0 ₫ (Miễn phí)</string>
     <string name="otp_title">Xác thực giao dịch</string>
-    <string name="otp_subtitle">Mã xác nhận hiển thị trên màn hình này.</string>
+    <string name="otp_subtitle">Nhập mã OTP 6 chữ số gửi tới ••• 789</string>
     <string name="otp_resend">Gửi lại mã sau</string>
     <string name="transfer_success_title">Chuyển tiền thành công</string>
     <string name="back_to_home">Về trang chủ</string>

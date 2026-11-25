@@ -49,6 +49,17 @@ public class MainActivity extends AppCompatActivity {
 
         FinalTermApplication application = (FinalTermApplication) getApplication();
         application.getAppContainer().getAuthRepository().observeAuthState().observe(this, this::routeFor);
+
+        binding.splashOverlay.postDelayed(() -> {
+            if (binding == null) return;
+            binding.splashOverlay.animate()
+                    .alpha(0f)
+                    .setDuration(260)
+                    .withEndAction(() -> {
+                        if (binding != null) binding.splashOverlay.setVisibility(android.view.View.GONE);
+                    })
+                    .start();
+        }, 650);
     }
 
     private void routeFor(AuthState state) {
