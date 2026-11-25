@@ -143,6 +143,7 @@ public final class EkycDialogFragment extends DialogFragment {
         if (window != null) {
             window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
             window.setBackgroundDrawableResource(android.R.color.transparent);
+            if (getView() != null) com.example.final_term.ui.common.FullscreenInsets.apply(window, getView());
         }
     }
 

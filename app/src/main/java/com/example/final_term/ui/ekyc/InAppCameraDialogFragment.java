@@ -31,6 +31,7 @@ import androidx.camera.view.PreviewView;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.DialogFragment;
 import com.example.final_term.R;
+import com.example.final_term.ui.common.FullscreenInsets;
 import com.google.android.material.button.MaterialButton;
 import com.google.common.util.concurrent.ListenableFuture;
 import java.io.File;
@@ -314,7 +315,7 @@ public final class InAppCameraDialogFragment extends DialogFragment {
         return root;
     }
 
-    @Override public void onStart() { super.onStart(); if (getDialog() != null && getDialog().getWindow() != null) getDialog().getWindow().setLayout(-1, -1); }
+    @Override public void onStart() { super.onStart(); if (getDialog() != null && getDialog().getWindow() != null && getView() != null) { getDialog().getWindow().setLayout(-1, -1); FullscreenInsets.apply(getDialog().getWindow(), getView()); } }
     @Override public void onResume() { super.onResume(); if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) startCamera(); else permission.launch(Manifest.permission.CAMERA); }
     @Override public void onPause() { if (provider != null) provider.unbindAll(); imageCapture = null; camera = null; super.onPause(); }
     @Override public void onSaveInstanceState(@NonNull Bundle out) { super.onSaveInstanceState(out); if (pendingPhoto != null) out.putString("pending_photo", pendingPhoto.getAbsolutePath()); }
