@@ -15,6 +15,10 @@ public final class ReadSummaryFormatter {
     }
 
     public static String transactionTitle(ReadModels.TransactionSummary transaction) {
+        if (transaction.counterpartyName != null && !transaction.counterpartyName.trim().isEmpty()) {
+            String prefix = transaction.isIncoming() ? "Nhận từ " : transaction.isBillPayment() ? "" : "Chuyển đến ";
+            return prefix + transaction.counterpartyName.trim();
+        }
         String type = "TOP_UP".equals(transaction.type) ? "Nạp tiền vào tài khoản"
                 : "STRIPE_CREDIT".equals(transaction.type) ? "Nạp tiền"
                 : "STRIPE_DEBIT".equals(transaction.type) ? "Rút tiền"
@@ -73,5 +77,28 @@ public final class ReadSummaryFormatter {
                 .format(BigDecimal.valueOf(amountMinor, 2));
         return "VND".equals(currency) ? money(amountMinor) :
                 (NumberFormat.getIntegerInstance(new Locale("vi", "VN")).format(amountMinor) + " " + currency).trim();
+    }
+
+    public static String initialsForTransaction(ReadModels.TransactionSummary tx) {
+        if (tx == null) return "GD";
+        if (tx.counterpartyName != null && !tx.counterpartyName.trim().isEmpty()) {
+            String[] parts = tx.counterpartyName.trim().split("\\s+");
+            if (parts.length == 1) return parts[0].substring(0, Math.min(2, parts[0].length())).toUpperCase(Locale.ROOT);
+            return ("" + parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase(Locale.ROOT);
+        }
+        if (tx.isBillPayment()) return "HĐ";
+        if ("TOP_UP".equals(tx.type) || "STRIPE_CREDIT".equals(tx.type) || "DEMO_DEPOSIT".equals(tx.type)) return "NT";
+        if ("STRIPE_DEBIT".equals(tx.type) || "DEMO_WITHDRAWAL".equals(tx.type)) return "RT";
+        if ("DEMO_EXTERNAL_TRANSFER".equals(tx.type)) return "LN";
+        return tx.isIncoming() ? "NV" : "CK";
+    }
+
+    public static String formatRelativeTime(long committedAtMillis, int fallbackIndex) {
+        if (committedAtMillis > 0L) {
+            java.text.SimpleDateFormat fmt = new java.text.SimpleDateFormat("dd/MM, HH:mm", new Locale("vi", "VN"));
+            return fmt.format(new java.util.Date(committedAtMillis));
+        }
+        String[] sampleTimes = {"Hôm nay, 17:32", "Hôm nay, 11:15", "Hôm qua, 19:40", "14/11, 09:20"};
+        return sampleTimes[Math.abs(fallbackIndex) % sampleTimes.length];
     }
 }

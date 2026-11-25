@@ -43,8 +43,9 @@ public final class BackendApiClient {
             .writeTimeout(5, TimeUnit.SECONDS)
             .followRedirects(false)
             .retryOnConnectionFailure(false);
-        if ("10.0.2.2".equals(URI.create(BASE_URL).getHost())) {
-            // Avoid reusing an idle socket through the Android Emulator host bridge.
+        String host = URI.create(BASE_URL).getHost();
+        if ("10.0.2.2".equals(host) || "127.0.0.1".equals(host)) {
+            // Avoid reusing an idle socket across the emulator bridge or ADB reverse tunnel.
             builder.connectionPool(new ConnectionPool(0, 5, TimeUnit.SECONDS));
         }
         return builder.build();

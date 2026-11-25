@@ -55,6 +55,7 @@ public final class ReadModels {
         public final String failureCode;
         public final Long balanceAfterMinor;
         public final String destinationBankCode;
+        public final String counterpartyName;
 
         public TransactionSummary(@NonNull String id, String accountId, String type, String currency,
                                    long amountMinor, String status, Timestamp createdAt) {
@@ -65,12 +66,20 @@ public final class ReadModels {
                                    long amountMinor, String status, Timestamp createdAt,
                                    String failureCode, Long balanceAfterMinor) {
             this(id, accountId, type, currency, amountMinor, status, createdAt,
-                    failureCode, balanceAfterMinor, null);
+                    failureCode, balanceAfterMinor, null, null);
         }
 
         public TransactionSummary(@NonNull String id, String accountId, String type, String currency,
                                    long amountMinor, String status, Timestamp createdAt,
                                    String failureCode, Long balanceAfterMinor, String destinationBankCode) {
+            this(id, accountId, type, currency, amountMinor, status, createdAt,
+                    failureCode, balanceAfterMinor, destinationBankCode, null);
+        }
+
+        public TransactionSummary(@NonNull String id, String accountId, String type, String currency,
+                                   long amountMinor, String status, Timestamp createdAt,
+                                   String failureCode, Long balanceAfterMinor, String destinationBankCode,
+                                   String counterpartyName) {
             this.id = id;
             this.accountId = accountId == null ? "" : accountId;
             this.type = type == null ? "TRANSACTION" : type;
@@ -81,6 +90,7 @@ public final class ReadModels {
             this.failureCode = failureCode;
             this.balanceAfterMinor = balanceAfterMinor;
             this.destinationBankCode = destinationBankCode == null ? "" : destinationBankCode;
+            this.counterpartyName = counterpartyName == null ? "" : counterpartyName;
         }
 
         public boolean isBillPayment() { return "BILL_PAYMENT".equals(type); }
