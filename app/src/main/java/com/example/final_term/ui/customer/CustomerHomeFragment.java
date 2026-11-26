@@ -99,7 +99,6 @@ public final class CustomerHomeFragment extends Fragment {
             FirestoreReadRepository reads = app.getAppContainer().getReadRepository();
             reads.observeAccounts(authState.getUser().getUid()).observe(getViewLifecycleOwner(), this::renderAccounts);
             reads.observeTransactions(authState.getUser().getUid()).observe(getViewLifecycleOwner(), this::renderTransactions);
-            reads.observeNotifications(authState.getUser().getUid()).observe(getViewLifecycleOwner(), this::renderNotifications);
 
         });
 
@@ -111,9 +110,6 @@ public final class CustomerHomeFragment extends Fragment {
         });
         binding.historyButton.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.transactionHistory));
         binding.branchLocatorButton.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.branchLocator));
-
-        binding.chatButton.setOnClickListener(v ->
-                new ChatbotDialogFragment().show(getChildFragmentManager(), "Chatbot"));
 
         // Quick action round buttons
         binding.quickTransfer.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.transfer));
@@ -139,11 +135,8 @@ public final class CustomerHomeFragment extends Fragment {
                     .show();
         });
 
-        binding.notificationButton.setOnClickListener(v -> {
-            Bundle args = new Bundle();
-            args.putInt("activeNavItem", R.id.nav_accounts);
-            navigateToAccounts(v, args);
-        });
+        binding.notificationButton.setOnClickListener(v ->
+                new ChatbotDialogFragment().show(getChildFragmentManager(), "Chatbot"));
     }
 
     private void navigateToAccounts(View source, Bundle args) {
@@ -308,16 +301,6 @@ public final class CustomerHomeFragment extends Fragment {
 
             binding.recentTransactionsContent.addView(rowBinding.getRoot());
         }
-    }
-
-    private void renderNotifications(ReadModelResult<List<ReadModels.NotificationSummary>> result) {
-        if (result == null || result.getData() == null || binding == null) return;
-        binding.notificationsContent.removeAllViews();
-        int unreadCount = 0;
-        for (ReadModels.NotificationSummary notification : result.getData()) {
-            if (!notification.read) unreadCount++;
-        }
-        binding.notificationBadge.setVisibility(unreadCount > 0 ? View.VISIBLE : View.GONE);
     }
 
     @Override

@@ -74,7 +74,6 @@ public final class MoneyRequestFragment extends Fragment {
             @Override public void onNothingSelected(AdapterView<?> parent) { }
         });
         binding.statusText.setText("Đang tải tài khoản…");
-        binding.demoSettlementButton.setVisibility(View.GONE);
         updateOperationUi();
         binding.submitButton.setOnClickListener(v -> {
             boolean withdrawal = binding.operationInput.getSelectedItemPosition() == 1;
@@ -95,8 +94,6 @@ public final class MoneyRequestFragment extends Fragment {
                     : TransactionFlowRequest.deposit(accountId, amountMinor, "VND");
             Navigation.findNavController(v).navigate(R.id.transactionFlow, flowRequest.toBundle());
         });
-        binding.historyButton.setOnClickListener(v ->
-                androidx.navigation.Navigation.findNavController(v).navigate(R.id.transactionHistory));
         updateControls();
         app.getAuthRepository().observeAuthState().observe(getViewLifecycleOwner(), auth -> {
             String currentUid = auth != null && auth.getStatus() == AuthState.Status.SIGNED_IN
@@ -155,8 +152,7 @@ public final class MoneyRequestFragment extends Fragment {
         binding.amountInput.setEnabled(true);
         binding.submitButton.setEnabled(uid != null && (binding.operationInput.getSelectedItemPosition() == 0 || !accountIds.isEmpty()));
         boolean withdrawal = binding.operationInput.getSelectedItemPosition() == 1;
-        binding.submitButton.setText(withdrawal ? "Tiếp tục · rút tiền" : "Nạp tiền bằng thẻ");
-        binding.historyButton.setEnabled(uid != null);
+        binding.submitButton.setText(withdrawal ? "Rút tiền" : "Nạp tiền");
     }
 
     private void selectOperation(int position) {

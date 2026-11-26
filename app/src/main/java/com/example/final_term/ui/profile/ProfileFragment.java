@@ -111,7 +111,7 @@ public final class ProfileFragment extends Fragment {
                             binding.profileHeaderTitle.setText("Cá nhân");
                             binding.profileSectionAccountTitle.setText("TÀI KHOẢN & THẺ");
                             binding.profilePersonalInfoTitle.setText("Thông tin cá nhân");
-                            binding.logoutButton.setText("Đăng xuất tài khoản");
+                            binding.logoutButton.setText("Đăng xuất");
                             binding.itemPersonalInfo.setOnClickListener(v -> openProfileEditor());
                             binding.itemNotifications.setOnClickListener(v -> openProfileEditor());
                             binding.itemLanguage.setOnClickListener(v -> openProfileEditor());
@@ -125,7 +125,7 @@ public final class ProfileFragment extends Fragment {
                             binding.customerTierText.setText(authState.getUser().isActive()
                                     ? "Đang hoạt động" : "Tạm khóa");
                             binding.personalInfoSummary.setText("Xem mã cán bộ, email công vụ và quyền hạn");
-                            binding.logoutButton.setText("Đăng xuất khỏi phiên vận hành");
+                            binding.logoutButton.setText("Đăng xuất");
                             binding.languageStatusText.setText("Tiếng Việt");
                             binding.itemPersonalInfo.setOnClickListener(v -> showOfficerDetailsDialog());
                             binding.itemOfficerAudit.setOnClickListener(v -> {

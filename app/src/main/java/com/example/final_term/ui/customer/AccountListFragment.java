@@ -144,9 +144,8 @@ public final class AccountListFragment extends Fragment {
 
         binding.backButton.setOnClickListener(v -> Navigation.findNavController(v).navigateUp());
         binding.retryButton.setOnClickListener(v -> load());
-        binding.notificationButton.setOnClickListener(v -> {
-            showNotificationsDialog();
-        });
+        binding.notificationButton.setOnClickListener(v ->
+                new ChatbotDialogFragment().show(getChildFragmentManager(), "Chatbot"));
 
         application.getAppContainer().getAuthRepository().observeAuthState()
                 .observe(getViewLifecycleOwner(), authState -> {
@@ -214,11 +213,6 @@ public final class AccountListFragment extends Fragment {
     private void renderNotifications(ReadModelResult<List<ReadModels.NotificationSummary>> result) {
         if (result == null) return;
         notifications = result.getData();
-        int unread = 0;
-        if (notifications != null) {
-            for (ReadModels.NotificationSummary n : notifications) if (!n.read) unread++;
-        }
-        binding.notificationDot.setVisibility(unread > 0 ? View.VISIBLE : View.GONE);
         renderAll();
     }
 
@@ -378,94 +372,70 @@ public final class AccountListFragment extends Fragment {
     private View createPaymentCard(ReadModels.AccountSummary account) {
         JSONObject snapshot = cardSnapshots.get(account.id);
         JSONObject cardData = snapshot == null ? null : snapshot.optJSONObject("card");
-        boolean loading = false;
-        String state = snapshot == null ? "" : snapshot.optString("status", "");
-        String brand = cardData == null ? "NIMBUS" : cardData.optString("brand", "Thẻ thanh toán").toUpperCase(Locale.ROOT);
+        String brand = cardData == null ? "VISA" : cardData.optString("brand", "VISA").toUpperCase(Locale.ROOT);
         String last4 = cardData == null ? "" : cardData.optString("last4", "");
-        String cardStatus = cardData == null ? "" : cardData.optString("status", "");
 
-        LinearLayout card = new LinearLayout(requireContext());
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setGravity(Gravity.TOP);
-        card.setPadding(dp(20), dp(22), dp(20), dp(20));
-        card.setBackground(cardDrawable(0xFF5E7096, 0xFFE4E9F2));
+        FrameLayout card = new FrameLayout(requireContext());
+        card.setPadding(dp(22), dp(24), dp(22), dp(22));
+        card.setBackground(cardDrawable(0xFF43537D, 0xFFF4F7FC));
         card.setElevation(dp(18));
         card.setContentDescription("Thẻ thanh toán Nimbus" + (last4.isEmpty() ? "" : " kết thúc bằng " + last4));
         if (android.os.Build.VERSION.SDK_INT >= 21) card.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
 
-        LinearLayout top = new LinearLayout(requireContext());
-        top.setGravity(Gravity.CENTER_VERTICAL);
-        FrameLayout chip = new FrameLayout(requireContext());
-        GradientDrawable chipShape = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                new int[]{0xFFFCE9B8, 0xFFE8C581, 0xFF9E7B34});
-        chipShape.setCornerRadius(dp(7));
-        chipShape.setStroke(dp(1), 0x99FFFFFF);
-        chip.setBackground(chipShape);
-        FrameLayout.LayoutParams vertical = new FrameLayout.LayoutParams(dp(1), ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER);
-        vertical.leftMargin = dp(14);
-        View chipDivider = new View(requireContext()); chipDivider.setBackgroundColor(0x665E4105); chip.addView(chipDivider, vertical);
-        LinearLayout.LayoutParams chipParams = new LinearLayout.LayoutParams(dp(42), dp(32));
-        top.addView(chip, chipParams);
-        TextView brandText = walletText(brand, 16, R.color.white, true);
-        brandText.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
-        brandText.setShadowLayer(dp(2), 0, dp(1), 0x66000000);
-        LinearLayout.LayoutParams brandParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        top.addView(brandText, brandParams);
-        card.addView(top);
+        // Top-left: Metallic EMV Chip
+        ImageView chip = new ImageView(requireContext());
+        chip.setImageResource(R.drawable.ic_card_chip);
+        chip.setContentDescription(null);
+        FrameLayout.LayoutParams chipParams = new FrameLayout.LayoutParams(dp(42), dp(32), Gravity.TOP | Gravity.START);
+        card.addView(chip, chipParams);
 
-        LinearLayout middle = new LinearLayout(requireContext());
-        middle.setOrientation(LinearLayout.VERTICAL);
-        middle.setGravity(Gravity.CENTER_VERTICAL);
-        middle.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        // Top-right: Vertical VISA wordmark
+        TextView brandText = walletText(brand, 22, R.color.white, true);
+        brandText.setLetterSpacing(0.06f);
+        brandText.setRotation(-90f);
+        FrameLayout.LayoutParams brandParams = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END);
+        brandParams.topMargin = dp(12);
+        brandParams.rightMargin = dp(-10);
+        card.addView(brandText, brandParams);
+
+        // Subtle center-bottom masked last 4 digits if available
         if (!last4.isEmpty()) {
-            TextView number = walletText("••••  ••••  ••••  " + last4, 16, R.color.white, true);
-            number.setLetterSpacing(0.06f);
-            number.setShadowLayer(dp(2), 0, dp(1), 0x55000000);
-            middle.addView(number);
-        } else {
-            String stateMessage = loading || "pending".equalsIgnoreCase(state)
-                    ? "Đang phát hành thẻ" : cardRequestsFailed.contains(account.id)
-                    ? "Chưa có thẻ đã lưu" : "Chọn thẻ khi thanh toán";
-            TextView cardState = walletText(stateMessage, 14, R.color.white, false);
-            cardState.setShadowLayer(dp(2), 0, dp(1), 0x55000000);
-            middle.addView(cardState);
+            TextView number = walletText("••••  " + last4, 14, R.color.navy, true);
+            number.setAlpha(0.75f);
+            number.setLetterSpacing(0.08f);
+            FrameLayout.LayoutParams numParams = new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
+            numParams.topMargin = dp(18);
+            card.addView(number, numParams);
         }
-        card.addView(middle);
 
-        LinearLayout bottom = new LinearLayout(requireContext());
-        bottom.setGravity(Gravity.BOTTOM | Gravity.CENTER_VERTICAL);
-        LinearLayout wordmark = new LinearLayout(requireContext());
-        wordmark.setOrientation(LinearLayout.VERTICAL);
-        TextView name = walletText("nimbus", 22, R.color.white, false);
-        name.setLetterSpacing(-0.03f);
-        TextView subtitle = walletText("infinite", 10, R.color.white, true);
-        subtitle.setAlpha(0.78f);
-        wordmark.addView(name); wordmark.addView(subtitle); bottom.addView(wordmark);
+        // Bottom-left: Vertical subtle brand watermark
+        TextView watermark = walletText("nimbus", 22, R.color.slate_blue, false);
+        watermark.setAlpha(0.55f);
+        watermark.setLetterSpacing(-0.02f);
+        watermark.setRotation(-90f);
+        FrameLayout.LayoutParams markParams = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.START);
+        markParams.bottomMargin = dp(16);
+        markParams.leftMargin = dp(-18);
+        card.addView(watermark, markParams);
+
+        // Bottom-right: Contactless NFC wave icon
         ImageView contactless = new ImageView(requireContext());
-        contactless.setImageResource(R.drawable.ic_nav_payment);
-        contactless.setColorFilter(ContextCompat.getColor(requireContext(), R.color.white));
-        LinearLayout.LayoutParams contactParams = new LinearLayout.LayoutParams(dp(25), dp(25));
-        contactParams.gravity = Gravity.BOTTOM;
-        contactParams.leftMargin = dp(8);
-        bottom.addView(contactless, contactParams);
-        card.addView(bottom);
+        contactless.setImageResource(R.drawable.ic_card_contactless);
+        contactless.setContentDescription(null);
+        FrameLayout.LayoutParams contactParams = new FrameLayout.LayoutParams(dp(24), dp(24), Gravity.BOTTOM | Gravity.END);
+        card.addView(contactless, contactParams);
 
-        String stateLabel = loading ? "Đang tải thông tin thẻ"
-                : cardRequestsFailed.contains(account.id) ? "Chọn thẻ ở bước thanh toán"
-                : cardData == null ? ("pending".equalsIgnoreCase(state) ? "Thẻ đang được phát hành"
-                : "Chọn thẻ khi thanh toán") : formatCardStatus(cardStatus);
-        TextView status = walletText(stateLabel, 12, R.color.ink_muted, false);
-        status.setGravity(Gravity.CENTER);
-        status.setPadding(0, dp(7), 0, 0);
-        card.addView(status);
         return card;
     }
 
     private GradientDrawable cardDrawable(int startColor, int endColor) {
         GradientDrawable drawable = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                new int[]{startColor, 0xFF8D9CC0, 0xFFB9C4DC, endColor, 0xFFF8FAFC});
+                new int[]{startColor, 0xFF697AA3, 0xFFA6B4D0, 0xFFE8EEF7, endColor, 0xFFFFFFFF});
         drawable.setCornerRadius(dp(28));
-        drawable.setStroke(dp(1), 0xCCFFFFFF);
+        drawable.setStroke(dp(1), 0xE6FFFFFF);
         return drawable;
     }
 

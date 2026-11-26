@@ -38,30 +38,15 @@
             android:textSize="18sp"
             android:textStyle="bold" />
 
-        <FrameLayout
+        <ImageButton
+            android:id="@+id/notification_button"
             android:layout_width="48dp"
-            android:layout_height="48dp">
-
-            <ImageButton
-                android:id="@+id/notification_button"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:background="@drawable/circle_action_button"
-                android:contentDescription="Thông báo"
-                android:padding="9dp"
-                android:src="@drawable/ic_nav_notifications" />
-
-            <View
-                android:id="@+id/notification_dot"
-                android:layout_width="8dp"
-                android:layout_height="8dp"
-                android:layout_gravity="top|end"
-                android:layout_marginTop="7dp"
-                android:layout_marginEnd="7dp"
-                android:background="@drawable/circle_action_button"
-                android:backgroundTint="@color/danger"
-                android:visibility="gone" />
-        </FrameLayout>
+            android:layout_height="48dp"
+            android:background="@drawable/circle_action_button"
+            android:contentDescription="Trợ lý Nimbus"
+            android:padding="12dp"
+            android:src="@drawable/ic_ai_spark"
+            app:tint="@color/navy" />
     </LinearLayout>
 
     <TextView

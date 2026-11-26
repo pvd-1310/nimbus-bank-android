@@ -10,7 +10,7 @@ import android.text.TextWatcher;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.navigation.NavController;
-import androidx.navigation.fragment.NavHostFragment;
+import androidx.navigation.Navigation;
 
 import com.example.final_term.R;
 import com.example.final_term.databinding.BottomSheetQuickActionsBinding;
@@ -35,35 +35,12 @@ public class QuickActionsBottomSheet extends BottomSheetDialogFragment {
         binding.closeSheetBtn.setOnClickListener(v -> dismiss());
         setupSearch();
 
-        binding.qaTransfer.setOnClickListener(v -> {
-            dismiss();
-            nav().navigate(R.id.transfer);
-        });
-
-        binding.qaDepositWithdraw.setOnClickListener(v -> {
-            dismiss();
-            nav().navigate(R.id.moneyRequest);
-        });
-
-        binding.qaBills.setOnClickListener(v -> {
-            dismiss();
-            nav().navigate(R.id.utilitiesHub);
-        });
-
-        binding.qaTopup.setOnClickListener(v -> {
-            dismiss();
-            nav().navigate(R.id.mobileTopup);
-        });
-
-        binding.qaBooking.setOnClickListener(v -> {
-            dismiss();
-            nav().navigate(R.id.flightBooking);
-        });
-
-        binding.qaBranch.setOnClickListener(v -> {
-            dismiss();
-            nav().navigate(R.id.branchLocator);
-        });
+        binding.qaTransfer.setOnClickListener(v -> navigateTo(R.id.transfer));
+        binding.qaDepositWithdraw.setOnClickListener(v -> navigateTo(R.id.moneyRequest));
+        binding.qaBills.setOnClickListener(v -> navigateTo(R.id.utilitiesHub));
+        binding.qaTopup.setOnClickListener(v -> navigateTo(R.id.mobileTopup));
+        binding.qaBooking.setOnClickListener(v -> navigateTo(R.id.flightBooking));
+        binding.qaBranch.setOnClickListener(v -> navigateTo(R.id.branchLocator));
 
         binding.qaAi.setOnClickListener(v -> {
             var manager = getParentFragmentManager();
@@ -71,14 +48,17 @@ public class QuickActionsBottomSheet extends BottomSheetDialogFragment {
             new com.example.final_term.ui.customer.ChatbotDialogFragment().show(manager, "Chatbot");
         });
 
-        binding.qaHistory.setOnClickListener(v -> {
-            dismiss();
-            nav().navigate(R.id.transactionHistory);
-        });
+        binding.qaHistory.setOnClickListener(v -> navigateTo(R.id.transactionHistory));
+    }
+
+    private void navigateTo(int destinationId) {
+        NavController controller = nav();
+        dismiss();
+        controller.navigate(destinationId);
     }
 
     private NavController nav() {
-        return NavHostFragment.findNavController(this);
+        return Navigation.findNavController(requireActivity(), R.id.nav_host_fragment);
     }
 
     private void setupSearch() {
