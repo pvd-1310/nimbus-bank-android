@@ -16,6 +16,7 @@ export class FirestoreStore implements Store {
         list: async (c, w = {}, o = {}) => {
           let q: FirebaseFirestore.Query = this.db.collection(c);
           for (const [k, v] of Object.entries(w)) q = q.where(k, "==", v);
+          if (o.arrayContains) q = q.where(o.arrayContains.field, "array-contains", o.arrayContains.value);
           if (o.prefix) {
             q = q.where(o.prefix.field, ">=", o.prefix.value)
               .where(o.prefix.field, "<=", o.prefix.value + "\uf8ff")

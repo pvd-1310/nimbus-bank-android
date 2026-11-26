@@ -2,6 +2,7 @@ import type { Banking } from "../../core/banking.js";
 import type { Doc } from "../../core/store.js";
 import { check } from "../../shared/errors.js";
 import { releaseContactPhone, reserveContactPhone } from "./contact-phone-reservations.js";
+import { phoneSearchTokens } from "../../shared/search.js";
 import type { Actor } from "../auth/auth.types.js";
 export class ProfileService {
   constructor(private bank: Banking) {}
@@ -53,6 +54,7 @@ export class ProfileService {
         await reserveContactPhone(t, a.uid, patch.contactPhone, this.bank.now());
         await releaseContactPhone(t, a.uid, typeof u.contactPhone === "string" ? u.contactPhone : undefined, this.bank.now());
         nextPatch.phoneMasked = "••••" + patch.contactPhone.slice(-4);
+        nextPatch.contactPhoneSearchTokens = phoneSearchTokens(patch.contactPhone);
       }
       for (const field of Object.keys(patch)) {
         before[field] = field === "contactEmail" ? this.maskEmail(u[field])

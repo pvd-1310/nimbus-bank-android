@@ -7,7 +7,7 @@ import { page, queryOptions } from "../../shared/pagination.js";
 import { id } from "../../shared/validation.js";
 import { releaseContactPhone, reserveContactPhone } from "../profile/contact-phone-reservations.js";
 import { OfficerAccountsService } from "./officer-accounts.service.js";
-import { normalizeSearchText } from "../../shared/search.js";
+import { normalizeSearchText, phoneSearchTokens } from "../../shared/search.js";
 export function registerOfficerRoutes(route: Route, d: AppDependencies) {
   const officerAccounts = new OfficerAccountsService(d.bank);
   route("get", "/officer/checking-accounts", async (a, r) => {
@@ -109,6 +109,7 @@ export function registerOfficerRoutes(route: Route, d: AppDependencies) {
           await releaseContactPhone(t, uid, typeof u.contactPhone === "string" ? u.contactPhone : undefined, d.bank.now());
         }
         userPatch.phoneMasked = "••••" + nextPhone.slice(-4);
+        userPatch.contactPhoneSearchTokens = phoneSearchTokens(nextPhone);
       }
       t.set("users/" + uid, { ...u, ...userPatch });
       const { id: customerId, _cursor, ...customerData } = customer;

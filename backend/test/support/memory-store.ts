@@ -18,7 +18,8 @@ export class MemoryStore implements Store {
               ([p, d]) =>
                 p.startsWith(c + "/") &&
                 p.split("/").length === 2 &&
-                Object.entries(w).every(([k, v]) => d[k] === v),
+                Object.entries(w).every(([k, v]) => d[k] === v) &&
+                (!o.arrayContains || (Array.isArray(d[o.arrayContains.field]) && d[o.arrayContains.field].includes(o.arrayContains.value))),
             )
             .map(
               ([p, d]) =>

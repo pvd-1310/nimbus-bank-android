@@ -3,6 +3,7 @@ import { check } from "../shared/errors.js";
 import { normalizeSearchText } from "../shared/search.js";
 import { preserveExisting, preserveSeedAccount, seedClaims } from "./seed-preserve.js";
 import { reserveContactPhone } from "../modules/profile/contact-phone-reservations.js";
+import { phoneSearchTokens } from "../shared/search.js";
 const r = runtime();
 const ns = process.env.DEMO_NAMESPACE ?? "demo";
 check(/^[a-z0-9_]{3,30}$/.test(ns), "INVALID_NAMESPACE");
@@ -136,6 +137,7 @@ try {
           phoneMasked: u.phoneMasked,
           contactEmail: u.email,
           ...(u.phone ? { contactPhone: u.phone } : {}),
+          ...(u.role === "CUSTOMER" && u.phone ? { contactPhoneSearchTokens: phoneSearchTokens(u.phone) } : {}),
           status: "ACTIVE",
           createdAt: Date.now(),
           active: true,

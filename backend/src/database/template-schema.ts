@@ -11,6 +11,7 @@ export const templateFields: Record<string, readonly string[]> = {
     "fullName",
     "emailMasked",
     "phoneMasked",
+    "contactPhoneSearchTokens",
     "status",
     "createdAt",
   ],

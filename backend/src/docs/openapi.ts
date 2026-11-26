@@ -201,7 +201,7 @@ const endpoints: [string, string, string, unknown?][] = [
     ),
   ],
   ["get", "/officer/customers", "Permission CUSTOMER_ADMIN required"],
-  ["get", "/officer/checking-accounts", "Permission CUSTOMER_ADMIN required; paginated checking accounts; q matches exact account ID or normalized owner-name prefix"],
+  ["get", "/officer/checking-accounts", "Permission CUSTOMER_ADMIN required; paginated checking accounts; q matches exact account/customer ID, phone digit substring, or normalized owner-name prefix"],
   ["get", "/officer/customers/{id}", "Permission CUSTOMER_ADMIN required; editable contact fields only; excludes CCCD"],
   [
     "post",

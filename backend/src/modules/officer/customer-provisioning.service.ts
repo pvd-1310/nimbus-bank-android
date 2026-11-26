@@ -3,7 +3,7 @@ import type { Doc } from "../../core/store.js";
 import { digest } from "../../shared/crypto.js";
 import { check, Fault, key } from "../../shared/errors.js";
 import { releaseContactPhone, reserveContactPhone } from "../profile/contact-phone-reservations.js";
-import { normalizeSearchText } from "../../shared/search.js";
+import { normalizeSearchText, phoneSearchTokens } from "../../shared/search.js";
 import { type Actor } from "../auth/auth.types.js";
 interface IdentityAdmin {
   exists: (uid: string) => Promise<boolean>;
@@ -101,6 +101,7 @@ export async function provisionCustomer(
       emailMasked: input.email.replace(/^(.).*(@.*)$/, "$1***$2"),
       phoneMasked: "••••" + String(input.phoneNumber ?? "").slice(-4),
       contactPhone: String(input.phoneNumber ?? ""),
+      contactPhoneSearchTokens: phoneSearchTokens(String(input.phoneNumber ?? "")),
       primaryCheckingAccountId: accountId,
       createdAt: bank.now(),
       createdBy: a.uid,

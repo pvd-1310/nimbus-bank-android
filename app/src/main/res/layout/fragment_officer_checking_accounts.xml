@@ -74,7 +74,7 @@
             android:layout_marginBottom="10dp"
             android:autofillHints=""
             android:background="@drawable/glass_panel_card"
-            android:hint="Tìm số tài khoản hoặc tên chủ tài khoản"
+            android:hint="Tìm số tài khoản, SĐT, ID khách hàng hoặc tên"
             android:imeOptions="actionSearch"
             android:inputType="text"
             android:paddingStart="16dp"

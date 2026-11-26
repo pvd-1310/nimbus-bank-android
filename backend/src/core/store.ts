@@ -5,6 +5,7 @@ export interface ListOptions {
   from?: number;
   to?: number;
   prefix?: { field: string; value: string };
+  arrayContains?: { field: string; value: unknown };
 }
 export interface Tx {
   get(path: string): Promise<Doc | undefined>;
