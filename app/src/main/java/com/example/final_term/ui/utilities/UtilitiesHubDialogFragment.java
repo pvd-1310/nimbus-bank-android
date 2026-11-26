@@ -274,7 +274,6 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         });
         binding.checkoutOtpTimer.setOnClickListener(v -> requestOtp());
         binding.checkoutOtpClose.setOnClickListener(v -> cancelIntentForEdit());
-        binding.checkoutBtnVerifyOtp.setOnClickListener(v -> verifyOtp());
         binding.checkoutBtnRecover.setOnClickListener(v -> {
             if (intentId == null) preparePaymentIntent();
             else recoverPaymentAndIntent(true, true);
@@ -1035,15 +1034,11 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         boolean needFace = checkoutConfirmed && quoted && faceRequired && !faceVerified && !commitPending;
         binding.checkoutFaceStepContainer.setVisibility(needFace ? View.VISIBLE : View.GONE);
 
-        boolean canOtp = checkoutConfirmed && quoted && intentId != null && (!faceRequired || faceVerified) && !commitPending && !completed;
-        if (!canOtp) dismissSharedOtp();
-        if (canOtp && authorizationSheet == null) {
-            authorizationSheet = new com.example.final_term.ui.common.TransactionSheet(requireContext(), binding.checkoutOtpStepContainer);
-        } else if (!canOtp && authorizationSheet != null) {
+        if (authorizationSheet != null) {
             authorizationSheet.close();
             authorizationSheet = null;
         }
-        binding.checkoutBtnVerifyOtp.setEnabled(!busy && challengeId != null);
+        binding.checkoutOtpStepContainer.setVisibility(View.GONE);
 
         binding.checkoutCommitContainer.setVisibility(commitPending ? View.VISIBLE : View.GONE);
         binding.checkoutPendingBanner.setVisibility(commitPending ? View.VISIBLE : View.GONE);
@@ -1078,15 +1073,16 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     private void requestOtp() {
         if (busy || intentId == null || commitPending || (faceRequired && !faceVerified)) return;
         if (sharedOtp == null) {
-            sharedOtp = new com.example.final_term.ui.transaction.OtpBottomSheetDialog(requireContext(), new com.example.final_term.ui.transaction.OtpBottomSheetDialog.Listener() {
-                @Override public void onSubmitOtp(@NonNull String code) { binding.checkoutOtpInput.setText(code); verifyOtp(); }
-                @Override public void onResendRequested() { requestOtp(); }
-                @Override public void onDismissRequested() { dismissSharedOtp(); cancelIntentForEdit(); }
-            });
+            sharedOtp = new com.example.final_term.ui.transaction.OtpBottomSheetDialog(requireContext(),
+                    new com.example.final_term.ui.transaction.OtpBottomSheetDialog.Listener() {
+                        @Override public void onSubmitOtp(@NonNull String code) { verifyOtp(code); }
+                        @Override public void onResendRequested() { requestOtp(); }
+                        @Override public void onDismissRequested() { dismissSharedOtp(); cancelIntentForEdit(); }
+                    });
         }
         sharedOtp.show();
         setBusy(true);
-        checkoutStatus("Đang tạo mã xác nhận…");
+        checkoutStatus("Đang xác thực giao dịch…");
         api.post("/intents/" + intentId + "/otp", "{}").addOnCompleteListener(task -> {
             if (!isAdded() || binding == null) return;
             setBusy(false);
@@ -1106,12 +1102,8 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                 String code = res.getString("code");
                 if (!code.matches("[0-9]{6}")) throw new IllegalStateException();
                 challengeId = res.getString("challengeId");
-                binding.checkoutDemoCode.setText("Mã OTP demo đã được điền tự động");
-                binding.checkoutOtpInput.setText(code);
                 if (sharedOtp != null) sharedOtp.setDemoCode(code);
                 startOtpTimer();
-                renderCheckoutStep();
-                checkoutStatus("Mã OTP demo đã được điền. Bấm xác nhận để tiếp tục.");
             } catch (Exception e) {
                 checkoutStatus("Phản hồi mã OTP không hợp lệ.");
             }
@@ -1143,11 +1135,11 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         }.start();
     }
 
-    private void verifyOtp() {
+    private void verifyOtp(@NonNull String code) {
         if (busy || intentId == null || challengeId == null) return;
-        String code = binding.checkoutOtpInput.getText() == null ? "" : binding.checkoutOtpInput.getText().toString().trim();
         if (!code.matches("[0-9]{6}")) {
-            checkoutStatus("Nhập mã xác nhận gồm 6 chữ số.");
+            setBusy(false);
+            checkoutStatus("Không thể xác thực giao dịch. Vui lòng thử lại.");
             return;
         }
         setBusy(true);
@@ -1179,6 +1171,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
 
     private void commitPayment() {
         if (busy || completed || currentBillId == null || requestId == null) return;
+        dismissSharedOtp();
         commitPending = true;
         setBusy(true);
         renderCheckoutStep();
@@ -1201,9 +1194,9 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                 if (!isAdded() || binding == null) return;
                 setBusy(false);
                 if (!task.isSuccessful() || task.getResult() == null || task.getResult().statusCode >= 500) {
-                    checkoutStatus(errorMessage(task.isSuccessful() ? task.getResult() : null,
-                            "Chưa có kết quả thanh toán. Bấm kiểm tra lại"));
+                    commitPending = false;
                     renderCheckoutStep();
+                    checkoutStatus("Thanh toán không thành công.");
                     return;
                 }
                 BackendApiClient.Response response = task.getResult();
@@ -1217,14 +1210,16 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                         }
                         if ("FAILED".equals(status)) {
                             commitPending = false;
-                            checkoutStatus("Thanh toán chưa hoàn tất. Số dư chưa thay đổi.");
+                            checkoutStatus("Thanh toán không thành công.");
                             renderCheckoutStep();
                             return;
                         }
                         String clientSecret = p.optString("clientSecret", "");
                         if (!p.isNull("clientSecret") && !clientSecret.isEmpty()) {
                             if (paymentSheet == null) {
-                                checkoutStatus("Thanh toán thẻ chưa được cấu hình.");
+                                commitPending = false;
+                                renderCheckoutStep();
+                                checkoutStatus("Thanh toán không thành công.");
                                 return;
                             }
                             PaymentSheet.Configuration.Builder configuration =
@@ -1258,7 +1253,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                     return;
                 }
                 renderCheckoutStep();
-                checkoutStatus(errorMessage(response, "Thanh toán bị từ chối"));
+                checkoutStatus(errorMessage(response, "Thanh toán không thành công."));
             });
         } catch (Exception e) {
             setBusy(false);
@@ -1279,10 +1274,8 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
         } else if (result instanceof PaymentSheetResult.Canceled) {
             checkoutStatus("Bạn đã đóng màn thanh toán. Bấm Tiếp tục thanh toán để thử lại.");
         } else if (result instanceof PaymentSheetResult.Failed) {
-            PaymentSheetResult.Failed failed = (PaymentSheetResult.Failed) result;
-            String message = failed.getError().getLocalizedMessage();
-            checkoutStatus("Thanh toán chưa hoàn tất" +
-                    (message == null || message.trim().isEmpty() ? ". Bạn có thể thử lại." : ": " + message));
+            commitPending = false;
+            checkoutStatus("Thanh toán không thành công.");
         }
         renderCheckoutStep();
     }
@@ -1363,7 +1356,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                 } else if (faceRequired && !faceVerified) {
                     checkoutStatus("Xác minh khuôn mặt để tiếp tục thanh toán.");
                 } else if ("AWAITING_CODE".equalsIgnoreCase(challenge) && challengeId != null) {
-                    checkoutStatus("Kiểm tra mã OTP demo và bấm xác nhận để tiếp tục.");
+                    checkoutStatus("Giao dịch chưa được xác thực. Vui lòng thử lại.");
                 } else {
                     checkoutStatus("Bấm tạo mã mới để tiếp tục xác thực thanh toán.");
                 }
@@ -1504,7 +1497,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
     private String errorMessage(BackendApiClient.Response response, String fallback) {
         String code = errorCode(response);
         switch (code) {
-            case "SETUP_REQUIRED": return "Thanh toán bằng thẻ hiện chưa khả dụng. Vui lòng thử lại sau.";
+            case "SETUP_REQUIRED": return "Thanh toán không thành công.";
             case "INVALID_OTP": return "Mã xác nhận không đúng. Vui lòng kiểm tra lại.";
             case "OTP_EXPIRED": return "Mã xác nhận đã hết hạn. Tạo mã mới.";
             case "OTP_LOCKED": return "Đã nhập sai quá 5 lần, giao dịch bị khóa. Hủy để tạo lại.";

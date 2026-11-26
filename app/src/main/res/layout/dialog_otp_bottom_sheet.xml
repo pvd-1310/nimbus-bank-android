@@ -102,7 +102,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
                     android:gravity="center"
-                    android:text="Nhập mã OTP 6 số đã gửi đến số ••• 789"
+                    android:text="Xác thực giao dịch an toàn"
                     android:textColor="@color/ink_muted"
                     android:textSize="13sp" />
             </LinearLayout>

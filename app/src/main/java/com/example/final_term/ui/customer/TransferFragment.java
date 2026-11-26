@@ -178,7 +178,6 @@ public final class TransferFragment extends Fragment {
         // Step 3 OTP -> Verify OTP & Commit
         binding.otpResendTimer.setOnClickListener(v -> requestOtp());
         binding.otpClose.setOnClickListener(v -> handleBackNavigation());
-        binding.verifyButton.setOnClickListener(v -> verifyOtp());
         binding.commitButton.setOnClickListener(v -> {
             if (cardTopup() && commitPending) createTopupPayment();
             else recover();
@@ -392,9 +391,8 @@ public final class TransferFragment extends Fragment {
     private void showStep(Step step) {
         currentStep = step;
         if (binding == null) return;
-        if (step != Step.OTP) dismissSharedOtp();
-
-        if (step != Step.OTP && authorizationSheet != null) {
+        dismissSharedOtp();
+        if (authorizationSheet != null) {
             authorizationSheet.close();
             authorizationSheet = null;
         }
@@ -403,8 +401,6 @@ public final class TransferFragment extends Fragment {
         binding.stepConfirmContainer.setVisibility(step == Step.CONFIRM || step == Step.OTP ? View.VISIBLE : View.GONE);
         binding.submitButton.setEnabled(step == Step.CONFIRM && !busy);
         binding.btnBackToEdit.setEnabled(step == Step.CONFIRM && !busy);
-        if (step == Step.OTP && authorizationSheet == null)
-            authorizationSheet = new com.example.final_term.ui.common.TransactionSheet(requireContext(), binding.stepOtpContainer);
         binding.stepSuccessContainer.setVisibility(step == Step.SUCCESS ? View.VISIBLE : View.GONE);
 
         if (step == Step.INPUT) {
@@ -415,7 +411,7 @@ public final class TransferFragment extends Fragment {
             binding.headerTitle.setText(demoMode() ? demoLabel() : getString(R.string.transfer_confirm_title));
             bindConfirmationView();
         } else if (step == Step.OTP) {
-            binding.headerTitle.setText(R.string.otp_title);
+            binding.headerTitle.setText(R.string.transfer_confirm_title);
             renderAuthorization();
         } else if (step == Step.SUCCESS) {
             binding.headerTitle.setText("Biên lai giao dịch");
@@ -788,14 +784,12 @@ public final class TransferFragment extends Fragment {
 
     private void renderAuthorization() {
         if (commitPending) dismissSharedOtp();
-        boolean canEnterCode = (!faceRequired || faceVerified) && !commitPending;
         binding.faceStepUpButton.setVisibility(faceRequired && !commitPending ? View.VISIBLE : View.GONE);
         binding.faceStepUpButton.setEnabled(!busy);
-        binding.otpInput.setVisibility(canEnterCode ? View.VISIBLE : View.GONE);
-        binding.otpResendTimer.setVisibility(canEnterCode ? View.VISIBLE : View.GONE);
-        binding.demoCode.setVisibility(canEnterCode ? View.VISIBLE : View.GONE);
-        binding.verifyButton.setVisibility(canEnterCode ? View.VISIBLE : View.GONE);
-        binding.verifyButton.setEnabled(!busy && challengeId != null);
+        binding.otpInput.setVisibility(View.GONE);
+        binding.otpResendTimer.setVisibility(View.GONE);
+        binding.demoCode.setVisibility(View.GONE);
+        binding.verifyButton.setVisibility(View.GONE);
         binding.commitButton.setVisibility(commitPending ? View.VISIBLE : View.GONE);
         binding.commitButton.setText(cardTopup() ? "Mở lại thanh toán thẻ" : "Kiểm tra trạng thái");
         binding.commitButton.setEnabled(!busy);
@@ -828,16 +822,17 @@ public final class TransferFragment extends Fragment {
     private void requestOtp() {
         if (busy || intentId == null || commitPending || (faceRequired && !faceVerified)) return;
         if (sharedOtp == null) {
-            sharedOtp = new com.example.final_term.ui.transaction.OtpBottomSheetDialog(requireContext(), new com.example.final_term.ui.transaction.OtpBottomSheetDialog.Listener() {
-                @Override public void onSubmitOtp(@NonNull String code) { binding.otpInput.setText(code); verifyOtp(); }
-                @Override public void onResendRequested() { requestOtp(); }
-                @Override public void onDismissRequested() { dismissSharedOtp(); cancelForEdit(); }
-            });
+            sharedOtp = new com.example.final_term.ui.transaction.OtpBottomSheetDialog(requireContext(),
+                    new com.example.final_term.ui.transaction.OtpBottomSheetDialog.Listener() {
+                        @Override public void onSubmitOtp(@NonNull String code) { verifyOtp(code); }
+                        @Override public void onResendRequested() { requestOtp(); }
+                        @Override public void onDismissRequested() { dismissSharedOtp(); cancelForEdit(); }
+                    });
         }
         sharedOtp.show();
         FragmentTransferBinding view = binding;
         setBusy(true);
-        status("Đang tạo mã xác nhận…");
+        status("Đang xác thực giao dịch…");
         api.post("/intents/" + intentId + "/otp", "{}").addOnCompleteListener(task -> {
             if (binding != view) return;
             setBusy(false);
@@ -857,23 +852,19 @@ public final class TransferFragment extends Fragment {
                 challengeId = result.getString("challengeId");
                 String code = result.getString("code");
                 if (!code.matches("[0-9]{6}")) throw new IllegalStateException();
-                binding.demoCode.setText("Mã OTP demo đã được điền tự động");
-                binding.otpInput.setText(code);
                 if (sharedOtp != null) sharedOtp.setDemoCode(code);
                 startOtpCountdown();
-                renderAuthorization();
-                status("Mã OTP demo đã được điền. Bấm xác nhận để tiếp tục.");
             } catch (Exception error) {
                 status("Không thể đọc kết quả. Vui lòng thử lại.");
             }
         });
     }
 
-    private void verifyOtp() {
+    private void verifyOtp(@NonNull String code) {
         if (busy || intentId == null || challengeId == null) return;
-        String code = text(binding.otpInput.getText());
         if (!code.matches("[0-9]{6}")) {
-            status("Nhập mã xác nhận gồm 6 chữ số.");
+            setBusy(false);
+            status("Không thể xác thực giao dịch. Vui lòng thử lại.");
             return;
         }
         FragmentTransferBinding view = binding;
@@ -1046,7 +1037,11 @@ public final class TransferFragment extends Fragment {
     private void createTopupPayment() {
         if (paymentSheet == null) {
             setBusy(false);
-            status("Thanh toán bằng thẻ hiện chưa khả dụng. Vui lòng thử lại sau.");
+            commitPending = false;
+            forgetPending();
+            renderAuthorization();
+            dismissSharedOtp();
+            status("Thanh toán không thành công.");
             return;
         }
         if (requestId == null || confirmedSource == null) {
@@ -1067,9 +1062,9 @@ public final class TransferFragment extends Fragment {
                 setBusy(false);
                 if (!task.isSuccessful() || !ok(task.getResult())) {
                     commitPending = false;
+                    forgetPending();
                     renderAuthorization();
-                    status(task.isSuccessful() ? errorMessage(task.getResult(), "Không thể tạo thanh toán")
-                            : "Chưa nhận được trạng thái thanh toán. Bấm kiểm tra lại.");
+                    status("Thanh toán không thành công.");
                     return;
                 }
                 try {
@@ -1109,8 +1104,10 @@ public final class TransferFragment extends Fragment {
             status("Bạn đã đóng thanh toán; số dư chưa thay đổi.");
             commitPending = true;
         } else if (result instanceof PaymentSheetResult.Failed) {
-            status("Thanh toán chưa hoàn tất. Số dư chưa thay đổi.");
-            commitPending = true;
+            commitPending = false;
+            forgetPending();
+            renderAuthorization();
+            status("Thanh toán không thành công.");
         }
     }
 
@@ -1131,7 +1128,7 @@ public final class TransferFragment extends Fragment {
                     commitPending = false;
                     forgetPending();
                     renderAuthorization();
-                    status("Thanh toán không thành công; số dư không thay đổi.");
+                    status("Thanh toán không thành công.");
                 } else {
                     commitPending = true;
                     status("Đang chờ xác nhận thanh toán. Số dư sẽ cập nhật sau khi hoàn tất.");
@@ -1200,6 +1197,7 @@ public final class TransferFragment extends Fragment {
             case "STRIPE_SANDBOX_ACCOUNT_REQUIRED": return "Tài khoản chưa sẵn sàng cho giao dịch này.";
             case "TOP_UP_REQUIRES_CARD": return "Vui lòng thanh toán bằng thẻ để nạp tiền.";
             case "CURRENCY_NOT_SUPPORTED": return "Luồng này chỉ hỗ trợ tài khoản VND.";
+            case "SETUP_REQUIRED": return "Thanh toán không thành công.";
             case "INVALID_OTP": return "Mã xác nhận sai. Vui lòng kiểm tra lại.";
             case "OTP_EXPIRED": return "Mã xác nhận đã hết hạn. Tạo mã mới để tiếp tục.";
             case "OTP_LOCKED": return "Đã nhập sai quá 5 lần, giao dịch bị khóa. Quay lại và tạo yêu cầu mới.";

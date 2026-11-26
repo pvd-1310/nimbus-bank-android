@@ -88,7 +88,7 @@
     <string name="transfer_confirm_title">Xác nhận chuyển tiền</string>
     <string name="fee_free">Phí dịch vụ: 0 ₫ (Miễn phí)</string>
     <string name="otp_title">Xác thực giao dịch</string>
-    <string name="otp_subtitle">Nhập mã OTP 6 chữ số gửi tới ••• 789</string>
+    <string name="otp_subtitle">Xác thực giao dịch an toàn</string>
     <string name="otp_resend">Gửi lại mã sau</string>
     <string name="transfer_success_title">Chuyển tiền thành công</string>
     <string name="back_to_home">Về trang chủ</string>

@@ -683,21 +683,9 @@ public final class TransactionExecutionFragment extends Fragment {
         if (binding == null || !isAdded() || intentId == null) return;
         if (otpDialog == null) {
             otpDialog = new OtpBottomSheetDialog(requireContext(), new OtpBottomSheetDialog.Listener() {
-                @Override
-                public void onSubmitOtp(@NonNull String code) {
-                    verifyOtp(code);
-                }
-
-                @Override
-                public void onResendRequested() {
-                    requestOtp();
-                }
-
-                @Override
-                public void onDismissRequested() {
-                    cancelOtpTimer();
-                    dismissOtpDialog();
-                }
+                @Override public void onSubmitOtp(@NonNull String code) { verifyOtp(code); }
+                @Override public void onResendRequested() { requestOtp(); }
+                @Override public void onDismissRequested() { cancelOtpTimer(); dismissOtpDialog(); }
             });
         }
         otpDialog.setStatusMessage(null);
@@ -717,16 +705,12 @@ public final class TransactionExecutionFragment extends Fragment {
             if (otpDialog != null) otpDialog.setBusy(false);
             if (!task.isSuccessful() || task.getResult() == null) {
                 startOtpCountdown();
-                if (otpDialog != null) {
-                    otpDialog.setStatusMessage("Chưa nhận được mã. Vui lòng chờ để tạo mã mới.");
-                }
+                showToast("Không thể xác thực giao dịch. Vui lòng thử lại.");
                 return;
             }
             BackendApiClient.Response response = task.getResult();
             if (!ok(response)) {
-                if (otpDialog != null) {
-                    otpDialog.setStatusMessage(errorMessage(response, "Không thể tạo mã xác nhận"));
-                }
+                showToast(errorMessage(response, "Không thể xác thực giao dịch."));
                 return;
             }
             try {
@@ -739,14 +723,10 @@ public final class TransactionExecutionFragment extends Fragment {
                 if (!code.matches("[0-9]{6}")) {
                     throw new IllegalStateException("Invalid OTP code");
                 }
-                if (otpDialog != null) {
-                    otpDialog.setDemoCode(code);
-                }
+                if (otpDialog != null) otpDialog.setDemoCode(code);
                 startOtpCountdown();
             } catch (Exception e) {
-                if (otpDialog != null) {
-                    otpDialog.setStatusMessage("Không thể đọc mã OTP. Vui lòng thử lại.");
-                }
+                showToast("Không thể xác thực giao dịch. Vui lòng thử lại.");
             }
         });
     }
@@ -792,6 +772,8 @@ public final class TransactionExecutionFragment extends Fragment {
             }
             BackendApiClient.Response response = task.getResult();
             if (ok(response)) {
+                cancelOtpTimer();
+                dismissOtpDialog();
                 rememberPending();
                 commitTransaction();
                 return;
@@ -800,8 +782,8 @@ public final class TransactionExecutionFragment extends Fragment {
             if ("OTP_USED".equals(errorCode(response))) {
                 dismissOtpDialog();
                 inspectIntent(false);
-            } else if (otpDialog != null) {
-                otpDialog.setStatusMessage(errorMessage(response, "Mã xác nhận không đúng"));
+            } else {
+                showToast(errorMessage(response, "Không thể xác thực giao dịch."));
             }
         });
     }
@@ -938,9 +920,11 @@ public final class TransactionExecutionFragment extends Fragment {
     private void commitTopupPayment() {
         if (paymentSheet == null || requestId == null || request.sourceAccountId == null) {
             setBusy(false);
-            if (otpDialog != null) otpDialog.setBusy(false);
             dismissOtpDialog();
-            showToast("Thanh toán bằng thẻ hiện chưa khả dụng. Vui lòng thử lại sau.");
+            commitPending = false;
+            forgetPending();
+            renderConfirmationStep();
+            showToast("Thanh toán không thành công.");
             return;
         }
         try {
@@ -954,11 +938,10 @@ public final class TransactionExecutionFragment extends Fragment {
                 if (otpDialog != null) otpDialog.setBusy(false);
                 if (!task.isSuccessful() || task.getResult() == null || !ok(task.getResult())) {
                     commitPending = false;
+                    forgetPending();
                     dismissOtpDialog();
                     renderConfirmationStep();
-                    showToast(task.isSuccessful() && task.getResult() != null
-                            ? errorMessage(task.getResult(), "Không thể tạo thanh toán")
-                            : "Chưa nhận được trạng thái thanh toán. Bấm kiểm tra lại.");
+                    showToast("Thanh toán không thành công.");
                     return;
                 }
                 try {
@@ -1011,7 +994,10 @@ public final class TransactionExecutionFragment extends Fragment {
                 if (otpDialog != null) otpDialog.setBusy(false);
                 if (!task.isSuccessful() || task.getResult() == null || task.getResult().statusCode >= 500) {
                     dismissOtpDialog();
-                    showPendingCard("Chưa có kết quả thanh toán. Bấm kiểm tra trạng thái.");
+                    commitPending = false;
+                    forgetPending();
+                    renderConfirmationStep();
+                    showToast("Thanh toán không thành công.");
                     return;
                 }
                 BackendApiClient.Response res = task.getResult();
@@ -1028,14 +1014,17 @@ public final class TransactionExecutionFragment extends Fragment {
                             forgetPending();
                             dismissOtpDialog();
                             renderConfirmationStep();
-                            showToast("Thanh toán chưa hoàn tất. Số dư chưa thay đổi.");
+                            showToast("Thanh toán không thành công.");
                             return;
                         }
                         String clientSecret = json.optString("clientSecret", "");
                         if (!json.isNull("clientSecret") && !clientSecret.isEmpty()) {
                             if (paymentSheet == null) {
                                 dismissOtpDialog();
-                                showToast("Thanh toán thẻ chưa được cấu hình.");
+                                commitPending = false;
+                                forgetPending();
+                                renderConfirmationStep();
+                                showToast("Thanh toán không thành công.");
                                 return;
                             }
                             dismissOtpDialog();
@@ -1047,7 +1036,7 @@ public final class TransactionExecutionFragment extends Fragment {
                     inspectIntent(false);
                     return;
                 }
-                handleCommitError(res, "Thanh toán bị từ chối");
+                handleCommitError(res, "Thanh toán không thành công.");
             });
         } catch (JSONException e) {
             setBusy(false);
@@ -1083,10 +1072,10 @@ public final class TransactionExecutionFragment extends Fragment {
         } else if (result instanceof PaymentSheetResult.Canceled) {
             showPendingCard("Bạn đã đóng màn thanh toán. Bấm kiểm tra hoặc thử lại.");
         } else if (result instanceof PaymentSheetResult.Failed) {
-            PaymentSheetResult.Failed failed = (PaymentSheetResult.Failed) result;
-            String msg = failed.getError().getLocalizedMessage();
-            showPendingCard("Thanh toán chưa hoàn tất"
-                    + (msg == null || msg.trim().isEmpty() ? ". Bấm để thử lại." : ": " + msg));
+            commitPending = false;
+            forgetPending();
+            renderConfirmationStep();
+            showToast("Thanh toán không thành công.");
         }
     }
 
@@ -1107,7 +1096,7 @@ public final class TransactionExecutionFragment extends Fragment {
                     commitPending = false;
                     forgetPending();
                     renderConfirmationStep();
-                    showToast("Thanh toán không thành công; số dư không thay đổi.");
+                    showToast("Thanh toán không thành công.");
                 } else {
                     commitPending = true;
                     showPendingCard("Đang chờ xác nhận thanh toán. Số dư sẽ cập nhật sau khi hoàn tất.");
@@ -1140,7 +1129,7 @@ public final class TransactionExecutionFragment extends Fragment {
                     commitPending = false;
                     forgetPending();
                     renderConfirmationStep();
-                    showToast("Thanh toán thất bại hoặc đã hủy.");
+                    showToast("Thanh toán không thành công.");
                 } else {
                     commitPending = true;
                     showPendingCard("Đang chờ xác nhận thanh toán…");
@@ -1181,7 +1170,9 @@ public final class TransactionExecutionFragment extends Fragment {
         }
         dismissOtpDialog();
         renderConfirmationStep();
-        showToast(errorMessage(response, fallback));
+        boolean cardPayment = request != null && (request.kind == TransactionFlowRequest.Kind.BILL_PAYMENT
+                || request.kind == TransactionFlowRequest.Kind.ORDER_PAYMENT);
+        showToast(cardPayment ? "Thanh toán không thành công." : errorMessage(response, fallback));
     }
 
     private void finishTransaction() {
@@ -1341,7 +1332,7 @@ public final class TransactionExecutionFragment extends Fragment {
             case "STRIPE_SANDBOX_ACCOUNT_REQUIRED": return "Tài khoản chưa sẵn sàng cho giao dịch này.";
             case "TOP_UP_REQUIRES_CARD": return "Vui lòng thanh toán bằng thẻ để nạp tiền.";
             case "CURRENCY_NOT_SUPPORTED": return "Luồng này chỉ hỗ trợ tài khoản VND.";
-            case "SETUP_REQUIRED": return "Thanh toán bằng thẻ hiện chưa khả dụng. Vui lòng thử lại sau.";
+            case "SETUP_REQUIRED": return "Thanh toán không thành công.";
             case "INVALID_OTP": return "Mã xác nhận không đúng. Vui lòng kiểm tra lại.";
             case "OTP_EXPIRED": return "Mã xác nhận đã hết hạn. Tạo mã mới để tiếp tục.";
             case "OTP_LOCKED": return "Đã nhập sai quá 5 lần, giao dịch bị khóa. Quay lại và tạo yêu cầu mới.";
