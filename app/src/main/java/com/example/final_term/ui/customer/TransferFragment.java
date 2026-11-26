@@ -249,6 +249,8 @@ public final class TransferFragment extends Fragment {
         if (intentId == null) {
             intentId = savedIntent;
             external = preferences.getBoolean(key + ":external", false);
+            if (requestId == null) requestId = preferences.getString(key + ":requestId", null);
+            if (confirmedSource == null) confirmedSource = preferences.getString(key + ":source", null);
             commitPending = true;
         }
     }
@@ -256,8 +258,12 @@ public final class TransferFragment extends Fragment {
     private boolean rememberPending() {
         if (customerUid == null || intentId == null) return false;
         String key = pendingKey();
-        storedPendingCommit = pendingPreferences().edit().putString(key, intentId)
-                .putBoolean(key + ":external", external).commit();
+        var editor = pendingPreferences().edit()
+                .putString(key, intentId)
+                .putBoolean(key + ":external", external);
+        if (requestId != null) editor.putString(key + ":requestId", requestId);
+        if (confirmedSource != null) editor.putString(key + ":source", confirmedSource);
+        storedPendingCommit = editor.commit();
         return storedPendingCommit;
     }
 
@@ -265,8 +271,14 @@ public final class TransferFragment extends Fragment {
         if (!storedPendingCommit || customerUid == null) return;
         String key = pendingKey();
         var preferences = pendingPreferences();
-        if (intentId != null && intentId.equals(preferences.getString(key, null)))
-            preferences.edit().remove(key).remove(key + ":external").apply();
+        if (intentId != null && intentId.equals(preferences.getString(key, null))) {
+            preferences.edit()
+                    .remove(key)
+                    .remove(key + ":external")
+                    .remove(key + ":requestId")
+                    .remove(key + ":source")
+                    .apply();
+        }
         storedPendingCommit = false;
     }
 
@@ -907,6 +919,12 @@ public final class TransferFragment extends Fragment {
                 authoritativeAmount = result.optLong("amountMinor", authoritativeAmount);
                 authoritativeFee = result.optLong("feeMinor", authoritativeFee);
                 authoritativeCurrency = result.optString("currency", authoritativeCurrency);
+                if (confirmedSource == null && !result.optString("sourceId").isEmpty()) {
+                    confirmedSource = result.optString("sourceId");
+                }
+                if (requestId == null && !result.optString("requestId").isEmpty()) {
+                    requestId = result.optString("requestId");
+                }
                 JSONObject tgt = result.optJSONObject("target");
                 if (tgt != null) authoritativeTarget = tgt.optString("id", authoritativeTarget);
 
@@ -1026,9 +1044,18 @@ public final class TransferFragment extends Fragment {
     }
 
     private void createTopupPayment() {
-        if (paymentSheet == null || requestId == null || confirmedSource == null) {
+        if (paymentSheet == null) {
             setBusy(false);
             status("Thanh toán bằng thẻ hiện chưa khả dụng. Vui lòng thử lại sau.");
+            return;
+        }
+        if (requestId == null || confirmedSource == null) {
+            setBusy(false);
+            commitPending = false;
+            forgetPending();
+            intentId = null;
+            showStep(Step.INPUT);
+            status("Phiên nạp tiền cũ không thể mở lại. Vui lòng tạo giao dịch mới.");
             return;
         }
         setBusy(true);
