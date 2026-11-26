@@ -195,7 +195,6 @@ public final class MobileTopupFragment extends Fragment {
             amountText.setTypeface(null, android.graphics.Typeface.BOLD);
             content.addView(amountText);
             TextView priceText = new TextView(requireContext());
-            priceText.setText("Thanh toán theo giá niêm yết");
             priceText.setTextSize(10);
             LinearLayout.LayoutParams priceParams = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);

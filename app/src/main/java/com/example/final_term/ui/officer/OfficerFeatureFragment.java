@@ -1,8 +1,8 @@
 package com.example.final_term.ui.officer;
 
-import android.app.AlertDialog;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.app.AlertDialog;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -474,11 +474,12 @@ public final class OfficerFeatureFragment extends Fragment {
                 JSONArray items = json.getJSONArray("items");
                 for (int i = 0; i < items.length(); i++) {
                     JSONObject item = items.getJSONObject(i);
-                    String timestamp = item.has("timestamp") ? new java.util.Date(item.getLong("timestamp")).toString()
-                            : "Chưa có thời gian";
-                    addAuditRow(item.optString("action"), item.optString("actorUid"),
-                            item.optString("resourceId"), timestamp + "\nMã yêu cầu: "
-                                    + item.optString("requestId", "—"), item.optJSONObject("beforeAfterSummary"));
+                    long millis = item.optLong("timestamp", 0L);
+                    String timestamp = millis == 0L ? "Chưa có thời gian" :
+                            java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM,
+                                    java.text.DateFormat.SHORT, java.util.Locale.forLanguageTag("vi-VN"))
+                                    .format(new java.util.Date(millis));
+                    addAuditRow(item, timestamp);
                 }
                 current.statusText.setText(items.length() == 0 && cursor == null
                         ? "Chưa có thay đổi phù hợp." : "Đã cập nhật lịch sử thay đổi.");
@@ -498,24 +499,56 @@ public final class OfficerFeatureFragment extends Fragment {
         });
     }
 
-    private void addAuditRow(String action, String actor, String target, String time, JSONObject summary) {
+    private void addAuditRow(JSONObject item, String time) {
+        String action = item.optString("action", "");
+        String titleText = auditTitle(action);
         View row = LayoutInflater.from(requireContext()).inflate(R.layout.item_transaction_row, binding.itemsContainer, false);
         TextView title = row.findViewById(R.id.title_text);
         TextView subtitle = row.findViewById(R.id.subtitle_text);
         TextView amount = row.findViewById(R.id.amount_text);
 
-        title.setText(action);
-        subtitle.setText("Actor: " + actor + " → Target: " + target + "\n" + time);
-        amount.setText("Lịch sử");
+        title.setText(titleText);
+        subtitle.setText(auditDescription(action) + "\n" + time);
+        amount.setText("Chi tiết");
         amount.setTextColor(ContextCompat.getColor(requireContext(), R.color.navy));
-
-        row.setOnClickListener(v -> new AlertDialog.Builder(requireContext())
-                .setTitle("Chi tiết thay đổi")
-                .setMessage("Thao tác: " + action + "\nNgười thực hiện: " + actor + "\nĐối tượng: " + target + "\nThời gian: " + time)
-                .setPositiveButton("Đóng", null)
-                .show());
+        Bundle args = new Bundle();
+        args.putBoolean("audit", true);
+        args.putString("title", titleText);
+        args.putString("status", "Đã ghi nhận");
+        args.putString("description", auditDescription(action));
+        args.putString("actor", "Cán bộ ngân hàng");
+        args.putString("target", action.contains("CUSTOMER") || action.contains("PROFILE")
+                ? "Hồ sơ khách hàng" : "Giao dịch ngân hàng");
+        args.putString("time", time);
+        args.putString("summary", item.optJSONObject("beforeAfterSummary") == null ? ""
+                : "Hệ thống đã lưu nội dung trước và sau khi thay đổi.");
+        row.setOnClickListener(v -> androidx.navigation.Navigation.findNavController(v).navigate(R.id.historyDetail, args));
 
         binding.itemsContainer.addView(row);
+    }
+
+    private String auditTitle(String action) {
+        switch (action) {
+            case "TRANSFER_COMMIT": return "Xử lý giao dịch chuyển tiền";
+            case "CUSTOMER_UPDATE": return "Cập nhật hồ sơ khách hàng";
+            case "DEMO_MOVEMENT_INTENT": return "Khởi tạo giao dịch mẫu";
+            case "DEMO_MOVEMENT_PENDING": return "Ghi nhận giao dịch đang xử lý";
+            case "DEMO_MOVEMENT_SETTLED": return "Hoàn tất giao dịch mẫu";
+            case "DEMO_MOVEMENT_FAILED": return "Giao dịch mẫu không thành công";
+            default: return "Thao tác nghiệp vụ";
+        }
+    }
+
+    private String auditDescription(String action) {
+        switch (action) {
+            case "TRANSFER_COMMIT": return "Cán bộ đã xử lý yêu cầu chuyển tiền.";
+            case "CUSTOMER_UPDATE": return "Thông tin hồ sơ khách hàng đã được cập nhật.";
+            case "DEMO_MOVEMENT_INTENT": return "Yêu cầu giao dịch mẫu đã được khởi tạo.";
+            case "DEMO_MOVEMENT_PENDING": return "Giao dịch mẫu đang được xử lý.";
+            case "DEMO_MOVEMENT_SETTLED": return "Giao dịch mẫu đã hoàn tất.";
+            case "DEMO_MOVEMENT_FAILED": return "Giao dịch mẫu không thể hoàn tất.";
+            default: return "Thao tác đã được ghi nhận trong lịch sử.";
+        }
     }
 
     private void renderRatePolicies(BackendApiClient api) {

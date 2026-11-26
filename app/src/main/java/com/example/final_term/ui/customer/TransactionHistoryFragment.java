@@ -274,13 +274,22 @@ public final class TransactionHistoryFragment extends Fragment {
             }
 
             rowBinding.getRoot().setOnClickListener(v -> {
-                new MaterialAlertDialogBuilder(requireContext())
-                        .setTitle("Chi tiết giao dịch")
-                        .setMessage(ReadSummaryFormatter.transactionTitle(tx) + "\n\n"
-                                + ReadSummaryFormatter.transactionDetail(tx)
-                                + "\nTài khoản: " + tx.accountId)
-                        .setPositiveButton("Đóng", null)
-                        .show();
+                Bundle args = new Bundle();
+                args.putString("title", ReadSummaryFormatter.transactionTitle(tx));
+                args.putString("type", transactionTypeLabel(tx.type));
+                args.putString("amount", (isIncoming ? "+" : "−") + amountFormatted);
+                args.putString("status", transactionStatusLabel(tx.status));
+                args.putString("time", tx.createdAt == null ? "Chưa có thông tin" :
+                        java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM,
+                                java.text.DateFormat.SHORT, java.util.Locale.forLanguageTag("vi-VN"))
+                                .format(tx.createdAt.toDate()));
+                args.putString("account", "Tài khoản ngân hàng");
+                args.putString("bank", "DEMO_EXTERNAL_TRANSFER".equals(tx.type)
+                        ? com.example.final_term.data.ExternalBankCatalog.nameForCode(tx.destinationBankCode) : "");
+                args.putString("balance", tx.balanceAfterMinor == null ? "" :
+                        ReadSummaryFormatter.formatCurrency(tx.balanceAfterMinor, tx.currency));
+                args.putString("note", "FAILED".equals(tx.status) ? ReadSummaryFormatter.transactionDetail(tx) : "");
+                Navigation.findNavController(v).navigate(R.id.historyDetail, args);
             });
 
             binding.content.addView(rowBinding.getRoot());
@@ -294,6 +303,30 @@ public final class TransactionHistoryFragment extends Fragment {
             empty.setPadding(0, 24, 0, 24);
             empty.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
             binding.content.addView(empty);
+        }
+    }
+
+    private String transactionTypeLabel(String type) {
+        switch (type) {
+            case "TOP_UP": case "STRIPE_CREDIT": case "DEMO_DEPOSIT": return "Nạp tiền";
+            case "STRIPE_DEBIT": case "DEMO_WITHDRAWAL": return "Rút tiền";
+            case "DEMO_EXTERNAL_TRANSFER": return "Chuyển liên ngân hàng";
+            case "INTERNAL_TRANSFER": return "Chuyển tiền trong ngân hàng";
+            case "TRANSFER_RECEIVED": return "Nhận tiền chuyển khoản";
+            case "BILL_PAYMENT": return "Thanh toán hóa đơn";
+            case "UTILITY_ORDER": return "Thanh toán dịch vụ";
+            case "CREDIT": return "Tiền vào";
+            case "DEBIT": return "Tiền ra";
+            default: return "Giao dịch ngân hàng";
+        }
+    }
+
+    private String transactionStatusLabel(String status) {
+        switch (status) {
+            case "SETTLED": case "DEMO_SETTLED": return "Thành công";
+            case "FAILED": return "Thất bại";
+            case "PENDING": case "DEMO_PENDING": return "Đang xử lý";
+            default: return "Đã ghi nhận";
         }
     }
 
