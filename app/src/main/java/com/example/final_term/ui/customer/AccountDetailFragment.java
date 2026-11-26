@@ -1,5 +1,8 @@
 package com.example.final_term.ui.customer;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Typeface;
 import android.os.Bundle;
@@ -8,6 +11,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -153,9 +157,8 @@ public class AccountDetailFragment extends Fragment {
                 binding.checkingLimitBox.setVisibility(View.VISIBLE);
                 binding.checkingLimitBar.setProgress(0.64f);
                 binding.genericDetails.setVisibility(View.VISIBLE);
-                binding.detailText.setText("Tên tài khoản: Tài khoản thanh toán Platinum\n"
-                        + "Số tài khoản: " + account.id + "\n"
-                        + "Chi nhánh: Quận 1, TP.HCM (minh họa)");
+                bindCheckingDetails("Tài khoản thanh toán Platinum", account.id, currentCurrency,
+                        "Hội sở chính", account.status);
                 var current = binding;
                 ((FinalTermApplication) requireActivity().getApplication()).getAppContainer().getBackendApiClient()
                         .get("/accounts/" + android.net.Uri.encode(account.id) + "/limits")
@@ -176,9 +179,7 @@ public class AccountDetailFragment extends Fragment {
                                 String displayName = lim.optString("displayName", "Tài khoản thanh toán");
                                 String branchName = lim.optString("branchName", "Hội sở chính");
                                 binding.heroMeta.setText(displayName);
-                                binding.detailText.setText("Tên tài khoản: " + displayName + "\n"
-                                        + "Số tài khoản: " + account.id + "\n"
-                                        + "Chi nhánh: " + branchName);
+                                bindCheckingDetails(displayName, account.id, currentCurrency, branchName, account.status);
                             } catch (Exception ignored) { }
                         });
             }
@@ -193,6 +194,26 @@ public class AccountDetailFragment extends Fragment {
         binding.statusText.setText(result.getStatus() == ReadModelResult.Status.LOADING
                 ? "ĐANG TẢI" : result.getStatus() == ReadModelResult.Status.ERROR
                 ? "LỖI KẾT NỐI" : "KHÔNG CÓ QUYỀN XEM");
+    }
+
+    private void bindCheckingDetails(String name, String accountId, String currency, String branch, String status) {
+        if (binding == null) return;
+        binding.checkingAccountName.setText(name);
+        binding.checkingAccountNumber.setText(accountId);
+        binding.checkingCurrency.setText(currency == null || currency.trim().isEmpty() ? "VND" : currency);
+        binding.checkingBranch.setText(branch);
+        boolean active = "ACTIVE".equalsIgnoreCase(status);
+        binding.checkingState.setText(active ? "Đang hoạt động" : "Tạm khóa");
+        binding.checkingState.setTextColor(androidx.core.content.ContextCompat.getColor(requireContext(),
+                active ? R.color.success : R.color.warning));
+        binding.checkingAccountNumberRow.setOnClickListener(v -> {
+            ClipboardManager clipboard =
+                    (ClipboardManager) requireContext().getSystemService(Context.CLIPBOARD_SERVICE);
+            if (clipboard != null) {
+                clipboard.setPrimaryClip(ClipData.newPlainText("account_number", accountId));
+                Toast.makeText(requireContext(), "Đã sao chép số tài khoản", Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
     private void loadTerms(String accountId, String type) {

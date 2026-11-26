@@ -231,6 +231,8 @@ public final class AccountListFragment extends Fragment {
             renderOfficerCustomers();
             return;
         }
+        boolean hideStatus = accountStatus == ReadModelResult.Status.SUCCESS;
+        binding.statusText.setVisibility(hideStatus ? View.GONE : View.VISIBLE);
         binding.statusText.setText(accountStatus == null ? "Đang tải dữ liệu…" : accountStatusMessage());
         binding.retryButton.setVisibility(accountStatus == ReadModelResult.Status.ERROR ? View.VISIBLE : View.GONE);
         binding.content.removeAllViews();
@@ -1362,10 +1364,10 @@ public final class AccountListFragment extends Fragment {
     private String accountStatusMessage() {
         switch (accountStatus) {
             case LOADING: return "Đang tải dữ liệu…";
-            case CACHED: return "Dữ liệu được lưu trong bộ nhớ đệm.";
+            case CACHED: return "Đang hiển thị dữ liệu gần nhất.";
             case ERROR: return accountMessage == null ? "Không thể tải dữ liệu." : accountMessage;
             case EMPTY: return "Chưa có tài khoản nào.";
-            default: return "Dữ liệu tài khoản đã đồng bộ.";
+            default: return "";
         }
     }
 

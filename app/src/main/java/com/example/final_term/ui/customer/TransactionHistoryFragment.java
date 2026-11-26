@@ -45,6 +45,7 @@ public final class TransactionHistoryFragment extends Fragment {
     private UserRole role;
     private List<ReadModels.TransactionSummary> rows;
     private String baseStatus = "";
+    private String selectedType = "ALL";
     private boolean thisMonth;
     private String nextCursor;
     private boolean pageLoading;
@@ -71,21 +72,23 @@ public final class TransactionHistoryFragment extends Fragment {
         binding.retryButton.setOnClickListener(v -> load());
         binding.loadMoreButton.setOnClickListener(v -> loadPage(nextCursor));
 
-        binding.filterIconBtn.setOnClickListener(v -> {
+        View.OnClickListener openTimeFilter = v -> {
             new ThemedDialogBuilder(requireContext())
                     .setTitle("Thời gian giao dịch")
                     .setSingleChoiceItems(new String[]{"Mọi thời điểm", "Tháng này"}, thisMonth ? 1 : 0,
                             (dialog, which) -> {
                                 thisMonth = which == 1;
                                 dialog.dismiss();
+                                updateSummaryMonthLabel();
                                 if (role == UserRole.CUSTOMER) load();
                                 else renderFiltered();
                             })
                     .show();
-        });
+        };
+        binding.filterIconBtn.setOnClickListener(openTimeFilter);
+        binding.summaryMonthLabel.setOnClickListener(openTimeFilter);
+        updateSummaryMonthLabel();
 
-        binding.typeFilter.setAdapter(new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_dropdown_item,
-                new String[]{"Tất cả giao dịch", "Tiền vào", "Tiền ra"}));
         binding.statusFilter.setAdapter(new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_dropdown_item,
                 new String[]{"Mọi trạng thái", "Hoàn tất", "Đang xử lý", "Thất bại"}));
 
@@ -100,17 +103,20 @@ public final class TransactionHistoryFragment extends Fragment {
             public void onItemSelected(AdapterView<?> p, View v, int pos, long id) { renderFiltered(); }
             public void onNothingSelected(AdapterView<?> p) { }
         };
-        binding.typeFilter.setOnItemSelectedListener(selected);
         binding.statusFilter.setOnItemSelectedListener(selected);
-        binding.chipHistAll.setOnClickListener(v -> binding.typeFilter.setSelection(0));
-        binding.chipHistIn.setOnClickListener(v -> binding.typeFilter.setSelection(1));
-        binding.chipHistOut.setOnClickListener(v -> binding.typeFilter.setSelection(2));
+        binding.chipHistAll.setOnClickListener(v -> selectType("ALL"));
+        binding.chipHistIn.setOnClickListener(v -> selectType("CREDIT"));
+        binding.chipHistOut.setOnClickListener(v -> selectType("DEBIT"));
+        updateTypeChips();
 
         application.getAppContainer().getAuthRepository().observeAuthState()
                 .observe(getViewLifecycleOwner(), authState -> {
                     if (authState != null && authState.getStatus() == AuthState.Status.SIGNED_IN && authState.getUser() != null) {
                         uid = authState.getUser().getUid();
                         role = authState.getUser().getRole();
+                        boolean customer = role == UserRole.CUSTOMER;
+                        binding.monthlySummaryCard.setVisibility(customer ? View.VISIBLE : View.GONE);
+                        binding.quickFilterScroll.setVisibility(customer ? View.VISIBLE : View.GONE);
                         load();
                     }
                 });
@@ -236,9 +242,8 @@ public final class TransactionHistoryFragment extends Fragment {
         if (rows == null) { binding.statusText.setText(baseStatus); return; }
 
         String query = binding.searchInput.getText() == null ? "" : binding.searchInput.getText().toString();
-        int typePosition = binding.typeFilter.getSelectedItemPosition();
         int statusPosition = binding.statusFilter.getSelectedItemPosition();
-        String type = typePosition == 1 ? "CREDIT" : typePosition == 2 ? "DEBIT" : "ALL";
+        String type = role == UserRole.CUSTOMER ? selectedType : "ALL";
         String status = statusPosition == 1 ? "COMPLETED" : statusPosition == 2 ? "PROCESSING" : statusPosition == 3 ? "FAILED" : "ALL";
         Long from = null, to = null;
         if (thisMonth) {
@@ -247,7 +252,8 @@ public final class TransactionHistoryFragment extends Fragment {
             to = java.time.YearMonth.now(zone).plusMonths(1).atDay(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1;
         }
         List<ReadModels.TransactionSummary> filtered = TransactionHistoryFilter.apply(rows, query, type, status, accountFilter, from, to);
-        binding.statusText.setText(baseStatus + (thisMonth ? " · Tháng này" : "") + " · " + filtered.size() + " kết quả đã tải");
+        String summary = (thisMonth ? "Tháng này · " : "") + filtered.size() + " giao dịch";
+        binding.statusText.setText(baseStatus.isEmpty() ? summary : baseStatus + " · " + summary);
 
         for (ReadModels.TransactionSummary tx : filtered) {
             ItemTransactionRowBinding rowBinding = ItemTransactionRowBinding.inflate(
@@ -255,9 +261,12 @@ public final class TransactionHistoryFragment extends Fragment {
 
             boolean isIncoming = tx.isIncoming();
             rowBinding.titleText.setText(ReadSummaryFormatter.transactionTitle(tx));
-            rowBinding.subtitleText.setText(tx.createdAt == null ? ReadSummaryFormatter.formatRelativeTime(0L, 0)
+            String timeText = tx.createdAt == null ? ReadSummaryFormatter.formatRelativeTime(0L, 0)
                     : java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT,
-                    java.util.Locale.forLanguageTag("vi-VN")).format(tx.createdAt.toDate()));
+                    java.util.Locale.forLanguageTag("vi-VN")).format(tx.createdAt.toDate());
+            rowBinding.subtitleText.setText(role == UserRole.OFFICER && tx.accountId != null && !tx.accountId.isEmpty()
+                    ? "TK: " + tx.accountId + " · " + timeText
+                    : timeText);
             rowBinding.transactionIcon.setVisibility(View.GONE);
             rowBinding.avatarInitials.setVisibility(View.VISIBLE);
             rowBinding.avatarInitials.setText(ReadSummaryFormatter.initialsForTransaction(tx));
@@ -306,6 +315,32 @@ public final class TransactionHistoryFragment extends Fragment {
         }
     }
 
+    private void selectType(String type) {
+        selectedType = type;
+        updateTypeChips();
+        renderFiltered();
+    }
+
+    private void updateTypeChips() {
+        if (binding == null) return;
+        styleTypeChip(binding.chipHistAll, "ALL".equals(selectedType));
+        styleTypeChip(binding.chipHistIn, "CREDIT".equals(selectedType));
+        styleTypeChip(binding.chipHistOut, "DEBIT".equals(selectedType));
+    }
+
+    private void styleTypeChip(TextView chip, boolean active) {
+        chip.setBackgroundResource(active ? R.drawable.navy_button_pill : R.drawable.glass_pill_bg);
+        chip.setTextColor(ContextCompat.getColor(requireContext(), active ? R.color.white : R.color.ink));
+        chip.setTypeface(null, active ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+    }
+
+    private void updateSummaryMonthLabel() {
+        if (binding == null) return;
+        java.time.YearMonth now = java.time.YearMonth.now();
+        String monthText = "Tháng " + now.getMonthValue() + ", " + now.getYear();
+        binding.summaryMonthLabel.setText((thisMonth ? monthText : "Tất cả thời gian") + " ⌄");
+    }
+
     private String transactionTypeLabel(String type) {
         switch (type) {
             case "TOP_UP": case "STRIPE_CREDIT": case "DEMO_DEPOSIT": return "Nạp tiền";
@@ -333,10 +368,10 @@ public final class TransactionHistoryFragment extends Fragment {
     private String statusMessage(ReadModelResult<?> result) {
         switch (result.getStatus()) {
             case LOADING: return "Đang tải lịch sử…";
-            case CACHED: return "Dữ liệu có thể chưa cập nhật.";
+            case CACHED: return "Đang hiển thị dữ liệu gần nhất.";
             case ERROR: return "Chưa thể tải lịch sử giao dịch. Vuốt xuống để thử lại.";
             case EMPTY: return "Không có giao dịch.";
-            default: return "Lịch sử đã đồng bộ.";
+            default: return "";
         }
     }
 

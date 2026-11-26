@@ -83,7 +83,7 @@ public final class FirestoreReadRepository {
                     List<T> mapped = mapper.map(snapshot);
                     if (snapshot.getMetadata().isFromCache()) {
                         postValue(ReadModelResult.cached(mapped,
-                                "Dữ liệu đang ở chế độ đọc offline hoặc chưa đồng bộ mới nhất."));
+                                "Đang hiển thị dữ liệu gần nhất."));
                     } else {
                         postValue(ReadModelResult.success(mapped));
                     }

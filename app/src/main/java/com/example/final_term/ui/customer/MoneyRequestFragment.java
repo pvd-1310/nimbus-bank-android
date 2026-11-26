@@ -139,7 +139,7 @@ public final class MoneyRequestFragment extends Fragment {
         if (newIndex >= 0) binding.accountInput.setSelection(newIndex);
         if ("Đang tải tài khoản…".contentEquals(binding.statusText.getText())) {
             binding.statusText.setText(accountIds.isEmpty()
-                    ? "Cần tài khoản thanh toán đã đồng bộ."
+                    ? "Chưa có tài khoản thanh toán khả dụng."
                     : "Nạp tiền được ghi có sau khi thanh toán hoàn tất.");
         }
         updateControls();
