@@ -92,10 +92,6 @@ public final class LoginFragment extends Fragment {
         }
         binding.signInButton.setOnClickListener(v -> signIn());
         binding.resetPasswordButton.setOnClickListener(v -> openResetPassword());
-        binding.biometricButton.setOnClickListener(v -> Toast.makeText(
-                requireContext(),
-                "Xác thực sinh trắc học khả dụng sau khi bạn đăng nhập và bật trong Hồ sơ.",
-                Toast.LENGTH_LONG).show());
     }
 
     private void signInWithFace(byte[] image) {
