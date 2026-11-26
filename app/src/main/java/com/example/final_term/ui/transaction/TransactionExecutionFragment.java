@@ -325,32 +325,29 @@ public final class TransactionExecutionFragment extends Fragment {
                 rowBinding.rowLeadingIcon.setVisibility(View.GONE);
             }
 
-            rowBinding.rowValue.setTypeface(row.monospace ? Typeface.MONOSPACE : Typeface.DEFAULT);
+            rowBinding.rowValue.setBackground(null);
+            rowBinding.rowValue.setPadding(0, 0, 0, 0);
+            if (row.monospace) {
+                rowBinding.rowValue.setTypeface(Typeface.MONOSPACE);
+            } else if (row.methodPill || ("Trạng thái".equals(row.label) && "Hoàn tất".equals(row.value))) {
+                rowBinding.rowValue.setTypeface(Typeface.DEFAULT_BOLD);
+            } else {
+                rowBinding.rowValue.setTypeface(Typeface.DEFAULT);
+            }
+
             if (row.methodPill) {
-                rowBinding.rowValue.setText("⚡ " + row.value);
-                rowBinding.rowValue.setBackgroundResource(R.drawable.bg_method_pill);
-                rowBinding.rowValue.setPadding(dp(10), dp(4), dp(10), dp(4));
-                rowBinding.rowValue.setTextColor(ContextCompat.getColor(requireContext(), R.color.navy_deep));
-                rowBinding.rowStatusDot.setVisibility(View.GONE);
+                rowBinding.rowValue.setText(row.value);
+                rowBinding.rowValue.setTextColor(ContextCompat.getColor(requireContext(), R.color.navy));
                 rowBinding.rowVerifiedBadge.setVisibility(View.GONE);
             } else if (isReceipt && "Phí dịch vụ".equals(row.label) && row.value.contains("Miễn phí")) {
-                rowBinding.rowValue.setText("0 ₫  •  Miễn phí");
-                rowBinding.rowValue.setBackgroundResource(R.drawable.badge_status_success);
-                rowBinding.rowValue.setPadding(dp(10), dp(4), dp(10), dp(4));
+                rowBinding.rowValue.setText("0 ₫ (Miễn phí)");
                 rowBinding.rowValue.setTextColor(ContextCompat.getColor(requireContext(), R.color.success));
-                rowBinding.rowStatusDot.setVisibility(View.GONE);
                 rowBinding.rowVerifiedBadge.setVisibility(View.GONE);
             } else if ("Trạng thái".equals(row.label) && "Hoàn tất".equals(row.value)) {
-                rowBinding.rowValue.setBackgroundResource(R.drawable.badge_status_success);
-                rowBinding.rowValue.setPadding(dp(10), dp(4), dp(10), dp(4));
                 rowBinding.rowValue.setTextColor(ContextCompat.getColor(requireContext(), R.color.success));
-                rowBinding.rowStatusDot.setVisibility(View.VISIBLE);
                 rowBinding.rowVerifiedBadge.setVisibility(View.GONE);
             } else {
-                rowBinding.rowValue.setBackground(null);
-                rowBinding.rowValue.setPadding(0, 0, 0, 0);
                 rowBinding.rowValue.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
-                rowBinding.rowStatusDot.setVisibility(View.GONE);
                 rowBinding.rowVerifiedBadge.setVisibility(!isReceipt && row.verifiedBadge ? View.VISIBLE : View.GONE);
             }
 
