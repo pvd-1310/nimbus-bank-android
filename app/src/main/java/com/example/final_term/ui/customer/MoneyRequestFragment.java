@@ -11,6 +11,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.LiveData;
+import androidx.navigation.Navigation;
 
 import com.example.final_term.R;
 import com.example.final_term.auth.AuthState;
@@ -20,6 +21,7 @@ import com.example.final_term.core.FinalTermApplication;
 import com.example.final_term.data.ReadModelResult;
 import com.example.final_term.data.ReadModels.AccountSummary;
 import com.example.final_term.databinding.FragmentMoneyRequestBinding;
+import com.example.final_term.ui.transaction.TransactionFlowRequest;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -75,24 +77,23 @@ public final class MoneyRequestFragment extends Fragment {
         binding.demoSettlementButton.setVisibility(View.GONE);
         updateOperationUi();
         binding.submitButton.setOnClickListener(v -> {
-            Bundle args = new Bundle();
             boolean withdrawal = binding.operationInput.getSelectedItemPosition() == 1;
-            args.putString("demoCashOperation", withdrawal ? WITHDRAWAL : DEPOSIT);
-            if (withdrawal) {
-                int index = binding.accountInput.getSelectedItemPosition();
-                if (index < 0 || index >= accountIds.size()) {
-                    binding.statusText.setText("Chọn tài khoản thanh toán khả dụng.");
-                    return;
-                }
-                String amount = binding.amountInput.getText().toString().trim();
-                if (!Phase2Presentation.validRequestAmount(amount)) {
-                    binding.amountInput.setError("Nhập số tiền VND nguyên hợp lệ, lớn hơn 0.");
-                    return;
-                }
-                args.putString("accountId", accountIds.get(index));
-                args.putString("amountMinor", amount);
+            int index = binding.accountInput.getSelectedItemPosition();
+            if (index < 0 || index >= accountIds.size()) {
+                binding.statusText.setText("Chọn tài khoản thanh toán khả dụng.");
+                return;
             }
-            androidx.navigation.Navigation.findNavController(v).navigate(R.id.transfer, args);
+            String amount = binding.amountInput.getText().toString().trim();
+            if (!Phase2Presentation.validRequestAmount(amount)) {
+                binding.amountInput.setError("Nhập số tiền VND nguyên hợp lệ, lớn hơn 0.");
+                return;
+            }
+            long amountMinor = Long.parseLong(amount);
+            String accountId = accountIds.get(index);
+            TransactionFlowRequest flowRequest = withdrawal
+                    ? TransactionFlowRequest.withdrawal(accountId, amountMinor, "VND")
+                    : TransactionFlowRequest.deposit(accountId, amountMinor, "VND");
+            Navigation.findNavController(v).navigate(R.id.transactionFlow, flowRequest.toBundle());
         });
         binding.historyButton.setOnClickListener(v ->
                 androidx.navigation.Navigation.findNavController(v).navigate(R.id.transactionHistory));
