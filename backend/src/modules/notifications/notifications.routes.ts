@@ -4,6 +4,9 @@ export function registerNotificationsRoutes(route: Route, d: AppDependencies) {
   route("get", "/notifications", async (a, r) =>
     page(await d.bank.listOwned(a, "notifications", r.query), r.query),
   );
+  route("post", "/notifications/read-all", (a) =>
+    d.bank.notifications.markAllRead(a),
+  );
   route("post", "/notifications/:id/read", (a, r) =>
     d.bank.notifications.markRead(a, String(r.params.id)),
   );

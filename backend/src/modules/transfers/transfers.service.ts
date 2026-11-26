@@ -2,6 +2,7 @@ import type { Banking } from "../../core/banking.js";
 import type { Doc, Tx } from "../../core/store.js";
 import { digest } from "../../shared/crypto.js";
 import { check, Fault, key, minor } from "../../shared/errors.js";
+import { formatVnd } from "../notifications/notifications.service.js";
 import type { Actor } from "../auth/auth.types.js";
 import { intentDigest } from "../security/intent.js";
 
@@ -250,15 +251,28 @@ export class TransferService {
         ...(typeof senderUser?.fullName === "string" ? { counterpartyName: senderUser.fullName } : {}),
         committedAt: this.bank.now(),
       });
-      for (const uid of new Set([a.uid, dst.ownerUid]))
-        t.set("notifications/" + digest([id, uid]), {
-          ownerUid: uid,
-          title: "Giao dịch đã hoàn tất",
-          message: "Đã ghi nhận giao dịch nội bộ.",
-          body: "Đã ghi nhận giao dịch nội bộ.",
-          read: false,
-          createdAt: this.bank.now(),
-        });
+      const senderNotifEnabled = await this.bank.notifications.isTransactionEnabled(t, a.uid);
+      const recipientNotifEnabled = dst.ownerUid === a.uid
+        ? senderNotifEnabled
+        : await this.bank.notifications.isTransactionEnabled(t, dst.ownerUid);
+      this.bank.notifications.emit(t, {
+        id: digest([id, a.uid]),
+        ownerUid: a.uid,
+        type: "TRANSACTION",
+        title: "Chuyển tiền thành công",
+        body: `-${formatVnd(i.amountMinor)} tới ${recipientUser?.fullName ?? i.destinationAccountId}. Số dư mới: ${formatVnd(src.bookedMinor - i.amountMinor)}`,
+        refId: id,
+      }, senderNotifEnabled);
+      if (dst.ownerUid !== a.uid) {
+        this.bank.notifications.emit(t, {
+          id: digest([id, dst.ownerUid]),
+          ownerUid: dst.ownerUid,
+          type: "TRANSACTION",
+          title: "Nhận tiền thành công",
+          body: `+${formatVnd(i.amountMinor)} từ ${senderUser?.fullName ?? i.sourceAccountId}. Số dư mới: ${formatVnd(dst.bookedMinor + i.amountMinor)}`,
+          refId: id,
+        }, recipientNotifEnabled);
+      }
       this.bank.audit(t, a, "TRANSFER_COMMIT", id, i.requestId, {
         before: {
           sourceBookedMinor: src.bookedMinor,

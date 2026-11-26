@@ -110,15 +110,23 @@ public final class ReadModels {
 
     public static final class NotificationSummary {
         public final String id;
+        public final String type;
         public final String title;
         public final String body;
+        public final String refId;
         public final boolean read;
         public final Timestamp createdAt;
 
         public NotificationSummary(@NonNull String id, String title, String body, boolean read, Timestamp createdAt) {
+            this(id, "SYSTEM", title, body, null, read, createdAt);
+        }
+
+        public NotificationSummary(@NonNull String id, String type, String title, String body, String refId, boolean read, Timestamp createdAt) {
             this.id = id;
+            this.type = type == null || type.isEmpty() ? "SYSTEM" : type;
             this.title = title == null ? "Thông báo" : title;
             this.body = body == null ? "" : body;
+            this.refId = refId;
             this.read = read;
             this.createdAt = createdAt;
         }

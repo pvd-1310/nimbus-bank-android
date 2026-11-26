@@ -232,6 +232,14 @@ export function registerPasswordResetRoutes(app: Express, d: AppDependencies) {
           challengeId,
           String(res.locals.requestId ?? ""),
         );
+        d.bank.notifications.emit(t, {
+          id: `pwd_reset_${challengeId}`,
+          ownerUid: uid,
+          type: "SECURITY",
+          title: "Mật khẩu vừa được thay đổi",
+          body: "Mật khẩu tài khoản Nimbus Bank của bạn vừa được đặt lại. Nếu không phải bạn, hãy liên hệ hỗ trợ ngay.",
+          refId: challengeId,
+        });
       });
 
       res.json({ updated: true });

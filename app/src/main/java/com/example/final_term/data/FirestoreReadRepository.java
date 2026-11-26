@@ -138,9 +138,18 @@ public final class FirestoreReadRepository {
         List<ReadModels.NotificationSummary> result = new ArrayList<>();
         for (DocumentSnapshot document : snapshot.getDocuments()) {
             Boolean read = document.getBoolean("read");
-            result.add(new ReadModels.NotificationSummary(document.getId(),
-                    document.getString("title"), document.getString("body"),
-                    Boolean.TRUE.equals(read), readTimestamp(document.get("createdAt"), null)));
+            String body = document.getString("body");
+            if (body == null) {
+                body = document.getString("message");
+            }
+            result.add(new ReadModels.NotificationSummary(
+                    document.getId(),
+                    document.getString("type"),
+                    document.getString("title"),
+                    body,
+                    document.getString("refId"),
+                    Boolean.TRUE.equals(read),
+                    readTimestamp(document.get("createdAt"), null)));
         }
         return result;
     }

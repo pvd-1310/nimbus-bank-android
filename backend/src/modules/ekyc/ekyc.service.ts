@@ -192,6 +192,13 @@ export class Evidence {
           },
           after: { templateStatus: "REVOKED", ekycStatus, objectsQueued },
         });
+        this.bank.notifications.emit(t, {
+          ownerUid: a.uid,
+          type: "SECURITY",
+          title: "Dữ liệu khuôn mặt đã bị thu hồi",
+          body: "Mẫu khuôn mặt eKYC của bạn đã được xóa. Vui lòng xác thực lại khi cần.",
+          refId: a.uid,
+        });
       }
       return {
         status: "REVOKED",
@@ -365,6 +372,14 @@ export class Evidence {
         this.bank.audit(t, a, "EKYC_AUTO_REVIEW", id, "", {
           before: { reviewStatus: "REVIEWING" }, after: { reviewStatus: "RESUBMIT_REQUIRED", mode: record.mode, reason: failure },
         });
+        this.bank.notifications.emit(t, {
+          id: `ekyc_${id}_resubmit`,
+          ownerUid: a.uid,
+          type: "EKYC",
+          title: "Hồ sơ eKYC cần chụp lại",
+          body: `Hồ sơ xác thực chưa đạt (${failure}). Vui lòng thực hiện lại eKYC.`,
+          refId: id,
+        });
         return response(next);
       }
       const user = await t.get(`users/${a.uid}`);
@@ -390,6 +405,14 @@ export class Evidence {
       t.set(requestPath(id), next);
       this.bank.audit(t, a, "EKYC_AUTO_REVIEW", id, "", {
         before: { reviewStatus: "REVIEWING" }, after: { reviewStatus: "VERIFIED", mode: record.mode, templateEnrolled: true },
+      });
+      this.bank.notifications.emit(t, {
+        id: `ekyc_${id}_verified`,
+        ownerUid: a.uid,
+        type: "EKYC",
+        title: "Xác thực eKYC thành công",
+        body: "Hồ sơ định danh và khuôn mặt của bạn đã được kích hoạt.",
+        refId: id,
       });
       return response(next);
     });

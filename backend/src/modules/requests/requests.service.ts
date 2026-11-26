@@ -153,6 +153,7 @@ export class RequestService {
       const usagePath = "dailyUsage/" + digest([account.id, dayUtc]);
       const usage = delta < 0 ? await t.get(usagePath) : undefined;
       const policy = delta < 0 ? await t.get("checkingDetails/" + account.id) : undefined;
+      const notifEnabled = await this.bank.notifications.isTransactionEnabled(t, a.uid);
       const amountMinor = (usage?.amountMinor ?? 0) + Math.max(0, -delta);
       const failureCode =
         account.type !== "CHECKING" || account.status !== "ACTIVE" ||
@@ -168,7 +169,17 @@ export class RequestService {
       await this.updateRequest(t, result, failureCode ? "FAILED" : "DEMO_SETTLED");
       t.set("transactionIntents/" + id, result);
       this.bank.audit(t, a, failureCode ? "DEMO_MOVEMENT_REJECTED" : "DEMO_MOVEMENT_SETTLED", id, intent.requestId);
-      if (failureCode) return this.demoResult(result);
+      if (failureCode) {
+        this.bank.notifications.emit(t, {
+          id: digest(["demo_req", id, "failed"]),
+          ownerUid: a.uid,
+          type: "TRANSACTION",
+          title: intent.movement === "EXTERNAL_TRANSFER" ? "Chuyển khoản ngoài thất bại" : "Yêu cầu rút tiền thất bại",
+          body: `Giao dịch không thành công (${failureCode}).`,
+          refId: id,
+        }, notifEnabled);
+        return this.demoResult(result);
+      }
 
       if (delta < 0) t.set(usagePath, { accountId: account.id, amountMinor, dayUtc });
       t.set("accounts/" + account.id, {
@@ -190,6 +201,22 @@ export class RequestService {
         amountMinor: intent.amountMinor, currency: intent.currency, status: "DEMO_SETTLED",
         providerReference: intent.providerReference, balanceAfterMinor: bookedMinor, committedAt: now, demo: true,
       });
+      const isExternal = intent.movement === "EXTERNAL_TRANSFER";
+      const isDeposit = intent.movement === "DEPOSIT";
+      this.bank.notifications.emit(t, {
+        id: digest(["demo_req", id, "settled"]),
+        ownerUid: a.uid,
+        type: "TRANSACTION",
+        title: isExternal
+          ? "Chuyển khoản ngoài thành công"
+          : isDeposit
+            ? "Nạp tiền thành công"
+            : "Rút tiền thành công",
+        body: isExternal
+          ? `-${intent.amountMinor.toLocaleString("vi-VN")} ₫ tới ${intent.destinationBankName ?? intent.bankCode ?? "ngân hàng ngoài"}. Số dư mới: ${bookedMinor.toLocaleString("vi-VN")} ₫`
+          : `${isDeposit ? "+" : "-"}${intent.amountMinor.toLocaleString("vi-VN")} ₫. Số dư mới: ${bookedMinor.toLocaleString("vi-VN")} ₫`,
+        refId: id,
+      }, notifEnabled);
       return this.demoResult(result);
     });
   }

@@ -412,6 +412,7 @@ export class Payments {
         if (status === "CANCELLED" && lock?.paymentId === id)
           t.set("billPaymentLocks/" + p.billId, { ...lock, released: true });
         if (success && topup) {
+          const notifEnabled = await this.bank.notifications.isTransactionEnabled(t, p.ownerUid);
           const account = await t.get("accounts/" + p.accountId);
           check(account && account.ownerUid === p.ownerUid && account.type === "CHECKING" && account.currency === "VND", "TOP_UP_ACCOUNT_MISMATCH", 409);
           const availableMinor = account.availableMinor + p.amountMinor;
@@ -422,7 +423,16 @@ export class Payments {
           t.set("ledgerEntries/" + id + "_clearing", { transactionId: id, accountId: "STRIPE_CLEARING", signedMinor: -p.amountMinor, amountMinor: p.amountMinor, direction: "DEBIT", currency: "VND", postedAt: settledAt });
           t.set("transactions/" + id, { ownerUid: p.ownerUid, actorUid: p.ownerUid, requestId: intent?.requestId ?? id, type: "TOP_UP", accountId: p.accountId, sourceAccountId: p.accountId, amountMinor: p.amountMinor, currency: "VND", status: "SETTLED", balanceAfterMinor: bookedMinor, paymentId: id, committedAt: settledAt });
           this.bank.audit(t, { uid: p.ownerUid, role: "CUSTOMER", permissions: [] }, "TOP_UP_SETTLED", id, intent?.requestId);
+          this.bank.notifications.emit(t, {
+            id: `pay_${id}`,
+            ownerUid: p.ownerUid,
+            type: "TRANSACTION",
+            title: "Nạp tiền thành công",
+            body: `+${p.amountMinor.toLocaleString("vi-VN")} ₫ đã được cộng vào tài khoản. Số dư mới: ${bookedMinor.toLocaleString("vi-VN")} ₫`,
+            refId: id,
+          }, notifEnabled);
         } else if (success) {
+          const notifEnabled = await this.bank.notifications.isTransactionEnabled(t, p.ownerUid);
           await recordBillPayment(t, id, p, intent, settledAt);
           t.set("bills/" + p.billId, {
             ...bill,
@@ -443,6 +453,14 @@ export class Payments {
             "STRIPE_SETTLED",
             id,
           );
+          this.bank.notifications.emit(t, {
+            id: `pay_${id}`,
+            ownerUid: p.ownerUid,
+            type: "TRANSACTION",
+            title: "Thanh toán hóa đơn thành công",
+            body: `-${p.amountMinor.toLocaleString("vi-VN")} ₫ cho hóa đơn ${bill?.provider ?? p.billId}.`,
+            refId: id,
+          }, notifEnabled);
         }
       }
       t.set("webhookEvents/" + event.id, {

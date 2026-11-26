@@ -113,7 +113,8 @@ public final class ProfileFragment extends Fragment {
                             binding.profilePersonalInfoTitle.setText("Thông tin cá nhân");
                             binding.logoutButton.setText("Đăng xuất");
                             binding.itemPersonalInfo.setOnClickListener(v -> openProfileEditor());
-                            binding.itemNotifications.setOnClickListener(v -> openProfileEditor());
+                            binding.itemNotifications.setOnClickListener(v ->
+                                    NavHostFragment.findNavController(this).navigate(R.id.notifications));
                             binding.itemLanguage.setOnClickListener(v -> openProfileEditor());
                             binding.ekycBadge.setOnClickListener(openEkycListener);
                             fetchEkycStatus();
