@@ -48,12 +48,21 @@ export function registerOfficerRoutes(route: Route, d: AppDependencies) {
         .object({
           requestId: id,
           email: z.email(),
+          contactEmail: z.email().max(254).optional(),
           fullName: z.string().min(2).max(120),
           phoneNumber: z.string().regex(/^(?:0[0-9]{9}|\+84[0-9]{9})$/)
             .transform((phone) => phone.startsWith("0") ? "+84" + phone.slice(1) : phone),
           nationalIdNumber: z.string().regex(/^\d{12}$/),
           customerNo: z.string().trim().min(1).max(60).optional(),
+          dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+          gender: z.enum(["Nam", "Nữ", "Khác"]).optional(),
+          nationality: z.string().trim().min(1).max(80).optional(),
+          identityDocumentExpiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
           address: z.string().trim().min(1).max(300).optional(),
+          preferences: z.object({
+            notificationsEnabled: z.boolean().optional(),
+            language: z.enum(["vi", "en"]).optional(),
+          }).strict().optional(),
         })
         .strict()
         .parse(r.body),
@@ -79,6 +88,14 @@ export function registerOfficerRoutes(route: Route, d: AppDependencies) {
           contactEmail: z.email().max(254).optional(),
           contactPhone: z.string().trim().regex(/^\+[1-9][0-9]{7,14}$/).optional(),
           address: z.string().trim().min(1).max(300).optional(),
+          dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+          gender: z.enum(["Nam", "Nữ", "Khác"]).optional(),
+          nationality: z.string().trim().min(1).max(80).optional(),
+          identityDocumentExpiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+          preferences: z.object({
+            notificationsEnabled: z.boolean().optional(),
+            language: z.enum(["vi", "en"]).optional(),
+          }).strict().optional(),
           reason: z.string().trim().min(3).max(500),
         })
         .refine((value) => Object.keys(value).some((field) => field !== "reason"), "NO_FIELDS_TO_UPDATE")
@@ -93,14 +110,34 @@ export function registerOfficerRoutes(route: Route, d: AppDependencies) {
       const customer = await d.bank.linkedProfile(t, "customers", uid);
       check(customer, "CUSTOMER_PROFILE_NOT_FOUND", 404);
       const userPatch: Doc = {}, customerPatch: Doc = {}, before: Doc = {}, after: Doc = {};
-      for (const field of ["fullName", "contactEmail", "contactPhone", "address"] as const) {
+      const customerFields = new Set(["address", "dateOfBirth", "gender", "nationality", "identityDocumentExpiry"]);
+      for (const field of [
+        "fullName",
+        "contactEmail",
+        "contactPhone",
+        "address",
+        "dateOfBirth",
+        "gender",
+        "nationality",
+        "identityDocumentExpiry",
+        "preferences",
+      ] as const) {
         const value = x[field];
         if (value === undefined) continue;
-        const source = field === "address" ? customer : u;
-        before[field] = source[field] ?? null;
-        after[field] = value;
-        if (field === "address") customerPatch.address = value;
-        else userPatch[field] = value;
+        const isCustomerField = customerFields.has(field);
+        const source = isCustomerField ? customer : u;
+        if (field === "preferences") {
+          const prevPrefs = (u.preferences && typeof u.preferences === "object") ? u.preferences as Doc : {};
+          const nextPrefs = { ...prevPrefs, ...(value as Doc) };
+          before[field] = prevPrefs;
+          after[field] = nextPrefs;
+          userPatch.preferences = nextPrefs;
+        } else {
+          before[field] = source[field] ?? null;
+          after[field] = value;
+          if (isCustomerField) customerPatch[field] = value;
+          else userPatch[field] = value;
+        }
       }
       if (userPatch.contactPhone) {
         const nextPhone = String(userPatch.contactPhone);

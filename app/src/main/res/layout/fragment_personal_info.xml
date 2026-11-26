@@ -41,17 +41,21 @@
             android:layout_height="48dp" />
     </LinearLayout>
 
-    <ScrollView
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:clipToPadding="false"
-        android:fillViewport="true"
-        android:paddingStart="20dp"
-        android:paddingTop="8dp"
-        android:paddingEnd="20dp"
-        android:paddingBottom="24dp"
-        android:scrollbars="none">
+        android:layout_weight="1">
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:fillViewport="true"
+            android:paddingStart="20dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="20dp"
+            android:paddingBottom="116dp"
+            android:scrollbars="none">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -561,26 +565,24 @@
         </LinearLayout>
     </ScrollView>
 
-    <!-- Sticky Bottom Action Bar -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@color/glass_sheet"
-        android:orientation="vertical">
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/glass_border" />
-
+        <!-- Floating Bottom Action Layer -->
         <LinearLayout
+            android:id="@+id/floating_action_bar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:layout_marginBottom="16dp"
+            android:background="@drawable/bg_floating_action_bar"
+            android:clickable="true"
+            android:elevation="18dp"
+            android:focusable="true"
             android:orientation="vertical"
-            android:paddingStart="20dp"
+            android:paddingStart="14dp"
             android:paddingTop="12dp"
-            android:paddingEnd="20dp"
-            android:paddingBottom="16dp">
+            android:paddingEnd="14dp"
+            android:paddingBottom="12dp">
 
             <ProgressBar
                 android:id="@+id/saving_progress"
@@ -613,11 +615,15 @@
                     android:layout_height="50dp"
                     android:layout_marginEnd="6dp"
                     android:layout_weight="1"
+                    android:fontFamily="sans-serif-medium"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
                     android:text="Hủy"
                     android:textColor="@color/navy"
                     app:backgroundTint="@color/glass_card"
-                    app:cornerRadius="16dp"
-                    app:strokeColor="@color/glass_border" />
+                    app:cornerRadius="18dp"
+                    app:strokeColor="@color/glass_border"
+                    app:strokeWidth="1dp" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/save_button"
@@ -625,12 +631,15 @@
                     android:layout_height="50dp"
                     android:layout_marginStart="6dp"
                     android:layout_weight="1"
+                    android:fontFamily="sans-serif-medium"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
                     android:text="Lưu thay đổi"
                     android:textColor="@color/white"
                     android:textStyle="bold"
                     app:backgroundTint="@color/navy_deep"
-                    app:cornerRadius="16dp" />
+                    app:cornerRadius="18dp" />
             </LinearLayout>
         </LinearLayout>
-    </LinearLayout>
+    </FrameLayout>
 </LinearLayout>

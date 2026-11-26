@@ -92,6 +92,16 @@ export async function provisionCustomer(
     const existingAccount = await t.get("accounts/" + accountId);
     check(!existingAccount || existingAccount.ownerUid === uid, "ACCOUNT_CONFLICT", 409);
     const existingDetails = await t.get(detailsPath);
+    const contactEmail = String(input.contactEmail ?? input.email ?? "").trim();
+    const rawPrefs = (input.preferences && typeof input.preferences === "object")
+      ? (input.preferences as Doc)
+      : {};
+    const preferences = {
+      notificationsEnabled: typeof rawPrefs.notificationsEnabled === "boolean"
+        ? rawPrefs.notificationsEnabled
+        : true,
+      language: rawPrefs.language === "en" ? "en" : "vi",
+    };
     t.set("users/" + uid, {
       uid,
       role: "CUSTOMER",
@@ -99,9 +109,11 @@ export async function provisionCustomer(
       status: "ONBOARDING",
       fullName: input.fullName,
       emailMasked: input.email.replace(/^(.).*(@.*)$/, "$1***$2"),
+      contactEmail,
       phoneMasked: "••••" + String(input.phoneNumber ?? "").slice(-4),
       contactPhone: String(input.phoneNumber ?? ""),
       contactPhoneSearchTokens: phoneSearchTokens(String(input.phoneNumber ?? "")),
+      preferences,
       primaryCheckingAccountId: accountId,
       createdAt: bank.now(),
       createdBy: a.uid,
@@ -111,6 +123,10 @@ export async function provisionCustomer(
       uidRef: uid,
       customerNo: input.customerNo ?? null,
       nationalIdNumber: String(input.nationalIdNumber),
+      dateOfBirth: input.dateOfBirth ?? null,
+      gender: input.gender ?? null,
+      nationality: input.nationality ?? null,
+      identityDocumentExpiry: input.identityDocumentExpiry ?? null,
       address: input.address ?? null,
       kycStatus: "NOT_SUBMITTED",
       status: "ONBOARDING",

@@ -84,11 +84,22 @@ it("requires customer-admin permission for account and customer detail reads", a
   await request(app).get("/officer/customers/missing").set("Authorization", "Bearer officer").expect(404);
 });
 
-it("returns editable contact fields without exposing CCCD", async () => {
+it("returns editable contact and identity fields without exposing CCCD", async () => {
   const app = await fixture();
   const response = await request(app).get("/officer/customers/c1")
     .set("Authorization", "Bearer officer").expect(200);
-  expect(response.body).toEqual({ fullName: "Nguyễn Minh Anh", contactEmail: "anh@example.com", contactPhone: "+84901234567", address: "12 Đường A" });
+  expect(response.body).toEqual({
+    fullName: "Nguyễn Minh Anh",
+    customerNo: "",
+    dateOfBirth: "",
+    gender: "",
+    nationality: "",
+    identityDocumentExpiry: "",
+    address: "12 Đường A",
+    contactEmail: "anh@example.com",
+    contactPhone: "+84901234567",
+    preferences: {},
+  });
   expect(JSON.stringify(response.body)).not.toContain("012345678901");
   const directory = await request(app).get("/officer/customers").set("Authorization", "Bearer officer").expect(200);
   expect(JSON.stringify(directory.body)).not.toContain("012345678901");
@@ -109,15 +120,53 @@ it("updates the normalized checking-account name search index after officer edit
   expect(stored.body.items[0]).not.toHaveProperty("id");
 });
 
-it("validates and forwards CCCD on provisioning without returning it", async () => {
-  let receivedNationalIdNumber = "";
+it("validates and forwards CCCD and full identity fields on provisioning without returning CCCD", async () => {
+  let receivedBody: Record<string, unknown> = {};
   const app = await fixture(async (_actor, body) => {
-    receivedNationalIdNumber = String(body.nationalIdNumber ?? "");
+    receivedBody = body;
     return { uid: "new-customer", accountId: "new-checking", status: "ONBOARDING" };
   });
-  const body = { requestId: "new-customer", email: "new@example.com", fullName: "New Customer", phoneNumber: "0901234567", nationalIdNumber: "012345678901" };
+  const body = {
+    requestId: "new-customer",
+    email: "new@example.com",
+    fullName: "New Customer",
+    phoneNumber: "0901234567",
+    nationalIdNumber: "012345678901",
+    dateOfBirth: "1998-05-12",
+    gender: "Nữ",
+    nationality: "Việt Nam",
+    identityDocumentExpiry: "2032-05-12",
+    address: "18 Nguyễn Văn Linh",
+    preferences: { notificationsEnabled: true, language: "vi" },
+  };
   const created = await request(app).post("/officer/customers").set("Authorization", "Bearer officer").send(body).expect(200);
   expect(created.body).toEqual({ uid: "new-customer", accountId: "new-checking", status: "ONBOARDING" });
-  expect(receivedNationalIdNumber).toBe("012345678901");
+  expect(receivedBody.nationalIdNumber).toBe("012345678901");
+  expect(receivedBody.dateOfBirth).toBe("1998-05-12");
+  expect(receivedBody.gender).toBe("Nữ");
+  expect(receivedBody.nationality).toBe("Việt Nam");
+  expect(receivedBody.identityDocumentExpiry).toBe("2032-05-12");
   await request(app).post("/officer/customers").set("Authorization", "Bearer officer").send({ ...body, requestId: "invalid-id", nationalIdNumber: "123" }).expect(400);
+});
+
+it("updates extended customer identity and preferences fields via PATCH", async () => {
+  const app = await fixture();
+  await request(app).patch("/officer/customers/c1").set("Authorization", "Bearer officer")
+    .send({
+      dateOfBirth: "1995-08-20",
+      gender: "Nữ",
+      nationality: "Việt Nam",
+      identityDocumentExpiry: "2035-08-20",
+      preferences: { notificationsEnabled: false, language: "en" },
+      reason: "Cập nhật thông tin định danh đầy đủ",
+    }).expect(200);
+  const updated = await request(app).get("/officer/customers/c1")
+    .set("Authorization", "Bearer officer").expect(200);
+  expect(updated.body).toMatchObject({
+    dateOfBirth: "1995-08-20",
+    gender: "Nữ",
+    nationality: "Việt Nam",
+    identityDocumentExpiry: "2035-08-20",
+    preferences: { notificationsEnabled: false, language: "en" },
+  });
 });

@@ -93,9 +93,15 @@ export class OfficerAccountsService {
       check(customer, "CUSTOMER_PROFILE_NOT_FOUND", 404);
       return {
         fullName: String(user.fullName ?? ""),
+        customerNo: String(customer.customerNo ?? ""),
+        dateOfBirth: String(customer.dateOfBirth ?? ""),
+        gender: String(customer.gender ?? ""),
+        nationality: String(customer.nationality ?? ""),
+        identityDocumentExpiry: String(customer.identityDocumentExpiry ?? ""),
+        address: String(customer.address ?? ""),
         contactEmail: String(user.contactEmail ?? ""),
         contactPhone: String(user.contactPhone ?? user.phoneMasked ?? ""),
-        address: String(customer.address ?? ""),
+        preferences: (user.preferences && typeof user.preferences === "object") ? user.preferences : {},
       };
     });
   }
