@@ -38,18 +38,16 @@ public final class OfficerHomeFragment extends Fragment {
             String fullName = authState.getUser().getFullName();
             binding.identityText.setText(fullName == null || fullName.trim().isEmpty()
                     ? authState.getUser().getEmail() : fullName);
-            binding.accountMetric.setText("Xem");
-            binding.ekycMetric.setText("—");
         });
-        binding.signOutButton.setOnClickListener(v -> app.getAppContainer().getAuthRepository().signOut());
         binding.checkingAccountsButton.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.officerCheckingAccounts));
-        binding.historyButton.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.transactionHistory));
+        binding.historyButton.setOnClickListener(v -> openFeature(v, R.id.officerAudit,
+                "Lịch sử giao dịch hệ thống", "Tra cứu các giao dịch trên toàn hệ thống."));
         binding.ekycButton.setOnClickListener(v -> openFeature(v, R.id.officerEkyc,
-                "Hồ sơ eKYC", "Theo dõi kết quả kiểm tra ảnh và xem bằng chứng theo quyền."));
+                "Hồ sơ eKYC", "Theo dõi kết quả kiểm tra tự động và bằng chứng hồ sơ."));
         binding.auditButton.setOnClickListener(v -> openFeature(v, R.id.officerAudit,
                 "Kiểm tra giao dịch", "Theo dõi lịch sử thao tác của cán bộ."));
         binding.ratesButton.setOnClickListener(v -> openFeature(v, R.id.officerRates,
-                "Chính sách lãi suất", "Quản lý policy có version và lý do thay đổi."));
+                "Chính sách lãi suất", "Quản lý biểu lãi suất hiện hành và ngày hiệu lực."));
     }
 
     private void openFeature(View anchor, int destination, String title, String subtitle) {

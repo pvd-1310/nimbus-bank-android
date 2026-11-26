@@ -41,9 +41,11 @@ public final class OfficerFeatureFragment extends Fragment {
     private final List<JSONObject> currentEkycItems = new ArrayList<>();
     private int currentEkycFilter = 0; // 0: all, 1: reviewing, 2: verified
 
-    @Override public void onResume() {
+    @Override
+    public void onResume() {
         super.onResume();
-        if (binding != null && binding.titleText.getText().toString().toLowerCase(java.util.Locale.ROOT).contains("lãi suất")) {
+        if (binding != null
+                && binding.titleText.getText().toString().toLowerCase(java.util.Locale.ROOT).contains("lãi suất")) {
             FinalTermApplication app = (FinalTermApplication) requireActivity().getApplication();
             renderRatePolicies(app.getAppContainer().getBackendApiClient());
         }
@@ -52,7 +54,7 @@ public final class OfficerFeatureFragment extends Fragment {
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
-                             @Nullable Bundle state) {
+            @Nullable Bundle state) {
         binding = FragmentOfficerFeatureBinding.inflate(inflater, container, false);
         return binding.getRoot();
     }
@@ -69,22 +71,16 @@ public final class OfficerFeatureFragment extends Fragment {
             }
             Bundle args = getArguments();
             String title = args == null ? "Tác vụ vận hành" : args.getString("title", "Tác vụ vận hành");
-            String subtitle = args == null ? "Các thao tác được ghi nhận theo quyền của tài khoản cán bộ." : args.getString("subtitle", "Các thao tác được ghi nhận theo quyền của tài khoản cán bộ.");
-            binding.eyebrowText.setText(args == null ? "OFFICER OPERATIONS" : args.getString("eyebrow", "OFFICER OPERATIONS"));
+            String subtitle = args == null ? "Các thao tác được ghi nhận theo quyền của tài khoản cán bộ."
+                    : args.getString("subtitle", "Các thao tác được ghi nhận theo quyền của tài khoản cán bộ.");
             binding.titleText.setText(title);
             binding.subtitleText.setText(subtitle);
-            binding.statusText.setText("TỔNG QUAN");
-            if (title.contains("eKYC")) {
-                binding.statusBadge.setText("CHỈ XEM");
-                binding.statusText.setText("KIỂM TRA TỰ ĐỘNG");
-                binding.complianceNote.setText("Hệ thống kiểm tra ảnh khi khách nộp hồ sơ. Cán bộ có quyền chỉ xem kết quả và bằng chứng; không phê duyệt thủ công.");
-            }
+            binding.statusText.setVisibility(View.GONE);
 
             setupFeatureContent(title, app.getAppContainer().getBackendApiClient());
         });
 
         binding.backButton.setOnClickListener(v -> Navigation.findNavController(v).navigateUp());
-        binding.primaryButton.setOnClickListener(v -> Navigation.findNavController(v).navigateUp());
     }
 
     private void setupFeatureContent(String title, BackendApiClient api) {
@@ -92,6 +88,8 @@ public final class OfficerFeatureFragment extends Fragment {
 
         if (title.contains("eKYC")) {
             renderEkycQueue(api);
+        } else if (title.contains("Lịch sử giao dịch")) {
+            renderSystemTransactions();
         } else if (title.contains("Kiểm tra") || title.contains("audit") || title.contains("Audit")) {
             renderAuditLogs(api);
         } else if (title.contains("lãi suất") || title.contains("Lãi suất")) {
@@ -101,10 +99,94 @@ public final class OfficerFeatureFragment extends Fragment {
         }
     }
 
+    private void renderSystemTransactions() {
+        binding.actionButton.setVisibility(View.GONE);
+        binding.filterScroll.setVisibility(View.VISIBLE);
+        binding.chipAll.setText("Tất cả");
+        binding.chipFilter1.setText("Hoàn tất");
+        binding.chipFilter2.setText("Đang xử lý");
+        binding.statusText.setVisibility(View.VISIBLE);
+        binding.statusText.setText("Đang tải giao dịch hệ thống…");
+
+        final int[] txFilter = { 0 };
+        final List<com.example.final_term.data.ReadModels.TransactionSummary> allRows = new ArrayList<>();
+        Runnable applyFilter = () -> {
+            if (binding == null) return;
+            binding.itemsContainer.removeAllViews();
+            highlightChip(binding.chipAll, txFilter[0] == 0);
+            highlightChip(binding.chipFilter1, txFilter[0] == 1);
+            highlightChip(binding.chipFilter2, txFilter[0] == 2);
+            List<com.example.final_term.data.ReadModels.TransactionSummary> filtered = new ArrayList<>();
+            for (var tx : allRows) {
+                boolean settled = "SETTLED".equals(tx.status) || "DEMO_SETTLED".equals(tx.status);
+                boolean pending = "PENDING".equals(tx.status) || "DEMO_PENDING".equals(tx.status);
+                if (txFilter[0] == 1 && !settled) continue;
+                if (txFilter[0] == 2 && !pending) continue;
+                filtered.add(tx);
+            }
+            binding.statusText.setText(filtered.size() + " giao dịch hệ thống");
+            if (filtered.isEmpty()) {
+                TextView empty = new TextView(requireContext());
+                empty.setText("Chưa có giao dịch phù hợp.");
+                empty.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
+                empty.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+                empty.setPadding(20, 48, 20, 20);
+                binding.itemsContainer.addView(empty);
+                return;
+            }
+            for (var tx : filtered) {
+                View row = LayoutInflater.from(requireContext()).inflate(R.layout.item_transaction_row, binding.itemsContainer, false);
+                TextView title = row.findViewById(R.id.title_text);
+                TextView subtitle = row.findViewById(R.id.subtitle_text);
+                TextView amount = row.findViewById(R.id.amount_text);
+                ImageView icon = row.findViewById(R.id.transaction_icon);
+                icon.setImageResource(R.drawable.ic_receipt);
+
+                title.setText(com.example.final_term.data.ReadSummaryFormatter.transactionTitle(tx));
+                String timeText = tx.createdAt == null ? "" :
+                        java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM,
+                                java.text.DateFormat.SHORT, java.util.Locale.forLanguageTag("vi-VN"))
+                                .format(tx.createdAt.toDate());
+                subtitle.setText((tx.accountId == null || tx.accountId.isEmpty() ? "" : "TK: " + tx.accountId + " · ") + timeText);
+                String formatted = com.example.final_term.data.ReadSummaryFormatter.formatCurrency(tx.amountMinor, tx.currency);
+                amount.setText((tx.isIncoming() ? "+" : "−") + formatted);
+                amount.setTextColor(ContextCompat.getColor(requireContext(), tx.isIncoming() ? R.color.success : R.color.ink));
+
+                row.setOnClickListener(v -> {
+                    Bundle args = new Bundle();
+                    args.putString("title", com.example.final_term.data.ReadSummaryFormatter.transactionTitle(tx));
+                    args.putString("amount", (tx.isIncoming() ? "+" : "−") + formatted);
+                    args.putString("status", "SETTLED".equals(tx.status) || "DEMO_SETTLED".equals(tx.status) ? "Thành công"
+                            : "FAILED".equals(tx.status) ? "Thất bại" : "Đang xử lý");
+                    args.putString("time", timeText);
+                    args.putString("account", tx.accountId == null ? "" : tx.accountId);
+                    Navigation.findNavController(v).navigate(R.id.historyDetail, args);
+                });
+                binding.itemsContainer.addView(row);
+            }
+        };
+
+        binding.chipAll.setOnClickListener(v -> { txFilter[0] = 0; applyFilter.run(); });
+        binding.chipFilter1.setOnClickListener(v -> { txFilter[0] = 1; applyFilter.run(); });
+        binding.chipFilter2.setOnClickListener(v -> { txFilter[0] = 2; applyFilter.run(); });
+
+        FinalTermApplication app = (FinalTermApplication) requireActivity().getApplication();
+        app.getAppContainer().getReadRepository().observeAllTransactionsForOfficer()
+                .observe(getViewLifecycleOwner(), result -> {
+                    if (binding == null || result == null) return;
+                    if (result.getData() != null) {
+                        allRows.clear();
+                        allRows.addAll(result.getData());
+                        applyFilter.run();
+                    } else if (result.getStatus() == com.example.final_term.data.ReadModelResult.Status.ERROR) {
+                        binding.statusText.setText("Không thể tải giao dịch hệ thống.");
+                    }
+                });
+    }
+
     private void renderEkycQueue(BackendApiClient api) {
-        binding.actionButton.setVisibility(View.VISIBLE);
-        binding.actionButton.setText("Làm mới hồ sơ");
-        binding.actionButton.setOnClickListener(v -> loadEkycData(api));
+        binding.actionButton.setVisibility(View.GONE);
+        binding.statusText.setVisibility(View.GONE);
         binding.filterScroll.setVisibility(View.VISIBLE);
         binding.chipAll.setText("Tất cả");
         binding.chipFilter1.setText("Đang xử lý");
@@ -151,7 +233,8 @@ public final class OfficerFeatureFragment extends Fragment {
         binding.itemsContainer.addView(loading);
 
         api.get("/officer/ekyc").addOnCompleteListener(task -> {
-            if (!isAdded()) return;
+            if (!isAdded())
+                return;
             requireActivity().runOnUiThread(() -> {
                 if (!task.isSuccessful() || task.getResult() == null || task.getResult().statusCode != 200) {
                     showEkycLoadError(api);
@@ -162,7 +245,8 @@ public final class OfficerFeatureFragment extends Fragment {
                     JSONObject json = new JSONObject(task.getResult().body);
                     JSONArray items = json.optJSONArray("items");
                     if (items != null) {
-                        for (int i = 0; i < items.length(); i++) currentEkycItems.add(items.getJSONObject(i));
+                        for (int i = 0; i < items.length(); i++)
+                            currentEkycItems.add(items.getJSONObject(i));
                     }
                 } catch (Exception ignored) {
                     showEkycLoadError(api);
@@ -182,7 +266,8 @@ public final class OfficerFeatureFragment extends Fragment {
         message.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
         message.setPadding(20, 40, 20, 16);
         binding.itemsContainer.addView(message);
-        com.google.android.material.button.MaterialButton retry = new com.google.android.material.button.MaterialButton(requireContext());
+        com.google.android.material.button.MaterialButton retry = new com.google.android.material.button.MaterialButton(
+                requireContext());
         retry.setText("Tải lại hồ sơ");
         retry.setTextColor(ContextCompat.getColor(requireContext(), R.color.navy));
         retry.setBackgroundResource(R.drawable.glass_pill_button);
@@ -197,9 +282,11 @@ public final class OfficerFeatureFragment extends Fragment {
         for (JSONObject item : currentEkycItems) {
             String status = item.optString("reviewStatus", "DRAFT");
             if (currentEkycFilter == 1) {
-                if ("REVIEWING".equals(status)) filtered.add(item);
+                if ("REVIEWING".equals(status))
+                    filtered.add(item);
             } else if (currentEkycFilter == 2) {
-                if ("VERIFIED".equals(status)) filtered.add(item);
+                if ("VERIFIED".equals(status))
+                    filtered.add(item);
             } else {
                 filtered.add(item);
             }
@@ -209,7 +296,7 @@ public final class OfficerFeatureFragment extends Fragment {
             TextView empty = new TextView(requireContext());
             empty.setText(currentEkycFilter == 1 ? "Hiện không có hồ sơ nào đang xử lý."
                     : currentEkycFilter == 2 ? "Chưa có hồ sơ nào được xác thực."
-                    : "Không tìm thấy hồ sơ eKYC nào.");
+                            : "Không tìm thấy hồ sơ eKYC nào.");
             empty.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
             empty.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
             empty.setPadding(20, 60, 20, 20);
@@ -231,7 +318,8 @@ public final class OfficerFeatureFragment extends Fragment {
         JSONArray storageRefs = item.optJSONArray("storageRefs");
         int photosCount = storageRefs != null ? storageRefs.length() : 0;
 
-        View row = LayoutInflater.from(requireContext()).inflate(R.layout.item_transaction_row, binding.itemsContainer, false);
+        View row = LayoutInflater.from(requireContext()).inflate(R.layout.item_transaction_row, binding.itemsContainer,
+                false);
         TextView title = row.findViewById(R.id.title_text);
         TextView subtitle = row.findViewById(R.id.subtitle_text);
         TextView amount = row.findViewById(R.id.amount_text);
@@ -241,7 +329,10 @@ public final class OfficerFeatureFragment extends Fragment {
         title.setText(demo ? "Hồ sơ đăng ký khuôn mặt" : "Hồ sơ định danh");
 
         StringBuilder sb = new StringBuilder();
-        sb.append("KH: ").append(customerUid);
+        String shortUid = customerUid.length() > 8
+                ? customerUid.substring(0, 8).toUpperCase(java.util.Locale.ROOT)
+                : customerUid;
+        sb.append("Mã KH: ").append(shortUid);
         if (photosCount > 0) {
             sb.append(" · ").append(photosCount).append(" ảnh bằng chứng");
         }
@@ -286,85 +377,303 @@ public final class OfficerFeatureFragment extends Fragment {
         JSONArray storageRefs = item.optJSONArray("storageRefs");
         int count = storageRefs != null ? storageRefs.length() : 0;
 
-        ScrollView scroll = new ScrollView(requireContext());
-        LinearLayout layout = new LinearLayout(requireContext());
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(40, 24, 40, 24);
-        scroll.addView(layout);
+        View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_ekyc_detail, null);
+        TextView statusTv = dialogView.findViewById(R.id.ekyc_detail_status);
+        TextView scopeTv = dialogView.findViewById(R.id.ekyc_detail_scope);
+        ImageView iconView = dialogView.findViewById(R.id.ekyc_detail_icon);
+        TextView idTv = dialogView.findViewById(R.id.ekyc_detail_id);
+        TextView customerTv = dialogView.findViewById(R.id.ekyc_detail_customer);
+        View reasonGroup = dialogView.findViewById(R.id.ekyc_detail_reason_group);
+        TextView reasonTv = dialogView.findViewById(R.id.ekyc_detail_reason);
+        TextView evidenceHeader = dialogView.findViewById(R.id.ekyc_evidence_header);
+        LinearLayout evidenceContainer = dialogView.findViewById(R.id.ekyc_evidence_container);
 
-        // Header info
-        TextView info = new TextView(requireContext());
-        info.setText("Mã hồ sơ: " + id + "\nKhách hàng: " + customerUid + "\nPhạm vi xác minh: "
-                + (demo ? "Ảnh selfie, chưa xác minh CCCD" : "CCCD và selfie")
-                + "\nTrạng thái: " + statusLabel(status, demo)
-                + (existingReason.isEmpty() ? "" : "\nKết quả: " + existingReason));
-        info.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
-        info.setTextSize(14f);
-        info.setLineSpacing(4, 1.2f);
-        info.setBackgroundResource(R.drawable.glass_panel_soft);
-        info.setPadding(16, 16, 16, 16);
-        layout.addView(info);
+        statusTv.setText(statusLabel(status, demo));
+        int statusColor = "VERIFIED".equals(status) ? R.color.success
+                : ("REJECTED".equals(status) ? R.color.danger
+                : ("REVIEWING".equals(status) || "RESUBMIT_REQUIRED".equals(status) ? R.color.warning : R.color.ink_muted));
+        int resolvedColor = ContextCompat.getColor(requireContext(), statusColor);
+        statusTv.setTextColor(resolvedColor);
+        iconView.setColorFilter(resolvedColor);
 
-        // Evidence section header
-        TextView evidenceTitle = new TextView(requireContext());
-        evidenceTitle.setText("\nBẰNG CHỨNG HÌNH ẢNH (" + count + " ảnh)");
-        evidenceTitle.setTextColor(ContextCompat.getColor(requireContext(), R.color.navy));
-        evidenceTitle.setTextSize(12f);
-        evidenceTitle.setTypeface(null, android.graphics.Typeface.BOLD);
-        layout.addView(evidenceTitle);
+        scopeTv.setText(demo ? "Ảnh chân dung (chưa xác minh CCCD)" : "CCCD (2 mặt) và ảnh chân dung");
+        String shortId = id.length() > 12 ? id.substring(0, 12).toUpperCase(java.util.Locale.ROOT) : id;
+        String shortCustomer = customerUid.length() > 8
+                ? customerUid.substring(0, 8).toUpperCase(java.util.Locale.ROOT)
+                : customerUid;
+        idTv.setText(shortId);
+        customerTv.setText(shortCustomer);
 
-        String[] mediaNames = new String[]{"Mặt trước CCCD", "Mặt sau CCCD", "Chân dung Selfie"};
-        for (int i = 0; i < count; i++) {
-            JSONObject ref = storageRefs.optJSONObject(i);
-            final int photoIndex = ref == null ? i : ref.optInt("index", i);
-            String label = photoIndex < mediaNames.length ? mediaNames[photoIndex] : ("Ảnh " + (photoIndex + 1));
-
-            com.google.android.material.button.MaterialButton btnViewPhoto =
-                    new com.google.android.material.button.MaterialButton(requireContext());
-            btnViewPhoto.setText("Xem ảnh: " + label);
-            btnViewPhoto.setTextSize(12f);
-            btnViewPhoto.setBackgroundColor(ContextCompat.getColor(requireContext(), R.color.glass_card));
-            btnViewPhoto.setTextColor(ContextCompat.getColor(requireContext(), R.color.navy));
-            btnViewPhoto.setStrokeColor(ContextCompat.getColorStateList(requireContext(), R.color.glass_border));
-            btnViewPhoto.setStrokeWidth(1);
-            btnViewPhoto.setCornerRadius(20);
-
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            lp.setMargins(0, 10, 0, 0);
-            btnViewPhoto.setLayoutParams(lp);
-
-            btnViewPhoto.setOnClickListener(v -> inspectEvidencePhoto(api, id, photoIndex, label));
-            layout.addView(btnViewPhoto);
+        if (!existingReason.isEmpty()) {
+            reasonGroup.setVisibility(View.VISIBLE);
+            reasonTv.setText(existingReason);
         }
 
-        new com.example.final_term.ui.common.ThemedDialogBuilder(requireContext())
+        evidenceHeader.setText("Bằng chứng hình ảnh (" + count + " ảnh)");
+        String[] mediaNames = new String[] { "Mặt trước CCCD", "Mặt sau CCCD", "Chân dung Selfie" };
+        final java.util.Map<Integer, byte[]> cachedBytes = new java.util.HashMap<>();
+        final List<Bitmap> previewBitmaps = new ArrayList<>();
+        final boolean[] dialogDismissed = { false };
+
+        if (count == 0) {
+            TextView empty = new TextView(requireContext());
+            empty.setText("Chưa có ảnh bằng chứng được tải lên.");
+            empty.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
+            empty.setTextSize(13f);
+            evidenceContainer.addView(empty);
+        } else {
+            for (int i = 0; i < count; i++) {
+                JSONObject ref = storageRefs.optJSONObject(i);
+                final int photoIndex = ref == null ? i : ref.optInt("index", i);
+                String label = photoIndex < mediaNames.length ? mediaNames[photoIndex] : ("Ảnh " + (photoIndex + 1));
+
+                LinearLayout card = new LinearLayout(requireContext());
+                card.setOrientation(LinearLayout.VERTICAL);
+                card.setPadding(dp(12), dp(12), dp(12), dp(12));
+                card.setBackgroundResource(R.drawable.glass_panel_card);
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                lp.topMargin = dp(10);
+                card.setLayoutParams(lp);
+                card.setClickable(true);
+                card.setFocusable(true);
+
+                LinearLayout headerRow = new LinearLayout(requireContext());
+                headerRow.setOrientation(LinearLayout.HORIZONTAL);
+                headerRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+
+                ImageView photoIcon = new ImageView(requireContext());
+                photoIcon.setImageResource(R.drawable.ic_photo_library);
+                photoIcon.setColorFilter(ContextCompat.getColor(requireContext(), R.color.navy));
+                LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(dp(18), dp(18));
+                iconLp.setMarginEnd(dp(8));
+                headerRow.addView(photoIcon, iconLp);
+
+                TextView photoLabel = new TextView(requireContext());
+                photoLabel.setText(label);
+                photoLabel.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
+                photoLabel.setTextSize(13.5f);
+                photoLabel.setTypeface(null, android.graphics.Typeface.BOLD);
+                headerRow.addView(photoLabel, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+                TextView zoomHint = new TextView(requireContext());
+                zoomHint.setText("Phóng to ›");
+                zoomHint.setTextColor(ContextCompat.getColor(requireContext(), R.color.navy));
+                zoomHint.setTextSize(12.5f);
+                zoomHint.setTypeface(null, android.graphics.Typeface.BOLD);
+                headerRow.addView(zoomHint);
+                card.addView(headerRow);
+
+                android.widget.FrameLayout previewFrame = new android.widget.FrameLayout(requireContext());
+                previewFrame.setBackgroundResource(R.drawable.glass_panel_soft);
+                LinearLayout.LayoutParams frameLp = new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, dp(156));
+                frameLp.topMargin = dp(8);
+                previewFrame.setLayoutParams(frameLp);
+
+                ImageView previewImage = new ImageView(requireContext());
+                previewImage.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                previewImage.setContentDescription(label);
+                previewImage.setVisibility(View.GONE);
+                previewFrame.addView(previewImage, new android.widget.FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+                android.widget.ProgressBar loadingSpinner = new android.widget.ProgressBar(requireContext());
+                android.widget.FrameLayout.LayoutParams spinLp = new android.widget.FrameLayout.LayoutParams(
+                        dp(28), dp(28), android.view.Gravity.CENTER);
+                previewFrame.addView(loadingSpinner, spinLp);
+
+                TextView previewStatus = new TextView(requireContext());
+                previewStatus.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
+                previewStatus.setTextSize(12f);
+                previewStatus.setGravity(android.view.Gravity.CENTER);
+                previewStatus.setPadding(dp(12), dp(12), dp(12), dp(12));
+                previewStatus.setVisibility(View.GONE);
+                previewFrame.addView(previewStatus, new android.widget.FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+                card.addView(previewFrame);
+                evidenceContainer.addView(card);
+
+                Runnable loadPreview = () -> {
+                    loadingSpinner.setVisibility(View.VISIBLE);
+                    previewStatus.setVisibility(View.GONE);
+                    previewImage.setVisibility(View.GONE);
+                    loadEvidenceBytes(api, id, photoIndex, new EvidenceBytesCallback() {
+                        @Override public void onSuccess(byte[] bytes) {
+                            if (dialogDismissed[0] || !isAdded()) return;
+                            cachedBytes.put(photoIndex, bytes);
+                            Bitmap thumb = decodeSampledBitmap(bytes, 720);
+                            loadingSpinner.setVisibility(View.GONE);
+                            if (thumb == null) {
+                                previewStatus.setText("Không đọc được ảnh.");
+                                previewStatus.setVisibility(View.VISIBLE);
+                                return;
+                            }
+                            previewBitmaps.add(thumb);
+                            previewImage.setImageBitmap(thumb);
+                            previewImage.setVisibility(View.VISIBLE);
+                        }
+
+                        @Override public void onError(String message) {
+                            if (dialogDismissed[0] || !isAdded()) return;
+                            loadingSpinner.setVisibility(View.GONE);
+                            previewStatus.setText(message);
+                            previewStatus.setVisibility(View.VISIBLE);
+                        }
+                    });
+                };
+
+                loadPreview.run();
+
+                card.setOnClickListener(v -> {
+                    byte[] bytes = cachedBytes.get(photoIndex);
+                    if (bytes != null) {
+                        showFullEvidencePhotoDialog(label, bytes);
+                    } else if (loadingSpinner.getVisibility() != View.VISIBLE) {
+                        loadPreview.run();
+                    }
+                });
+            }
+        }
+
+        androidx.appcompat.app.AlertDialog detailDialog = new com.example.final_term.ui.common.ThemedDialogBuilder(requireContext())
                 .setTitle("Chi tiết hồ sơ eKYC")
-                .setView(scroll)
+                .setView(dialogView)
                 .setPositiveButton("Đóng", null)
-                .show();
+                .create();
+        detailDialog.setOnDismissListener(d -> {
+            dialogDismissed[0] = true;
+            for (Bitmap bm : previewBitmaps) {
+                if (bm != null && !bm.isRecycled()) bm.recycle();
+            }
+            previewBitmaps.clear();
+            cachedBytes.clear();
+        });
+        detailDialog.show();
+    }
+
+    private interface EvidenceBytesCallback {
+        void onSuccess(byte[] bytes);
+        void onError(String message);
+    }
+
+    private void loadEvidenceBytes(BackendApiClient api, String requestId, int index, EvidenceBytesCallback cb) {
+        api.get("/officer/ekyc/" + requestId + "/evidence/" + index).addOnCompleteListener(urlTask -> {
+            if (!isAdded()) return;
+            requireActivity().runOnUiThread(() -> {
+                if (!urlTask.isSuccessful() || urlTask.getResult() == null) {
+                    cb.onError("Không thể kết nối máy chủ. Chạm để thử lại.");
+                    return;
+                }
+                int sc = urlTask.getResult().statusCode;
+                if (sc == 503) {
+                    cb.onError("Chưa thể tải ảnh hồ sơ lúc này.");
+                    return;
+                }
+                if (sc != 200) {
+                    cb.onError("Không tải được ảnh (" + sc + "). Chạm để thử lại.");
+                    return;
+                }
+                try {
+                    JSONObject resp = new JSONObject(urlTask.getResult().body);
+                    String downloadUrl = resp.getString("url");
+                    api.downloadBytes(downloadUrl).addOnCompleteListener(dlTask -> {
+                        if (!isAdded()) return;
+                        requireActivity().runOnUiThread(() -> {
+                            if (!dlTask.isSuccessful() || dlTask.getResult() == null) {
+                                cb.onError("Không thể tải ảnh. Chạm để thử lại.");
+                                return;
+                            }
+                            cb.onSuccess(dlTask.getResult());
+                        });
+                    });
+                } catch (Exception e) {
+                    cb.onError("Dữ liệu ảnh không hợp lệ.");
+                }
+            });
+        });
+    }
+
+    private void showFullEvidencePhotoDialog(String label, byte[] bytes) {
+        Bitmap bitmap = decodeSampledBitmap(bytes, 1600);
+        if (bitmap == null) {
+            Toast.makeText(requireContext(), "Ảnh không hợp lệ hoặc đã hỏng", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        ImageView iv = new ImageView(requireContext());
+        iv.setImageBitmap(bitmap);
+        iv.setAdjustViewBounds(true);
+        iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        iv.setPadding(dp(8), dp(8), dp(8), dp(8));
+
+        androidx.appcompat.app.AlertDialog photoDialog = new com.example.final_term.ui.common.ThemedDialogBuilder(
+                requireContext())
+                .setTitle(label)
+                .setView(iv)
+                .setPositiveButton("Đóng", (d, w) -> {
+                    iv.setImageBitmap(null);
+                    if (!bitmap.isRecycled()) bitmap.recycle();
+                })
+                .create();
+        photoDialog.setOnDismissListener(d -> {
+            iv.setImageBitmap(null);
+            if (!bitmap.isRecycled()) bitmap.recycle();
+        });
+        photoDialog.show();
+    }
+
+    private static Bitmap decodeSampledBitmap(byte[] bytes, int maxDimPx) {
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.length, bounds);
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null;
+        int sample = 1;
+        while (Math.max(bounds.outWidth, bounds.outHeight) / sample > maxDimPx) {
+            sample *= 2;
+        }
+        BitmapFactory.Options opts = new BitmapFactory.Options();
+        opts.inSampleSize = sample;
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.length, opts);
+    }
+
+    private int dp(float value) {
+        return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
     }
 
     private static String statusLabel(String status, boolean demo) {
         switch (status) {
-            case "VERIFIED": return demo ? "Đã đăng ký khuôn mặt · chưa xác minh CCCD" : "Đã xác thực tự động";
-            case "REVIEWING": return "Đang chờ kiểm tra lại";
-            case "RESUBMIT_REQUIRED": return "Cần chụp lại ảnh";
-            case "REJECTED": return "Đã từ chối";
-            default: return "Bản nháp";
+            case "VERIFIED":
+                return demo ? "Đã đăng ký khuôn mặt · chưa xác minh CCCD" : "Đã xác thực tự động";
+            case "REVIEWING":
+                return "Đang chờ kiểm tra lại";
+            case "RESUBMIT_REQUIRED":
+                return "Cần chụp lại ảnh";
+            case "REJECTED":
+                return "Đã từ chối";
+            default:
+                return "Bản nháp";
         }
     }
 
     private static String screeningMessage(String code, boolean demo) {
-        if (code.isEmpty()) return "";
+        if (code.isEmpty())
+            return "";
         switch (code) {
-            case "FACE_ID_MISMATCH": return "Khuôn mặt trên CCCD và selfie không khớp.";
-            case "FACE_BLURRY": return demo ? "Ảnh selfie bị nhòe." : "Ảnh CCCD hoặc selfie bị nhòe.";
-            case "FACE_EXPOSURE": return "Khuôn mặt quá tối hoặc quá sáng.";
-            case "FACE_TOO_SMALL": return "Khuôn mặt quá nhỏ.";
-            case "FACE_NOT_FOUND": return "Không tìm thấy khuôn mặt.";
-            case "MULTIPLE_FACES": return "Ảnh có nhiều khuôn mặt.";
-            default: return code.matches("[A-Z_]+") ? "Ảnh chưa đạt yêu cầu kiểm tra tự động." : code;
+            case "FACE_ID_MISMATCH":
+                return "Khuôn mặt trên CCCD và selfie không khớp.";
+            case "FACE_BLURRY":
+                return demo ? "Ảnh selfie bị nhòe." : "Ảnh CCCD hoặc selfie bị nhòe.";
+            case "FACE_EXPOSURE":
+                return "Khuôn mặt quá tối hoặc quá sáng.";
+            case "FACE_TOO_SMALL":
+                return "Khuôn mặt quá nhỏ.";
+            case "FACE_NOT_FOUND":
+                return "Không tìm thấy khuôn mặt.";
+            case "MULTIPLE_FACES":
+                return "Ảnh có nhiều khuôn mặt.";
+            default:
+                return code.matches("[A-Z_]+") ? "Ảnh chưa đạt yêu cầu kiểm tra tự động." : code;
         }
     }
 
@@ -372,7 +681,8 @@ public final class OfficerFeatureFragment extends Fragment {
         Toast.makeText(requireContext(), "Đang lấy link tải ảnh " + label + "...", Toast.LENGTH_SHORT).show();
 
         api.get("/officer/ekyc/" + requestId + "/evidence/" + index).addOnCompleteListener(urlTask -> {
-            if (!isAdded()) return;
+            if (!isAdded())
+                return;
             requireActivity().runOnUiThread(() -> {
                 if (!urlTask.isSuccessful() || urlTask.getResult() == null) {
                     Toast.makeText(requireContext(), "Lỗi kết nối máy chủ", Toast.LENGTH_SHORT).show();
@@ -398,16 +708,19 @@ public final class OfficerFeatureFragment extends Fragment {
 
                     // Download image bytes
                     api.downloadBytes(downloadUrl).addOnCompleteListener(dlTask -> {
-                        if (!isAdded()) return;
+                        if (!isAdded())
+                            return;
                         requireActivity().runOnUiThread(() -> {
                             if (!dlTask.isSuccessful() || dlTask.getResult() == null) {
-                                Toast.makeText(requireContext(), "Không thể tải nội dung ảnh từ S3", Toast.LENGTH_SHORT).show();
+                                Toast.makeText(requireContext(), "Không thể tải nội dung ảnh từ S3", Toast.LENGTH_SHORT)
+                                        .show();
                                 return;
                             }
                             byte[] bytes = dlTask.getResult();
                             Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
                             if (bitmap == null) {
-                                Toast.makeText(requireContext(), "Ảnh không hợp lệ hoặc đã hỏng", Toast.LENGTH_SHORT).show();
+                                Toast.makeText(requireContext(), "Ảnh không hợp lệ hoặc đã hỏng", Toast.LENGTH_SHORT)
+                                        .show();
                                 return;
                             }
 
@@ -418,7 +731,8 @@ public final class OfficerFeatureFragment extends Fragment {
                             iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
                             iv.setPadding(20, 20, 20, 20);
 
-                            androidx.appcompat.app.AlertDialog photoDialog = new com.example.final_term.ui.common.ThemedDialogBuilder(requireContext())
+                            androidx.appcompat.app.AlertDialog photoDialog = new com.example.final_term.ui.common.ThemedDialogBuilder(
+                                    requireContext())
                                     .setTitle("Bằng chứng: " + label)
                                     .setView(iv)
                                     .setPositiveButton("Đóng", (d, w) -> {
@@ -458,15 +772,20 @@ public final class OfficerFeatureFragment extends Fragment {
     private void loadAuditPage(BackendApiClient api, String action, String cursor) {
         var current = binding;
         int generation = ++auditLoadGeneration;
-        if (cursor == null) current.itemsContainer.removeAllViews();
+        if (cursor == null)
+            current.itemsContainer.removeAllViews();
+        current.statusText.setVisibility(View.VISIBLE);
         current.statusText.setText("Đang tải lịch sử thay đổi…");
         current.actionButton.setVisibility(View.VISIBLE);
         current.actionButton.setEnabled(false);
         String path = "/officer/audit?limit=25";
-        if (!action.isEmpty()) path += "&action=" + action;
-        if (cursor != null) path += "&cursor=" + android.net.Uri.encode(cursor);
+        if (!action.isEmpty())
+            path += "&action=" + action;
+        if (cursor != null)
+            path += "&cursor=" + android.net.Uri.encode(cursor);
         api.get(path).addOnCompleteListener(task -> {
-            if (binding != current || generation != auditLoadGeneration) return;
+            if (binding != current || generation != auditLoadGeneration)
+                return;
             current.actionButton.setEnabled(true);
             try {
                 if (!task.isSuccessful() || task.getResult().statusCode != 200)
@@ -476,14 +795,15 @@ public final class OfficerFeatureFragment extends Fragment {
                 for (int i = 0; i < items.length(); i++) {
                     JSONObject item = items.getJSONObject(i);
                     long millis = item.optLong("timestamp", 0L);
-                    String timestamp = millis == 0L ? "Chưa có thời gian" :
-                            java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM,
+                    String timestamp = millis == 0L ? "Chưa có thời gian"
+                            : java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM,
                                     java.text.DateFormat.SHORT, java.util.Locale.forLanguageTag("vi-VN"))
                                     .format(new java.util.Date(millis));
                     addAuditRow(item, timestamp);
                 }
                 current.statusText.setText(items.length() == 0 && cursor == null
-                        ? "Chưa có thay đổi phù hợp." : "Đã cập nhật lịch sử thay đổi.");
+                        ? "Chưa có thay đổi phù hợp."
+                        : "Đã cập nhật lịch sử thay đổi.");
                 if (!json.isNull("nextCursor")) {
                     String next = json.getString("nextCursor");
                     current.actionButton.setText("Tải thêm");
@@ -493,7 +813,8 @@ public final class OfficerFeatureFragment extends Fragment {
                 }
             } catch (JSONException error) {
                 current.statusText.setText(task.isSuccessful() && task.getResult().statusCode == 403
-                        ? "Bạn chưa có quyền xem nội dung này." : "Không tải được lịch sử thay đổi.");
+                        ? "Bạn chưa có quyền xem nội dung này."
+                        : "Không tải được lịch sử thay đổi.");
                 current.actionButton.setText("Thử lại");
                 current.actionButton.setOnClickListener(v -> loadAuditPage(api, action, cursor));
             }
@@ -503,7 +824,8 @@ public final class OfficerFeatureFragment extends Fragment {
     private void addAuditRow(JSONObject item, String time) {
         String action = item.optString("action", "");
         String titleText = auditTitle(action);
-        View row = LayoutInflater.from(requireContext()).inflate(R.layout.item_transaction_row, binding.itemsContainer, false);
+        View row = LayoutInflater.from(requireContext()).inflate(R.layout.item_transaction_row, binding.itemsContainer,
+                false);
         TextView title = row.findViewById(R.id.title_text);
         TextView subtitle = row.findViewById(R.id.subtitle_text);
         TextView amount = row.findViewById(R.id.amount_text);
@@ -519,36 +841,52 @@ public final class OfficerFeatureFragment extends Fragment {
         args.putString("description", auditDescription(action));
         args.putString("actor", "Cán bộ ngân hàng");
         args.putString("target", action.contains("CUSTOMER") || action.contains("PROFILE")
-                ? "Hồ sơ khách hàng" : "Giao dịch ngân hàng");
+                ? "Hồ sơ khách hàng"
+                : "Giao dịch ngân hàng");
         args.putString("time", time);
         args.putString("summary", item.optJSONObject("beforeAfterSummary") == null ? ""
                 : "Hệ thống đã lưu nội dung trước và sau khi thay đổi.");
-        row.setOnClickListener(v -> androidx.navigation.Navigation.findNavController(v).navigate(R.id.historyDetail, args));
+        row.setOnClickListener(
+                v -> androidx.navigation.Navigation.findNavController(v).navigate(R.id.historyDetail, args));
 
         binding.itemsContainer.addView(row);
     }
 
     private String auditTitle(String action) {
         switch (action) {
-            case "TRANSFER_COMMIT": return "Xử lý giao dịch chuyển tiền";
-            case "CUSTOMER_UPDATE": return "Cập nhật hồ sơ khách hàng";
-            case "DEMO_MOVEMENT_INTENT": return "Khởi tạo giao dịch mẫu";
-            case "DEMO_MOVEMENT_PENDING": return "Ghi nhận giao dịch đang xử lý";
-            case "DEMO_MOVEMENT_SETTLED": return "Hoàn tất giao dịch mẫu";
-            case "DEMO_MOVEMENT_FAILED": return "Giao dịch mẫu không thành công";
-            default: return "Thao tác nghiệp vụ";
+            case "TRANSFER_COMMIT":
+                return "Xử lý giao dịch chuyển tiền";
+            case "CUSTOMER_UPDATE":
+                return "Cập nhật hồ sơ khách hàng";
+            case "DEMO_MOVEMENT_INTENT":
+                return "Khởi tạo giao dịch mẫu";
+            case "DEMO_MOVEMENT_PENDING":
+                return "Ghi nhận giao dịch đang xử lý";
+            case "DEMO_MOVEMENT_SETTLED":
+                return "Hoàn tất giao dịch mẫu";
+            case "DEMO_MOVEMENT_FAILED":
+                return "Giao dịch mẫu không thành công";
+            default:
+                return "Thao tác nghiệp vụ";
         }
     }
 
     private String auditDescription(String action) {
         switch (action) {
-            case "TRANSFER_COMMIT": return "Cán bộ đã xử lý yêu cầu chuyển tiền.";
-            case "CUSTOMER_UPDATE": return "Thông tin hồ sơ khách hàng đã được cập nhật.";
-            case "DEMO_MOVEMENT_INTENT": return "Yêu cầu giao dịch mẫu đã được khởi tạo.";
-            case "DEMO_MOVEMENT_PENDING": return "Giao dịch mẫu đang được xử lý.";
-            case "DEMO_MOVEMENT_SETTLED": return "Giao dịch mẫu đã hoàn tất.";
-            case "DEMO_MOVEMENT_FAILED": return "Giao dịch mẫu không thể hoàn tất.";
-            default: return "Thao tác đã được ghi nhận trong lịch sử.";
+            case "TRANSFER_COMMIT":
+                return "Cán bộ đã xử lý yêu cầu chuyển tiền.";
+            case "CUSTOMER_UPDATE":
+                return "Thông tin hồ sơ khách hàng đã được cập nhật.";
+            case "DEMO_MOVEMENT_INTENT":
+                return "Yêu cầu giao dịch mẫu đã được khởi tạo.";
+            case "DEMO_MOVEMENT_PENDING":
+                return "Giao dịch mẫu đang được xử lý.";
+            case "DEMO_MOVEMENT_SETTLED":
+                return "Giao dịch mẫu đã hoàn tất.";
+            case "DEMO_MOVEMENT_FAILED":
+                return "Giao dịch mẫu không thể hoàn tất.";
+            default:
+                return "Thao tác đã được ghi nhận trong lịch sử.";
         }
     }
 
@@ -560,10 +898,12 @@ public final class OfficerFeatureFragment extends Fragment {
         var current = binding;
         int generation = ++ratePolicyLoadGeneration;
         current.itemsContainer.removeAllViews();
+        current.statusText.setVisibility(View.VISIBLE);
         current.statusText.setText("Đang tải chính sách lãi suất…");
         current.statusText.setOnClickListener(v -> renderRatePolicies(api));
         api.get("/officer/rate-policies?limit=100").addOnCompleteListener(task -> {
-            if (binding != current || generation != ratePolicyLoadGeneration) return;
+            if (binding != current || generation != ratePolicyLoadGeneration)
+                return;
             try {
                 if (!task.isSuccessful()) {
                     current.statusText.setText("Không thể kết nối để tải chính sách lãi suất. Chạm để thử lại.");
@@ -575,7 +915,8 @@ public final class OfficerFeatureFragment extends Fragment {
                     return;
                 }
                 if (statusCode == 403) {
-                    current.statusText.setText("Tài khoản chưa được cấp quyền quản lý lãi suất. Vui lòng liên hệ quản trị viên.");
+                    current.statusText
+                            .setText("Tài khoản chưa được cấp quyền quản lý lãi suất. Vui lòng liên hệ quản trị viên.");
                     current.actionButton.setVisibility(View.GONE);
                     return;
                 }
@@ -583,10 +924,12 @@ public final class OfficerFeatureFragment extends Fragment {
                     throw new JSONException("Unavailable");
                 JSONArray items = new JSONObject(task.getResult().body).getJSONArray("items");
                 List<JSONObject> policies = new ArrayList<>();
-                for (int i = 0; i < items.length(); i++) policies.add(items.getJSONObject(i));
+                for (int i = 0; i < items.length(); i++)
+                    policies.add(items.getJSONObject(i));
                 policies.sort((left, right) -> {
                     int byEffectiveDate = Long.compare(left.optLong("effectiveFrom"), right.optLong("effectiveFrom"));
-                    if (byEffectiveDate != 0) return byEffectiveDate;
+                    if (byEffectiveDate != 0)
+                        return byEffectiveDate;
                     int byType = left.optString("rateType").compareTo(right.optString("rateType"));
                     return byType != 0 ? byType : Integer.compare(left.optInt("version"), right.optInt("version"));
                 });
@@ -598,12 +941,16 @@ public final class OfficerFeatureFragment extends Fragment {
                     String reason = policy.optString("reason", "");
                     String creator = policy.optString("createdBy", "");
                     addRatePolicyCard(rateName, bps / 100.0 + "% / năm",
-                            "Phiên bản " + policy.optInt("version") + (reason.isEmpty() ? "" : " · " + reason)
+                            "Biểu lãi suất #" + policy.optInt("version") + (reason.isEmpty() ? "" : " · " + reason)
                                     + (creator.isEmpty() ? "" : "\nNgười cập nhật: " + creator),
-                            ("CURRENT".equals(state) ? "Đang áp dụng" : "SCHEDULED".equals(state) ? "Sắp áp dụng" : "Đã kết thúc")
-                                    + " · Hiệu lực từ " + new java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault()).format(new java.util.Date(policy.optLong("effectiveFrom"))));
+                            ("CURRENT".equals(state) ? "Đang áp dụng"
+                                    : "SCHEDULED".equals(state) ? "Sắp áp dụng" : "Đã kết thúc")
+                                    + " · Hiệu lực từ "
+                                    + new java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
+                                            .format(new java.util.Date(policy.optLong("effectiveFrom"))));
                 }
-                current.statusText.setText(items.length() == 0 ? "Chưa có chính sách lãi suất." : "Danh sách chính sách lãi suất đã được cập nhật.");
+                current.statusText.setText(items.length() == 0 ? "Chưa có chính sách lãi suất."
+                        : "Danh sách chính sách lãi suất đã được cập nhật.");
             } catch (JSONException error) {
                 current.statusText.setText("Không tải được chính sách lãi suất. Chạm để thử lại.");
             }
@@ -613,7 +960,8 @@ public final class OfficerFeatureFragment extends Fragment {
     }
 
     private void addRatePolicyCard(String title, String rateStr, String version, String effective) {
-        View card = LayoutInflater.from(requireContext()).inflate(R.layout.item_transaction_row, binding.itemsContainer, false);
+        View card = LayoutInflater.from(requireContext()).inflate(R.layout.item_transaction_row, binding.itemsContainer,
+                false);
         TextView titleTv = card.findViewById(R.id.title_text);
         TextView subtitleTv = card.findViewById(R.id.subtitle_text);
         TextView amountTv = card.findViewById(R.id.amount_text);

@@ -32,6 +32,7 @@
         </FrameLayout>
 
         <TextView
+            android:id="@+id/profile_header_title"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
@@ -226,6 +227,7 @@
                         android:paddingBottom="4dp">
 
                         <TextView
+                            android:id="@+id/profile_section_account_title"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
@@ -270,6 +272,7 @@
                             android:orientation="vertical">
 
                             <TextView
+                                android:id="@+id/profile_personal_info_title"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="Thông tin cá nhân"
@@ -293,10 +296,115 @@
                             android:src="@drawable/ic_chevron_right"
                             app:tint="@color/ink_faint" />
                     </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/item_officer_audit"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="60dp"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:padding="10dp"
+                        android:visibility="gone">
+
+                        <ImageView
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:background="@drawable/circle_action_button"
+                            android:padding="8dp"
+                            android:src="@drawable/ic_receipt"
+                            app:tint="@color/navy" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="12dp"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Nhật ký thao tác cán bộ"
+                                android:textColor="@color/ink"
+                                android:textSize="14sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="Theo dõi lịch sử cập nhật hồ sơ và giao dịch"
+                                android:textColor="@color/ink_muted"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+
+                        <ImageView
+                            android:layout_width="18dp"
+                            android:layout_height="18dp"
+                            android:src="@drawable/ic_chevron_right"
+                            app:tint="@color/ink_faint" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/item_officer_rates"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="60dp"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:padding="10dp"
+                        android:visibility="gone">
+
+                        <ImageView
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:background="@drawable/circle_action_button"
+                            android:padding="8dp"
+                            android:src="@drawable/ic_trending_up"
+                            app:tint="@color/navy" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="12dp"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Chính sách lãi suất"
+                                android:textColor="@color/ink"
+                                android:textSize="14sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="Xem và điều chỉnh biểu lãi suất áp dụng"
+                                android:textColor="@color/ink_muted"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+
+                        <ImageView
+                            android:layout_width="18dp"
+                            android:layout_height="18dp"
+                            android:src="@drawable/ic_chevron_right"
+                            app:tint="@color/ink_faint" />
+                    </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_security_section"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
@@ -583,7 +691,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
                 android:gravity="center"
-                android:text="Nimbus Bank v2.4.0 • Bảo mật chuẩn PCI-DSS 256-bit"
+                android:text="Nimbus Bank v2.4.0"
                 android:textColor="@color/ink_muted"
                 android:textSize="12sp" />
         </LinearLayout>

@@ -24,11 +24,11 @@
 
             <ImageButton
                 android:id="@+id/back_button"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
                 android:background="@drawable/circle_action_button"
                 android:contentDescription="Quay lại"
-                android:padding="10dp"
+                android:padding="12dp"
                 android:src="@drawable/ic_arrow_back"
                 app:tint="@color/navy" />
 
@@ -45,8 +45,8 @@
                 android:textStyle="bold" />
 
             <View
-                android:layout_width="40dp"
-                android:layout_height="40dp" />
+                android:layout_width="48dp"
+                android:layout_height="48dp" />
         </LinearLayout>
 
         <TextView

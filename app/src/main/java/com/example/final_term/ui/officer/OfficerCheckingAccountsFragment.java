@@ -16,6 +16,8 @@ import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.navigation.Navigation;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.final_term.R;
 import com.example.final_term.auth.AuthState;
@@ -35,6 +37,7 @@ public final class OfficerCheckingAccountsFragment extends Fragment {
     private FragmentOfficerCheckingAccountsBinding binding;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final List<JSONObject> accounts = new ArrayList<>();
+    private CheckingAccountsAdapter adapter;
     private String nextCursor;
     private String activeQuery = "";
     private boolean hasLoaded;
@@ -58,8 +61,11 @@ public final class OfficerCheckingAccountsFragment extends Fragment {
 
     @Override public void onViewCreated(@NonNull View view, @Nullable Bundle state) {
         FinalTermApplication app = (FinalTermApplication) requireActivity().getApplication();
+        adapter = new CheckingAccountsAdapter();
+        binding.accountsRecycler.setLayoutManager(new LinearLayoutManager(requireContext()));
+        binding.accountsRecycler.setAdapter(adapter);
         binding.backButton.setOnClickListener(v -> Navigation.findNavController(v).navigateUp());
-        binding.refreshButton.setOnClickListener(v -> loadAccounts(true));
+        binding.statusText.setOnClickListener(v -> loadAccounts(true));
         binding.createButton.setOnClickListener(v -> openForm(v, "create", "", ""));
         binding.searchInput.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
@@ -113,51 +119,108 @@ public final class OfficerCheckingAccountsFragment extends Fragment {
                 nextCursor = page.isNull("nextCursor") ? null : page.optString("nextCursor", null);
                 binding.statusText.setText(accounts.isEmpty()
                         ? (activeQuery.isEmpty() ? "Chưa có tài khoản thanh toán." : "Không tìm thấy tài khoản phù hợp.")
-                        : "Tài khoản tìm thấy: " + accounts.size() + (nextCursor == null ? "" : " · Có thể tải thêm"));
+                        : accounts.size() + " tài khoản thanh toán" + (nextCursor == null ? "" : " · Có thể tải thêm"));
                 renderAccounts();
             } catch (Exception error) {
-                binding.statusText.setText("Không tải được danh sách. Chạm Tải lại để thử lại.");
-                binding.accountsContainer.removeAllViews();
+                binding.statusText.setText("Không tải được danh sách. Chạm để thử lại.");
+                accounts.clear();
+                nextCursor = null;
+                renderAccounts();
             }
         });
     }
 
     private void renderAccounts() {
-        if (binding == null) return;
-        binding.accountsContainer.removeAllViews();
-        for (JSONObject account : accounts) {
-            MaterialCardView card = new MaterialCardView(requireContext());
-            card.setCardBackgroundColor(ContextCompat.getColor(requireContext(), R.color.glass_card));
-            card.setStrokeColor(ContextCompat.getColor(requireContext(), R.color.glass_border));
+        if (binding == null || adapter == null) return;
+        adapter.notifyDataSetChanged();
+    }
+
+    private final class CheckingAccountsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
+        private static final int TYPE_ACCOUNT = 0;
+        private static final int TYPE_LOAD_MORE = 1;
+
+        @Override public int getItemCount() {
+            return accounts.size() + (nextCursor != null ? 1 : 0);
+        }
+
+        @Override public int getItemViewType(int position) {
+            return position < accounts.size() ? TYPE_ACCOUNT : TYPE_LOAD_MORE;
+        }
+
+        @NonNull @Override
+        public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            if (viewType == TYPE_LOAD_MORE) {
+                MaterialButton more = new MaterialButton(parent.getContext());
+                more.setText("Tải thêm tài khoản");
+                RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                more.setLayoutParams(params);
+                return new RecyclerView.ViewHolder(more) { };
+            }
+            MaterialCardView card = new MaterialCardView(parent.getContext());
+            card.setCardBackgroundColor(ContextCompat.getColor(parent.getContext(), R.color.glass_card));
+            card.setStrokeColor(ContextCompat.getColor(parent.getContext(), R.color.glass_border));
             card.setStrokeWidth(dp(1));
             card.setRadius(dp(18));
             card.setCardElevation(0);
             card.setClickable(true);
             card.setFocusable(true);
-            LinearLayout body = new LinearLayout(requireContext());
-            body.setOrientation(LinearLayout.VERTICAL);
-            body.setPadding(dp(16), dp(14), dp(16), dp(14));
-            TextView number = text(account.optString("accountId", ""), 16, R.color.navy, true);
-            body.addView(number);
-            body.addView(text(account.optString("ownerName", "Chưa có tên chủ tài khoản"), 14, R.color.ink, true));
-            String phone = account.optString("contactPhone", "").trim();
-            body.addView(text(phone.isEmpty() ? "Chưa có số điện thoại" : phone, 13, R.color.ink_muted, false));
-            body.addView(text(account.optString("status", ""), 11, R.color.ink_muted, true));
-            card.addView(body);
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             params.bottomMargin = dp(10);
             card.setLayoutParams(params);
-            String customerId = account.optString("customerId", "");
-            card.setEnabled(!customerId.isEmpty());
-            card.setContentDescription("Tài khoản " + account.optString("accountId") + ", chủ tài khoản " + account.optString("ownerName") + ", " + phone + ". Mở chỉnh sửa hồ sơ.");
-            card.setOnClickListener(v -> openForm(v, "edit", customerId, account.optString("accountId", "")));
-            binding.accountsContainer.addView(card);
+
+            LinearLayout body = new LinearLayout(parent.getContext());
+            body.setOrientation(LinearLayout.VERTICAL);
+            body.setPadding(dp(16), dp(14), dp(16), dp(14));
+            TextView number = text("", 16, R.color.navy, true);
+            TextView owner = text("", 14, R.color.ink, true);
+            TextView phone = text("", 13, R.color.ink_muted, false);
+            TextView status = text("", 11, R.color.ink_muted, true);
+            body.addView(number);
+            body.addView(owner);
+            body.addView(phone);
+            body.addView(status);
+            card.addView(body);
+            return new AccountViewHolder(card, number, owner, phone, status);
         }
-        if (nextCursor != null) {
-            MaterialButton more = new MaterialButton(requireContext());
-            more.setText("Tải thêm tài khoản");
-            more.setOnClickListener(v -> loadAccounts(false));
-            binding.accountsContainer.addView(more);
+
+        @Override
+        public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
+            if (getItemViewType(position) == TYPE_LOAD_MORE) {
+                holder.itemView.setOnClickListener(v -> loadAccounts(false));
+                return;
+            }
+            AccountViewHolder vh = (AccountViewHolder) holder;
+            JSONObject account = accounts.get(position);
+            String accountId = account.optString("accountId", "");
+            String ownerName = account.optString("ownerName", "Chưa có tên chủ tài khoản");
+            String phone = account.optString("contactPhone", "").trim();
+            String statusText = account.optString("status", "");
+            String customerId = account.optString("customerId", "");
+
+            vh.number.setText(accountId);
+            vh.owner.setText(ownerName);
+            vh.phone.setText(phone.isEmpty() ? "Chưa có số điện thoại" : phone);
+            vh.status.setText("ACTIVE".equalsIgnoreCase(statusText) ? "Đang hoạt động" : statusText);
+            vh.itemView.setEnabled(!customerId.isEmpty());
+            vh.itemView.setContentDescription("Tài khoản " + accountId + ", chủ tài khoản " + ownerName + ", " + phone + ". Mở chỉnh sửa hồ sơ.");
+            vh.itemView.setOnClickListener(v -> openForm(v, "edit", customerId, accountId));
+        }
+    }
+
+    private static final class AccountViewHolder extends RecyclerView.ViewHolder {
+        final TextView number;
+        final TextView owner;
+        final TextView phone;
+        final TextView status;
+
+        AccountViewHolder(@NonNull View itemView, TextView number, TextView owner, TextView phone, TextView status) {
+            super(itemView);
+            this.number = number;
+            this.owner = owner;
+            this.phone = phone;
+            this.status = status;
         }
     }
 

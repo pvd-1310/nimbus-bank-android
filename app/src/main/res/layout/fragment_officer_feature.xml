@@ -19,8 +19,8 @@
 
         <ImageButton
             android:id="@+id/back_button"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:background="@drawable/circle_action_button"
             android:contentDescription="Quay lại"
             android:padding="12dp"
@@ -35,16 +35,6 @@
             android:orientation="vertical">
 
             <TextView
-                android:id="@+id/eyebrow_text"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@color/slate_blue"
-                android:textSize="11sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.08"
-                android:text="OFFICER OPERATIONS" />
-
-            <TextView
                 android:id="@+id/title_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -53,20 +43,6 @@
                 android:textStyle="bold"
                 android:text="Tác vụ vận hành" />
         </LinearLayout>
-
-        <TextView
-            android:id="@+id/status_badge"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:background="@drawable/glass_panel_soft"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
-            android:paddingTop="4dp"
-            android:paddingBottom="4dp"
-            android:text="OFFICER"
-            android:textColor="@color/navy"
-            android:textSize="11sp"
-            android:textStyle="bold" />
     </LinearLayout>
 
     <ScrollView
@@ -82,7 +58,7 @@
             android:orientation="vertical"
             android:paddingStart="20dp"
             android:paddingEnd="20dp"
-            android:paddingBottom="30dp">
+            android:paddingBottom="108dp">
 
             <!-- Subtitle -->
             <TextView
@@ -111,53 +87,59 @@
                     <TextView
                         android:id="@+id/chip_all"
                         android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
+                        android:layout_height="48dp"
                         android:background="@drawable/navy_button_pill"
-                        android:paddingStart="16dp"
-                        android:paddingEnd="16dp"
-                        android:paddingTop="6dp"
-                        android:paddingBottom="6dp"
+                        android:gravity="center"
+                        android:paddingStart="18dp"
+                        android:paddingEnd="18dp"
                         android:text="Tất cả"
                         android:textColor="@color/white"
-                        android:textSize="12sp"
+                        android:textSize="13sp"
                         android:textStyle="bold" />
 
                     <TextView
                         android:id="@+id/chip_filter1"
                         android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
+                        android:layout_height="48dp"
                         android:layout_marginStart="8dp"
                         android:background="@drawable/glass_panel_soft"
-                        android:paddingStart="14dp"
-                        android:paddingEnd="14dp"
-                        android:paddingTop="6dp"
-                        android:paddingBottom="6dp"
+                        android:gravity="center"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
                         android:text="Đang xử lý"
                         android:textColor="@color/ink"
-                        android:textSize="12sp" />
+                        android:textSize="13sp" />
 
                     <TextView
                         android:id="@+id/chip_filter2"
                         android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
+                        android:layout_height="48dp"
                         android:layout_marginStart="8dp"
                         android:background="@drawable/glass_panel_soft"
-                        android:paddingStart="14dp"
-                        android:paddingEnd="14dp"
-                        android:paddingTop="6dp"
-                        android:paddingBottom="6dp"
+                        android:gravity="center"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
                         android:text="Đã xác thực"
                         android:textColor="@color/ink"
-                        android:textSize="12sp" />
+                        android:textSize="13sp" />
                 </LinearLayout>
             </HorizontalScrollView>
+
+            <TextView
+                android:id="@+id/status_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:textColor="@color/ink_muted"
+                android:textSize="13sp"
+                android:visibility="gone" />
 
             <!-- Dynamic Content Items Container -->
             <LinearLayout
                 android:id="@+id/items_container"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="12dp"
                 android:orientation="vertical" />
 
             <!-- Primary Action Button (Optional depending on screen) -->
@@ -171,61 +153,6 @@
                 android:textSize="14sp"
                 android:visibility="gone"
                 android:background="@drawable/navy_button_pill"
-                app:backgroundTint="@null" />
-
-            <!-- Compliance information -->
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                app:cardBackgroundColor="@color/glass_card"
-                app:cardCornerRadius="20dp"
-                app:cardElevation="0dp"
-                app:strokeColor="@color/glass_border"
-                app:strokeWidth="1dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <TextView
-                        android:id="@+id/status_text"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:background="@drawable/glass_panel_soft"
-                        android:paddingStart="10dp"
-                        android:paddingEnd="10dp"
-                        android:paddingTop="4dp"
-                        android:paddingBottom="4dp"
-                        android:text="HOẠT ĐỘNG"
-                        android:textColor="@color/navy"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/compliance_note"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:text="Thay đổi lãi suất và kết quả kiểm tra eKYC được lưu trong lịch sử thao tác của cán bộ."
-                        android:textColor="@color/ink_muted"
-                        android:textSize="13sp"
-                        android:lineSpacingExtra="2dp" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <!-- Bottom Back Button for compatibility -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/primary_button"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="16dp"
-                android:text="Quay lại bảng điều hành"
-                android:textColor="@color/navy"
-                android:textSize="14sp"
-                android:background="@drawable/glass_pill_button"
                 app:backgroundTint="@null" />
         </LinearLayout>
     </ScrollView>

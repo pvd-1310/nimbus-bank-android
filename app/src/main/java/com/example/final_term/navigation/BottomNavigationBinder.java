@@ -23,14 +23,32 @@ public final class BottomNavigationBinder {
         View wallet = root.findViewById(R.id.nav_wallet);
         View accounts = root.findViewById(R.id.nav_accounts);
         View profile = root.findViewById(R.id.nav_profile);
+        View quickContainer = root.findViewById(R.id.nav_quick);
         View quick = root.findViewById(R.id.nav_quick_button);
         boolean officer = homeDestination == R.id.officerHome;
 
+        if (quickContainer != null) {
+            quickContainer.setVisibility(officer ? View.GONE : View.VISIBLE);
+        }
+
+        ImageView homeIcon = root.findViewById(R.id.nav_home_icon);
+        ImageView walletIcon = root.findViewById(R.id.nav_wallet_icon);
+        ImageView accountsIcon = root.findViewById(R.id.nav_accounts_icon);
+        ImageView profileIcon = root.findViewById(R.id.nav_profile_icon);
+        if (homeIcon != null) homeIcon.setImageResource(R.drawable.ic_nav_home);
+        if (walletIcon != null) {
+            walletIcon.setImageResource(officer ? R.drawable.ic_officer_customers : R.drawable.ic_nav_wallet);
+        }
+        if (accountsIcon != null) {
+            accountsIcon.setImageResource(officer ? R.drawable.ic_shield : R.drawable.ic_nav_accounts);
+        }
+        if (profileIcon != null) profileIcon.setImageResource(R.drawable.ic_nav_person);
+
         ((TextView) root.findViewById(R.id.nav_home_label)).setText(officer ? "Tổng quan" : "Trang chủ");
         ((TextView) root.findViewById(R.id.nav_wallet_label)).setText(officer ? "Khách hàng" : "Ví");
-        ((TextView) root.findViewById(R.id.nav_accounts_label)).setText(officer ? "Duyệt" : "Thẻ");
-        ((TextView) root.findViewById(R.id.nav_profile_label)).setText(officer ? "Nhân sự" : "Cá nhân");
-        quick.setContentDescription(officer ? "Tác vụ vận hành" : "Thao tác nhanh");
+        ((TextView) root.findViewById(R.id.nav_accounts_label)).setText(officer ? "eKYC" : "Thẻ");
+        ((TextView) root.findViewById(R.id.nav_profile_label)).setText("Cá nhân");
+        quick.setContentDescription("Thao tác nhanh");
 
         home.setBackgroundResource(0);
         wallet.setBackgroundResource(0);
@@ -72,8 +90,8 @@ public final class BottomNavigationBinder {
         accounts.setOnClickListener(v -> {
             if (officer) {
                 Bundle officerArgs = new Bundle();
-                officerArgs.putString("title", "Duyệt hồ sơ eKYC");
-                officerArgs.putString("subtitle", "Xem và xử lý các yêu cầu xác thực danh tính.");
+                officerArgs.putString("title", "Hồ sơ eKYC");
+                officerArgs.putString("subtitle", "Theo dõi kết quả kiểm tra tự động và bằng chứng hồ sơ.");
                 navController.navigate(R.id.officerEkyc, officerArgs);
             } else {
                 selectTab(root, navController, homeDestination, R.id.nav_accounts);
@@ -81,19 +99,13 @@ public final class BottomNavigationBinder {
         });
 
         quick.setOnClickListener(v -> {
-            if (officer) {
-                Bundle officerArgs = new Bundle();
-                officerArgs.putString("title", "Kiểm tra giao dịch & Audit");
-                officerArgs.putString("subtitle", "Theo dõi lịch sử và audit log theo permission.");
-                navController.navigate(R.id.officerAudit, officerArgs);
+            if (officer) return;
+            if (root.getContext() instanceof FragmentActivity) {
+                FragmentActivity activity = (FragmentActivity) root.getContext();
+                QuickActionsBottomSheet sheet = new QuickActionsBottomSheet();
+                sheet.show(activity.getSupportFragmentManager(), "QuickActions");
             } else {
-                if (root.getContext() instanceof FragmentActivity) {
-                    FragmentActivity activity = (FragmentActivity) root.getContext();
-                    QuickActionsBottomSheet sheet = new QuickActionsBottomSheet();
-                    sheet.show(activity.getSupportFragmentManager(), "QuickActions");
-                } else {
-                    navigate(navController, R.id.transfer);
-                }
+                navigate(navController, R.id.transfer);
             }
         });
 

@@ -18,8 +18,8 @@
 
         <ImageButton
             android:id="@+id/back_button"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:background="@drawable/circle_action_button"
             android:contentDescription="Quay lại"
             android:padding="12dp"
@@ -32,13 +32,7 @@
             android:layout_marginStart="12dp"
             android:layout_weight="1"
             android:orientation="vertical">
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="TÀI KHOẢN OFFICER"
-                android:textColor="@color/slate_blue"
-                android:textSize="11sp"
-                android:textStyle="bold" />
+           
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -47,16 +41,6 @@
                 android:textSize="20sp"
                 android:textStyle="bold" />
         </LinearLayout>
-
-        <ImageButton
-            android:id="@+id/refresh_button"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:background="@drawable/circle_action_button"
-            android:contentDescription="Tải lại danh sách"
-            android:padding="12dp"
-            android:src="@drawable/ic_refresh"
-            app:tint="@color/navy" />
     </LinearLayout>
 
     <LinearLayout
@@ -105,19 +89,13 @@
             android:textColor="@color/ink_muted"
             android:textSize="13sp" />
 
-        <ScrollView
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/accounts_recycler"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
             android:clipToPadding="false"
-            android:fillViewport="true"
             android:paddingBottom="108dp"
-            android:scrollbars="none">
-            <LinearLayout
-                android:id="@+id/accounts_container"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical" />
-        </ScrollView>
+            android:scrollbars="none" />
     </LinearLayout>
 </LinearLayout>

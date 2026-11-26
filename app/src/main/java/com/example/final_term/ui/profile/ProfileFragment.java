@@ -57,6 +57,8 @@ public final class ProfileFragment extends Fragment {
     private ActivityResultLauncher<String> avatarPicker;
     private boolean avatarUploading;
     private String currentUserId;
+    private boolean isCustomerRole = true;
+    private AuthState latestAuthState;
     private static final ExecutorService AVATAR_PROCESSOR = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
@@ -95,13 +97,53 @@ public final class ProfileFragment extends Fragment {
                 .observe(getViewLifecycleOwner(), authState -> {
                     render(authState);
                     if (authState != null && authState.getUser() != null) {
+                        latestAuthState = authState;
                         boolean customer = authState.getUser().getRole()
                                 == com.example.final_term.auth.UserRole.CUSTOMER;
+                        isCustomerRole = customer;
                         binding.ekycBadge.setVisibility(customer ? View.VISIBLE : View.GONE);
-                        if (customer) fetchEkycStatus();
-                        binding.itemPersonalInfo.setVisibility(customer ? View.VISIBLE : View.GONE);
-                        binding.itemPersonalInfo.setOnClickListener(customer ? v -> openProfileEditor() : null);
-                        binding.ekycBadge.setOnClickListener(customer ? openEkycListener : null);
+                        binding.itemPersonalInfo.setVisibility(View.VISIBLE);
+                        binding.cardSecuritySection.setVisibility(customer ? View.VISIBLE : View.GONE);
+                        binding.itemNotifications.setVisibility(customer ? View.VISIBLE : View.GONE);
+                        binding.itemOfficerAudit.setVisibility(customer ? View.GONE : View.VISIBLE);
+                        binding.itemOfficerRates.setVisibility(customer ? View.GONE : View.VISIBLE);
+                        if (customer) {
+                            binding.profileHeaderTitle.setText("Cá nhân");
+                            binding.profileSectionAccountTitle.setText("TÀI KHOẢN & THẺ");
+                            binding.profilePersonalInfoTitle.setText("Thông tin cá nhân");
+                            binding.logoutButton.setText("Đăng xuất tài khoản");
+                            binding.itemPersonalInfo.setOnClickListener(v -> openProfileEditor());
+                            binding.itemNotifications.setOnClickListener(v -> openProfileEditor());
+                            binding.itemLanguage.setOnClickListener(v -> openProfileEditor());
+                            binding.ekycBadge.setOnClickListener(openEkycListener);
+                            fetchEkycStatus();
+                        } else {
+                            binding.profileHeaderTitle.setText("Hồ sơ cán bộ");
+                            binding.profileSectionAccountTitle.setText("HỒ SƠ CÁN BỘ");
+                            binding.profilePersonalInfoTitle.setText("Thông tin công vụ & quyền hạn");
+                            binding.customerNoText.setText("Vai trò: Cán bộ ngân hàng");
+                            binding.customerTierText.setText(authState.getUser().isActive()
+                                    ? "Đang hoạt động" : "Tạm khóa");
+                            binding.personalInfoSummary.setText("Xem mã cán bộ, email công vụ và quyền hạn");
+                            binding.logoutButton.setText("Đăng xuất khỏi phiên vận hành");
+                            binding.languageStatusText.setText("Tiếng Việt");
+                            binding.itemPersonalInfo.setOnClickListener(v -> showOfficerDetailsDialog());
+                            binding.itemOfficerAudit.setOnClickListener(v -> {
+                                Bundle officerArgs = new Bundle();
+                                officerArgs.putString("title", "Kiểm tra giao dịch");
+                                officerArgs.putString("subtitle", "Theo dõi lịch sử thao tác của cán bộ.");
+                                NavHostFragment.findNavController(this).navigate(R.id.officerAudit, officerArgs);
+                            });
+                            binding.itemOfficerRates.setOnClickListener(v -> {
+                                Bundle officerArgs = new Bundle();
+                                officerArgs.putString("title", "Chính sách lãi suất");
+                                officerArgs.putString("subtitle", "Quản lý biểu lãi suất hiện hành và ngày hiệu lực.");
+                                NavHostFragment.findNavController(this).navigate(R.id.officerRates, officerArgs);
+                            });
+                            binding.itemLanguage.setOnClickListener(v ->
+                                    Toast.makeText(requireContext(), "Ứng dụng đang sử dụng Tiếng Việt.", Toast.LENGTH_SHORT).show());
+                            binding.ekycBadge.setOnClickListener(null);
+                        }
                         loadProfile();
                     }
                 });
@@ -202,11 +244,42 @@ public final class ProfileFragment extends Fragment {
                 .show();
     }
 
+    private void showOfficerDetailsDialog() {
+        if (!isAdded() || latestAuthState == null || latestAuthState.getUser() == null) return;
+        var user = latestAuthState.getUser();
+        String fullName = user.getFullName() == null || user.getFullName().trim().isEmpty()
+                ? "Cán bộ Nimbus Bank" : user.getFullName().trim();
+        String email = user.getEmail() == null ? "—" : user.getEmail().trim();
+        String uid = user.getUid() == null ? "—" : user.getUid().trim();
+        String shortCode = uid.length() > 8 ? uid.substring(0, 8).toUpperCase() : uid;
+        boolean active = user.isActive();
+
+        View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_officer_profile_detail, null);
+        android.widget.TextView nameTv = dialogView.findViewById(R.id.officer_detail_name);
+        android.widget.TextView statusTv = dialogView.findViewById(R.id.officer_detail_status);
+        android.widget.TextView codeTv = dialogView.findViewById(R.id.officer_detail_code);
+        android.widget.TextView emailTv = dialogView.findViewById(R.id.officer_detail_email);
+
+        nameTv.setText(fullName);
+        statusTv.setText(active ? "Đang hoạt động" : "Tạm khóa");
+        statusTv.setTextColor(ContextCompat.getColor(requireContext(), active ? R.color.success : R.color.warning));
+        codeTv.setText(shortCode);
+        emailTv.setText(email);
+
+        new ThemedDialogBuilder(requireContext())
+                .setTitle("Thông tin công vụ")
+                .setView(dialogView)
+                .setPositiveButton("Đóng", null)
+                .show();
+    }
+
     private void loadProfile() {
         if (apiClient == null || binding == null) return;
         var current = binding;
         profileLoaded = false;
-        current.personalInfoSummary.setText("Đang tải thông tin…");
+        if (isCustomerRole) {
+            current.personalInfoSummary.setText("Đang tải thông tin…");
+        }
         apiClient.get("/me").addOnCompleteListener(task -> {
             if (binding != current) return;
             try {
@@ -229,7 +302,7 @@ public final class ProfileFragment extends Fragment {
 
     private void renderPreferenceSummaries() {
         if (binding == null) return;
-        if (profileLoaded && currentProfile != null) {
+        if (isCustomerRole && profileLoaded && currentProfile != null) {
             String customerNo = currentProfile.optString("customerNo", "").trim();
             if (!customerNo.isEmpty()) binding.customerNoText.setText("Mã KH: " + customerNo);
             String tier = currentProfile.optString("tier", "").trim();
@@ -238,21 +311,25 @@ public final class ProfileFragment extends Fragment {
             }
         }
         if (!profileLoaded) {
-            binding.personalInfoSummary.setText("Chạm để cập nhật email hoặc số điện thoại");
-            binding.notificationsStatusText.setText("—");
-            binding.languageStatusText.setText("—");
+            if (isCustomerRole) {
+                binding.personalInfoSummary.setText("Chạm để cập nhật email hoặc số điện thoại");
+                binding.notificationsStatusText.setText("—");
+                binding.languageStatusText.setText("—");
+            }
             return;
         }
-        String email = currentProfile.optString("contactEmail", "").trim();
-        String phone = currentProfile.optString("contactPhone", "").trim();
-        if (!email.isEmpty() && !phone.isEmpty()) {
-            binding.personalInfoSummary.setText("Email và số điện thoại đã cập nhật");
-        } else if (!email.isEmpty()) {
-            binding.personalInfoSummary.setText("Email đã cập nhật");
-        } else if (!phone.isEmpty()) {
-            binding.personalInfoSummary.setText("Số điện thoại đã cập nhật");
-        } else {
-            binding.personalInfoSummary.setText("Thêm email hoặc số điện thoại liên hệ");
+        if (isCustomerRole) {
+            String email = currentProfile.optString("contactEmail", "").trim();
+            String phone = currentProfile.optString("contactPhone", "").trim();
+            if (!email.isEmpty() && !phone.isEmpty()) {
+                binding.personalInfoSummary.setText("Email và số điện thoại đã cập nhật");
+            } else if (!email.isEmpty()) {
+                binding.personalInfoSummary.setText("Email đã cập nhật");
+            } else if (!phone.isEmpty()) {
+                binding.personalInfoSummary.setText("Số điện thoại đã cập nhật");
+            } else {
+                binding.personalInfoSummary.setText("Thêm email hoặc số điện thoại liên hệ");
+            }
         }
         JSONObject preferences = currentProfile.optJSONObject("preferences");
         boolean notificationsEnabled = preferences == null

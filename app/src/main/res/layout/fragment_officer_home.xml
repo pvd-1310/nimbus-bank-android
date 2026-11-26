@@ -42,15 +42,6 @@
             android:orientation="vertical">
 
             <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Không gian vận hành"
-                android:textColor="@color/ink_muted"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.05" />
-
-            <TextView
                 android:id="@+id/identity_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -72,7 +63,7 @@
             android:paddingEnd="12dp"
             android:paddingTop="6dp"
             android:paddingBottom="6dp"
-            android:text="OFFICER"
+            android:text="Cán bộ"
             android:textColor="@color/navy"
             android:textSize="11sp"
             android:textStyle="bold" />
@@ -91,121 +82,27 @@
             android:orientation="vertical"
             android:paddingStart="20dp"
             android:paddingEnd="20dp"
-            android:paddingBottom="90dp">
+            android:paddingBottom="96dp">
 
             <!-- Title & Subtitle -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="8dp"
                 android:text="Bảng điều hành"
                 android:textColor="@color/ink"
-                android:textSize="28sp"
+                android:textSize="26sp"
                 android:textStyle="bold"
                 android:fontFamily="sans-serif-medium" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="Theo dõi trạng thái vận hành, phê duyệt và giám sát hệ thống."
-                android:textColor="@color/ink_muted"
-                android:textSize="14sp" />
-
-            <!-- KPI Metric Cards Grid (2x2) -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="18dp"
-                android:orientation="horizontal">
-
-                <!-- Metric 1: Khách hàng -->
-                <com.google.android.material.card.MaterialCardView
-                    android:layout_width="0dp"
-                    android:layout_height="100dp"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="6dp"
-                    app:cardBackgroundColor="@color/glass_card"
-                    app:cardCornerRadius="20dp"
-                    app:cardElevation="0dp"
-                    app:strokeColor="@color/glass_border"
-                    app:strokeWidth="1dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:orientation="vertical"
-                        android:gravity="center_vertical"
-                        android:padding="14dp">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Khách hàng"
-                            android:textColor="@color/ink_muted"
-                            android:textSize="12sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:id="@+id/account_metric"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="6dp"
-                            android:text="Danh bạ"
-                            android:textColor="@color/ink"
-                            android:textSize="20sp"
-                            android:textStyle="bold" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-
-                <!-- Metric 2: eKYC đang xử lý -->
-                <com.google.android.material.card.MaterialCardView
-                    android:layout_width="0dp"
-                    android:layout_height="100dp"
-                    android:layout_weight="1"
-                    android:layout_marginStart="6dp"
-                    app:cardBackgroundColor="@color/glass_card"
-                    app:cardCornerRadius="20dp"
-                    app:cardElevation="0dp"
-                    app:strokeColor="@color/glass_border"
-                    app:strokeWidth="1dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:orientation="vertical"
-                        android:gravity="center_vertical"
-                        android:padding="14dp">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="eKYC đang xử lý"
-                            android:textColor="@color/warning"
-                            android:textSize="12sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:id="@+id/ekyc_metric"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="6dp"
-                            android:text="Hàng đợi"
-                            android:textColor="@color/warning"
-                            android:textSize="20sp"
-                            android:textStyle="bold" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-            </LinearLayout>
 
             <!-- Operational Action Queue Section -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
+                android:layout_marginTop="20dp"
                 android:text="Tác vụ vận hành ưu tiên"
                 android:textColor="@color/ink"
-                android:textSize="18sp"
+                android:textSize="17sp"
                 android:textStyle="bold" />
 
             <!-- Card Action 1: Quản lý khách hàng -->
@@ -235,6 +132,7 @@
                             android:layout_width="40dp"
                             android:layout_height="40dp"
                             android:background="@drawable/circle_action_button"
+                            android:contentDescription="@null"
                             android:padding="10dp"
                             android:src="@drawable/ic_search"
                             app:tint="@color/navy" />
@@ -254,13 +152,6 @@
                                 android:textSize="15sp"
                                 android:textStyle="bold" />
 
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="2dp"
-                                android:text="Tìm tài khoản thanh toán, xem chủ tài khoản và điều chỉnh hồ sơ."
-                                android:textColor="@color/ink_muted"
-                                android:textSize="13sp" />
                         </LinearLayout>
                     </LinearLayout>
 
@@ -305,6 +196,7 @@
                             android:layout_width="40dp"
                             android:layout_height="40dp"
                             android:background="@drawable/circle_action_button"
+                            android:contentDescription="@null"
                             android:padding="10dp"
                             android:src="@drawable/ic_shield"
                             app:tint="@color/warning" />
@@ -323,14 +215,6 @@
                                 android:textColor="@color/ink"
                                 android:textSize="15sp"
                                 android:textStyle="bold" />
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="2dp"
-                                android:text="Xem trạng thái và bằng chứng của hồ sơ eKYC được xử lý tự động."
-                                android:textColor="@color/ink_muted"
-                                android:textSize="13sp" />
                         </LinearLayout>
                     </LinearLayout>
 
@@ -374,6 +258,7 @@
                             android:layout_width="40dp"
                             android:layout_height="40dp"
                             android:background="@drawable/circle_action_button"
+                            android:contentDescription="@null"
                             android:padding="10dp"
                             android:src="@drawable/ic_receipt"
                             app:tint="@color/navy" />
@@ -393,13 +278,7 @@
                                 android:textSize="15sp"
                                 android:textStyle="bold" />
 
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="2dp"
-                                android:text="Theo dõi giao dịch và các thay đổi của cán bộ."
-                                android:textColor="@color/ink_muted"
-                                android:textSize="13sp" />
+                       
                         </LinearLayout>
                     </LinearLayout>
 
@@ -463,6 +342,7 @@
                             android:layout_width="40dp"
                             android:layout_height="40dp"
                             android:background="@drawable/circle_action_button"
+                            android:contentDescription="@null"
                             android:padding="10dp"
                             android:src="@drawable/ic_trending_up"
                             app:tint="@color/navy" />
@@ -482,13 +362,6 @@
                                 android:textSize="15sp"
                                 android:textStyle="bold" />
 
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="2dp"
-                                android:text="Quản lý biểu lãi suất theo version và kiểm tra ngày hiệu lực."
-                                android:textColor="@color/ink_muted"
-                                android:textSize="13sp" />
                         </LinearLayout>
                     </LinearLayout>
 
@@ -505,29 +378,6 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Compliance notice -->
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                android:background="@drawable/glass_panel_soft"
-                android:padding="14dp"
-                android:text="Thao tác cấp mới, điều chỉnh thông tin và kết quả kiểm tra eKYC được lưu trong lịch sử thao tác."
-                android:textColor="@color/ink_muted"
-                android:textSize="12sp"
-                android:lineSpacingExtra="2dp" />
-
-            <!-- Sign Out Button -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/sign_out_button"
-                android:layout_width="match_parent"
-                android:layout_height="50dp"
-                android:layout_marginTop="20dp"
-                android:text="Đăng xuất khỏi phiên vận hành"
-                android:textColor="@color/danger"
-                android:textSize="14sp"
-                android:background="@drawable/glass_pill_button"
-                app:backgroundTint="@null" />
         </LinearLayout>
     </ScrollView>
 </LinearLayout>
