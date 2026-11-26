@@ -27,6 +27,7 @@ import com.example.final_term.core.FinalTermApplication;
 import com.example.final_term.data.BackendApiClient;
 import com.example.final_term.data.ReadSummaryFormatter;
 import com.example.final_term.databinding.FragmentMobileTopupBinding;
+import com.example.final_term.ui.transaction.TransactionFlowRequest;
 import com.google.android.material.card.MaterialCardView;
 
 import org.json.JSONArray;
@@ -317,9 +318,20 @@ public final class MobileTopupFragment extends Fragment {
             return;
         }
         if (selectedProduct == null) return;
-        UtilitiesHubDialogFragment checkout = UtilitiesHubDialogFragment.newOrderCheckoutInstance(
-                "TOPUP", selectedProduct.optString("id"), phone, sourceAccountId);
-        checkout.show(getParentFragmentManager(), "UtilityCheckout");
+        String carrier = displayNetwork(selectedProduct.optString("name", selectedNetwork == null ? "" : selectedNetwork));
+        TransactionFlowRequest flowRequest = TransactionFlowRequest.orderPayment(
+                "TOPUP",
+                selectedProduct.optString("id"),
+                carrier,
+                "Nạp tiền điện thoại",
+                phone,
+                null,
+                null,
+                phone,
+                selectedProduct.optLong("amountMinor"),
+                selectedProduct.optString("currency", "VND"),
+                sourceAccountId);
+        Navigation.findNavController(requireView()).navigate(R.id.transactionFlow, flowRequest.toBundle());
     }
 
     private void showStatus(String message) {

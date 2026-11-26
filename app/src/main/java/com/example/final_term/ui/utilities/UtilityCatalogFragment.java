@@ -20,6 +20,7 @@ import com.example.final_term.core.FinalTermApplication;
 import com.example.final_term.data.BackendApiClient;
 import com.example.final_term.data.ReadSummaryFormatter;
 import com.example.final_term.databinding.FragmentUtilityCatalogBinding;
+import com.example.final_term.ui.transaction.TransactionFlowRequest;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 
@@ -379,9 +380,24 @@ public final class UtilityCatalogFragment extends Fragment {
     }
 
     private void openCheckout(JSONObject product) {
-        UtilitiesHubDialogFragment checkout = UtilitiesHubDialogFragment.newOrderCheckoutInstance(
-                serviceType, product.optString("id"), null, sourceAccountId);
-        checkout.show(getParentFragmentManager(), "UtilityCheckout");
+        String productName = product.optString("name", serviceTitle(serviceType));
+        String providerName = product.optString("airline", "").trim();
+        if (providerName.isEmpty()) {
+            providerName = serviceTitle(serviceType);
+        }
+        TransactionFlowRequest flowRequest = TransactionFlowRequest.orderPayment(
+                serviceType,
+                product.optString("id"),
+                providerName,
+                productName,
+                null,
+                null,
+                null,
+                null,
+                product.optLong("amountMinor"),
+                product.optString("currency", "VND"),
+                sourceAccountId);
+        Navigation.findNavController(requireView()).navigate(R.id.transactionFlow, flowRequest.toBundle());
     }
 
     private String serviceTitle(String type) {

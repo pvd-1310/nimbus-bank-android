@@ -18,6 +18,7 @@ import com.example.final_term.core.FinalTermApplication;
 import com.example.final_term.data.BackendApiClient;
 import com.example.final_term.data.ReadSummaryFormatter;
 import com.example.final_term.databinding.FragmentBillPaymentBinding;
+import com.example.final_term.ui.transaction.TransactionFlowRequest;
 import com.google.android.material.button.MaterialButton;
 
 import org.json.JSONArray;
@@ -232,9 +233,19 @@ public final class BillPaymentFragment extends Fragment {
 
     private void openCheckout() {
         if (selectedBill == null || !"UNPAID".equalsIgnoreCase(selectedBill.optString("status"))) return;
-        UtilitiesHubDialogFragment checkout = UtilitiesHubDialogFragment.newCheckoutInstance(
-                selectedBill.optString("id"), sourceAccountId);
-        checkout.show(getParentFragmentManager(), "UtilityCheckout");
+        String serviceLabel = "WATER".equalsIgnoreCase(serviceType)
+                ? "Thanh toán tiền nước"
+                : "OTHER".equalsIgnoreCase(serviceType) ? "Hóa đơn dịch vụ" : "Thanh toán tiền điện";
+        TransactionFlowRequest flowRequest = TransactionFlowRequest.billPayment(
+                selectedBill.optString("id"),
+                serviceLabel,
+                binding.providerName.getText().toString(),
+                selectedBill.optString("invoiceRef", selectedBill.optString("id")),
+                null,
+                selectedBill.optLong("amountMinor"),
+                selectedBill.optString("currency", "VND"),
+                sourceAccountId);
+        Navigation.findNavController(requireView()).navigate(R.id.transactionFlow, flowRequest.toBundle());
     }
 
     private void showStatus(String message) {
