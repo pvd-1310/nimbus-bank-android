@@ -28,6 +28,7 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.appcompat.app.AlertDialog;
+import androidx.navigation.fragment.NavHostFragment;
 
 import com.example.final_term.R;
 import com.example.final_term.auth.AuthState;
@@ -35,8 +36,7 @@ import com.example.final_term.core.FinalTermApplication;
 import com.example.final_term.data.AvatarCache;
 import com.example.final_term.data.BackendApiClient;
 import com.example.final_term.databinding.FragmentProfileBinding;
-import com.example.final_term.databinding.DialogProfileContactBinding;
-import com.google.android.material.bottomsheet.BottomSheetDialog;
+import com.example.final_term.ui.common.ThemedDialogBuilder;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -151,23 +151,23 @@ public final class ProfileFragment extends Fragment {
         boolean cameraPermission = ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA)
                 == PackageManager.PERMISSION_GRANTED;
 
-        new AlertDialog.Builder(requireContext())
+        new ThemedDialogBuilder(requireContext())
                 .setTitle("Bảo mật khuôn mặt")
                 .setMessage((cameraPermission
                         ? "Máy ảnh đã được cấp quyền. "
                         : "Máy ảnh chưa được cấp quyền. Bạn có thể bật quyền này trong Cài đặt thiết bị. ") +
-                        "Ảnh selfie dùng cho đăng ký và đăng nhập bằng khuôn mặt; phương thức này chưa xác minh CCCD.")
-                .setNeutralButton("Xóa dữ liệu khuôn mặt", (dialog, which) -> confirmRevokeFaceTemplate())
+                        "Ảnh khuôn mặt dùng để đăng ký và đăng nhập nhanh; phương thức này chưa thay thế bước xác minh giấy tờ tùy thân.")
+                .setNeutralButtonDestructive("Xóa dữ liệu khuôn mặt", (dialog, which) -> confirmRevokeFaceTemplate())
                 .setPositiveButton("Đóng", null)
                 .show();
     }
 
     private void confirmRevokeFaceTemplate() {
-        new AlertDialog.Builder(requireContext())
+        new ThemedDialogBuilder(requireContext())
                 .setTitle("Xóa dữ liệu khuôn mặt")
-                .setMessage("Thao tác này sẽ tắt đăng nhập khuôn mặt, đặt eKYC về trạng thái cần đăng ký lại và đưa ảnh eKYC đã tải lên vào hàng chờ xóa. Tài khoản của bạn vẫn hoạt động; bạn cần hoàn tất eKYC mới để bật lại đăng nhập khuôn mặt. Tiếp tục thu hồi?")
+                .setMessage("Thao tác này sẽ tắt đăng nhập bằng khuôn mặt và yêu cầu xác thực lại khi bạn muốn sử dụng tính năng này. Tài khoản của bạn vẫn hoạt động bình thường. Tiếp tục xóa?")
                 .setNegativeButton("Hủy", null)
-                .setPositiveButton("Thu hồi ngay", (d, which) -> {
+                .setPositiveButton("Xóa ngay", (d, which) -> {
                     if (apiClient == null) return;
                     Toast.makeText(requireContext(), "Đang gửi yêu cầu thu hồi…", Toast.LENGTH_SHORT).show();
                     apiClient.post("/me/face/revoke", "{}").addOnCompleteListener(task -> {
@@ -224,14 +224,7 @@ public final class ProfileFragment extends Fragment {
 
     private void openProfileEditor() {
         if (!isAdded()) return;
-        if (profileLoaded) {
-            showContactEditor();
-        } else if (apiClient != null) {
-            Toast.makeText(requireContext(), "Đang tải thông tin cá nhân…", Toast.LENGTH_SHORT).show();
-            loadProfile();
-        } else {
-            Toast.makeText(requireContext(), "Chưa thể tải thông tin cá nhân. Vui lòng thử lại.", Toast.LENGTH_SHORT).show();
-        }
+        NavHostFragment.findNavController(this).navigate(R.id.personalInfo);
     }
 
     private void renderPreferenceSummaries() {
@@ -267,151 +260,6 @@ public final class ProfileFragment extends Fragment {
         String language = preferences == null ? "vi" : preferences.optString("language", "vi");
         binding.notificationsStatusText.setText(notificationsEnabled ? "Bật" : "Tắt");
         binding.languageStatusText.setText("en".equalsIgnoreCase(language) ? "English" : "Tiếng Việt");
-    }
-
-    private void showContactEditor() {
-        DialogProfileContactBinding form = DialogProfileContactBinding.inflate(getLayoutInflater());
-        String identityName = currentProfile.optString("fullName", "");
-        String identityId = currentProfile.optString("nationalIdNumber", "");
-        if (!identityId.isEmpty()) {
-            android.widget.TextView identity = new android.widget.TextView(requireContext());
-            identity.setText("Thông tin định danh\nHọ tên: " + identityName
-                    + "\nSố định danh: " + identityId
-                    + "\nNgày sinh: " + currentProfile.optString("dateOfBirth", "")
-                    + "\nGiới tính: " + currentProfile.optString("gender", "")
-                    + "\nQuốc tịch: " + currentProfile.optString("nationality", "")
-                    + "\nĐịa chỉ: " + currentProfile.optString("address", "")
-                    + "\nCCCD hết hạn: " + currentProfile.optString("identityDocumentExpiry", ""));
-            identity.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
-            identity.setPadding(0, 0, 0, (int) (12 * getResources().getDisplayMetrics().density));
-            ((android.widget.LinearLayout) form.contactEmailLayout.getParent()).addView(identity, 0);
-        }
-        JSONObject preferences = currentProfile.optJSONObject("preferences");
-        form.contactEmailInput.setText(currentProfile.optString("contactEmail", ""));
-        form.contactPhoneInput.setText(currentProfile.optString("contactPhone", ""));
-        form.notificationsSwitch.setChecked(preferences == null
-                || preferences.optBoolean("notificationsEnabled", true));
-        String languageCode = preferences == null ? "vi" : preferences.optString("language", "vi");
-        String[] languageLabels = {"Tiếng Việt", "English"};
-        form.languageInput.setSimpleItems(languageLabels);
-        form.languageInput.setText("en".equalsIgnoreCase(languageCode) ? "English" : "Tiếng Việt", false);
-
-        BottomSheetDialog dialog = new BottomSheetDialog(requireContext());
-        dialog.setContentView(form.getRoot());
-        dialog.setOnShowListener(ignored -> {
-            FrameLayout sheet = dialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
-            if (sheet != null) sheet.setBackgroundColor(Color.TRANSPARENT);
-            dialog.getBehavior().setSkipCollapsed(true);
-            dialog.getBehavior().setState(com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED);
-        });
-        form.closeButton.setOnClickListener(v -> dialog.dismiss());
-        form.cancelButton.setOnClickListener(v -> dialog.dismiss());
-        form.saveButton.setOnClickListener(v -> {
-                String email = form.contactEmailInput.getText() == null
-                        ? "" : form.contactEmailInput.getText().toString().trim();
-                String phone = form.contactPhoneInput.getText() == null
-                        ? "" : form.contactPhoneInput.getText().toString().trim();
-                form.contactEmailLayout.setError(null);
-                form.contactPhoneLayout.setError(null);
-                form.formStatusText.setVisibility(View.GONE);
-
-                if (!email.isEmpty() && !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-                    form.contactEmailLayout.setError("Nhập email hợp lệ.");
-                    form.contactEmailInput.requestFocus();
-                    return;
-                }
-                if (!phone.isEmpty() && !phone.matches("\\+[1-9][0-9]{7,14}")) {
-                    form.contactPhoneLayout.setError("Dùng định dạng quốc tế, ví dụ +84901234567.");
-                    form.contactPhoneInput.requestFocus();
-                    return;
-                }
-
-                View currentFocus = dialog.getCurrentFocus();
-                if (currentFocus != null) {
-                    InputMethodManager imm = (InputMethodManager) requireContext()
-                            .getSystemService(Context.INPUT_METHOD_SERVICE);
-                    if (imm != null) imm.hideSoftInputFromWindow(currentFocus.getWindowToken(), 0);
-                    currentFocus.clearFocus();
-                }
-
-                try {
-                    JSONObject updatedPreferences = new JSONObject(preferences == null ? "{}" : preferences.toString());
-                    String selectedLanguage = String.valueOf(form.languageInput.getText());
-                    updatedPreferences.put("language", "English".equals(selectedLanguage) ? "en" : "vi");
-                    updatedPreferences.put("notificationsEnabled", form.notificationsSwitch.isChecked());
-                    JSONObject body = new JSONObject().put("preferences", updatedPreferences);
-                    if (!email.isEmpty()) body.put("contactEmail", email);
-                    if (!phone.isEmpty()) body.put("contactPhone", phone);
-
-                    form.saveButton.setEnabled(false);
-                    form.cancelButton.setEnabled(false);
-                    form.closeButton.setEnabled(false);
-                    form.saveButton.setText("Đang lưu…");
-                    form.savingProgress.setVisibility(View.VISIBLE);
-                    form.formStatusText.setText("Đang lưu thay đổi…");
-                    form.formStatusText.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
-                    form.formStatusText.setVisibility(View.VISIBLE);
-                    dialog.setCancelable(false);
-                    dialog.getBehavior().setDraggable(false);
-
-                    apiClient.patch("/me", body.toString()).addOnCompleteListener(task -> {
-                        if (!isAdded() || binding == null) return;
-                        form.savingProgress.setVisibility(View.GONE);
-                        form.saveButton.setEnabled(true);
-                        form.cancelButton.setEnabled(true);
-                        form.closeButton.setEnabled(true);
-                        form.saveButton.setText("Lưu thay đổi");
-                        dialog.setCancelable(true);
-                        dialog.getBehavior().setDraggable(true);
-                        if (task.isSuccessful() && task.getResult() != null
-                                && task.getResult().statusCode >= 200 && task.getResult().statusCode < 300) {
-                            Toast.makeText(requireContext(), "Thông tin cá nhân đã được cập nhật.", Toast.LENGTH_SHORT).show();
-                            dialog.dismiss();
-                            loadProfile();
-                            return;
-                        }
-
-                        String message = "Chưa thể lưu thay đổi. Vui lòng kiểm tra kết nối rồi thử lại.";
-                        if (task.isSuccessful() && task.getResult() != null) {
-                            try {
-                                String error = new JSONObject(task.getResult().body).optString("error");
-                                if ("CONTACT_PHONE_EXISTS".equals(error)) {
-                                    form.contactPhoneLayout.setError("Số điện thoại này đã được sử dụng.");
-                                    form.contactPhoneInput.requestFocus();
-                                    message = "Hãy kiểm tra lại số điện thoại liên hệ.";
-                                } else if ("CONTACT_EMAIL_EXISTS".equals(error)) {
-                                    form.contactEmailLayout.setError("Email này đã được sử dụng.");
-                                    form.contactEmailInput.requestFocus();
-                                    message = "Hãy kiểm tra lại email liên hệ.";
-                                } else {
-                                    message = "Chưa thể lưu thay đổi. Vui lòng thử lại sau.";
-                                }
-                            } catch (org.json.JSONException ignoredResponse) {
-                                message = "Chưa thể lưu thay đổi. Vui lòng thử lại sau.";
-                            }
-                        }
-                        form.formStatusText.setText(message);
-                        form.formStatusText.setTextColor(ContextCompat.getColor(requireContext(), R.color.danger));
-                        form.formStatusText.setVisibility(View.VISIBLE);
-                    });
-                } catch (Exception e) {
-                    form.saveButton.setEnabled(true);
-                    form.cancelButton.setEnabled(true);
-                    form.closeButton.setEnabled(true);
-                    form.saveButton.setText("Lưu thay đổi");
-                    form.savingProgress.setVisibility(View.GONE);
-                    dialog.setCancelable(true);
-                    dialog.getBehavior().setDraggable(true);
-                    form.formStatusText.setText("Không thể lưu thông tin. Vui lòng thử lại.");
-                    form.formStatusText.setTextColor(ContextCompat.getColor(requireContext(), R.color.danger));
-                    form.formStatusText.setVisibility(View.VISIBLE);
-                }
-        });
-        dialog.show();
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
-                    | android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
-        }
     }
 
     private void fetchEkycStatus() {

@@ -100,6 +100,10 @@
         android:id="@+id/profile"
         android:name="com.example.final_term.ui.profile.ProfileFragment"
         android:label="Cá nhân và cài đặt" />
+    <fragment
+        android:id="@+id/personalInfo"
+        android:name="com.example.final_term.ui.profile.PersonalInfoFragment"
+        android:label="Thông tin cá nhân" />
     <fragment android:id="@+id/accountDetail" android:name="com.example.final_term.ui.customer.AccountDetailFragment" android:label="Chi tiết tài khoản" />
     <fragment android:id="@+id/historyDetail" android:name="com.example.final_term.ui.customer.HistoryDetailFragment" android:label="Chi tiết lịch sử" />
     <fragment android:id="@+id/savingsDetail" android:name="com.example.final_term.ui.customer.SavingsDetailFragment" android:label="Tài khoản tiết kiệm" />

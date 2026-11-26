@@ -24,7 +24,7 @@ import com.example.final_term.data.ReadSummaryFormatter;
 import com.example.final_term.data.ExternalBankCatalog;
 import com.example.final_term.databinding.FragmentTransferBinding;
 import com.example.final_term.domain.DomainDtos.OtpVerification;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.example.final_term.ui.common.ThemedDialogBuilder;
 import com.stripe.android.PaymentConfiguration;
 import com.stripe.android.paymentsheet.PaymentSheet;
 import com.stripe.android.paymentsheet.PaymentSheetResult;
@@ -205,9 +205,9 @@ public final class TransferFragment extends Fragment {
         });
 
         binding.qrScanShortcut.setOnClickListener(v -> {
-            new MaterialAlertDialogBuilder(requireContext())
+            new ThemedDialogBuilder(requireContext())
                     .setTitle("Quét mã QR chuyển khoản")
-                    .setMessage("Đang chờ kích hoạt camera scan VietQR.")
+                    .setMessage("Tính năng quét mã QR chuyển khoản đang được hoàn thiện.")
                     .setPositiveButton("Đóng", null)
                     .show();
         });

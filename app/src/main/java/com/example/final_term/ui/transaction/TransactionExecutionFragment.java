@@ -35,7 +35,7 @@ import com.example.final_term.domain.DomainDtos.OtpVerification;
 import com.example.final_term.ui.ekyc.FaceCamera;
 import com.google.android.gms.tasks.Task;
 import com.google.android.gms.tasks.Tasks;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.example.final_term.ui.common.ThemedDialogBuilder;
 import com.stripe.android.PaymentConfiguration;
 import com.stripe.android.paymentsheet.PaymentSheet;
 import com.stripe.android.paymentsheet.PaymentSheetResult;
@@ -1202,9 +1202,9 @@ public final class TransactionExecutionFragment extends Fragment {
     }
 
     private void showSecurityInfoDialog() {
-        new MaterialAlertDialogBuilder(requireContext())
+        new ThemedDialogBuilder(requireContext())
                 .setTitle("Bảo mật giao dịch")
-                .setMessage("Giao dịch được bảo vệ bằng mã hóa đầu cuối (E2E) và xác thực qua Nimbus Smart OTP. "
+                .setMessage("Giao dịch được bảo vệ bằng mã hóa bảo mật và xác thực qua Nimbus Smart OTP. "
                         + "Các giao dịch giá trị cao sẽ yêu cầu thêm bước xác minh khuôn mặt.")
                 .setPositiveButton("Đã hiểu", null)
                 .show();

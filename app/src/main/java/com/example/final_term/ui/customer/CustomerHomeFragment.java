@@ -25,7 +25,7 @@ import com.example.final_term.data.ReadSummaryFormatter;
 import com.example.final_term.databinding.FragmentCustomerHomeBinding;
 import com.example.final_term.databinding.ItemTransactionRowBinding;
 import com.example.final_term.ui.quickactions.QuickActionsBottomSheet;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.example.final_term.ui.common.ThemedDialogBuilder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -132,7 +132,7 @@ public final class CustomerHomeFragment extends Fragment {
         });
 
         binding.quickQr.setOnClickListener(v -> {
-            new MaterialAlertDialogBuilder(requireContext())
+            new ThemedDialogBuilder(requireContext())
                     .setTitle("Quét mã QR")
                     .setMessage("Tính năng này đang được hoàn thiện.")
                     .setPositiveButton("Đóng", null)

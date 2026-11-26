@@ -38,7 +38,7 @@ import com.example.final_term.data.ReadSummaryFormatter;
 import com.example.final_term.databinding.FragmentAccountListBinding;
 import com.example.final_term.ui.common.SignatureBarChartView;
 import com.google.android.material.button.MaterialButton;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.example.final_term.ui.common.ThemedDialogBuilder;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -553,7 +553,7 @@ public final class AccountListFragment extends Fragment {
                                 new JSONObject().put("nfcEnabled", nfcOn[0]).toString());
                     } catch (Exception ignored) { }
                 } else if (actionIndex == 1) {
-                    new MaterialAlertDialogBuilder(requireContext())
+                    new ThemedDialogBuilder(requireContext())
                             .setTitle("Hạn mức thẻ")
                             .setMessage("Hạn mức chi tiêu thẻ hiện tại: "
                                     + ReadSummaryFormatter.formatCurrency(cardLimit[0], account.currency) + " mỗi ngày.")
@@ -1026,7 +1026,7 @@ public final class AccountListFragment extends Fragment {
         scrollView.addView(layout);
         scrollView.setFocusableInTouchMode(true);
 
-        androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
+        androidx.appcompat.app.AlertDialog dialog = new ThemedDialogBuilder(requireContext())
                 .setTitle("Cấp mới tài khoản khách hàng")
                 .setView(scrollView)
                 .setPositiveButton("Tạo hồ sơ", null)
@@ -1101,7 +1101,7 @@ public final class AccountListFragment extends Fragment {
                                                 if (!isAdded()) return;
                                                 String finalMessage = reset.isSuccessful() ? createdMessage
                                                         : createdMessage + " Email chưa gửi được; khách hàng có thể dùng mục Đặt/quên mật khẩu ở màn đăng nhập.";
-                                                new MaterialAlertDialogBuilder(requireContext()).setTitle("Đã tiếp nhận khách hàng")
+                                                new ThemedDialogBuilder(requireContext()).setTitle("Đã tiếp nhận khách hàng")
                                                         .setMessage(finalMessage).setPositiveButton("Đóng", null).show();
                                                 load();
                                             });
@@ -1174,7 +1174,7 @@ public final class AccountListFragment extends Fragment {
         scrollView.addView(layout);
         scrollView.setFocusableInTouchMode(true);
 
-        androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
+        androidx.appcompat.app.AlertDialog dialog = new ThemedDialogBuilder(requireContext())
                 .setTitle("Cập nhật hồ sơ khách hàng")
                 .setMessage("Thao tác này sẽ được lưu vào lịch sử thay đổi của hệ thống ngân hàng.")
                 .setView(scrollView)
@@ -1241,7 +1241,7 @@ public final class AccountListFragment extends Fragment {
                                         if (changes != null) summary += "\n\nTrước:\n" + changes.optJSONObject("before")
                                                 + "\n\nSau:\n" + changes.optJSONObject("after");
                                     } catch (Exception ignored) { }
-                                    new MaterialAlertDialogBuilder(requireContext()).setTitle("Thành công")
+                                    new ThemedDialogBuilder(requireContext()).setTitle("Thành công")
                                             .setMessage(summary).setPositiveButton("Đóng", null).show();
                                     load();
                                 } else {
@@ -1282,7 +1282,7 @@ public final class AccountListFragment extends Fragment {
                                     .append("\nSau: ").append(item.optJSONObject("after"));
                         }
                         if (history.length() == 0) history.append("Chưa có thay đổi hồ sơ nào.");
-                        new MaterialAlertDialogBuilder(requireContext()).setTitle("Lịch sử hồ sơ khách hàng")
+                        new ThemedDialogBuilder(requireContext()).setTitle("Lịch sử hồ sơ khách hàng")
                                 .setMessage(history.toString()).setPositiveButton("Đóng", null).show();
                     } catch (Exception ignored) {
                         Toast.makeText(requireContext(), "Dữ liệu lịch sử không hợp lệ.", Toast.LENGTH_SHORT).show();
@@ -1328,7 +1328,7 @@ public final class AccountListFragment extends Fragment {
 
     private void showNotificationsDialog() {
         if (notifications == null || notifications.isEmpty()) {
-            new MaterialAlertDialogBuilder(requireContext())
+            new ThemedDialogBuilder(requireContext())
                     .setTitle("Thông báo")
                     .setMessage("Bạn không có thông báo mới.")
                     .setPositiveButton("Đóng", null)
@@ -1339,7 +1339,7 @@ public final class AccountListFragment extends Fragment {
         for (ReadModels.NotificationSummary n : notifications) {
             sb.append("• ").append(n.title).append("\n").append(n.body).append("\n\n");
         }
-        new MaterialAlertDialogBuilder(requireContext())
+        new ThemedDialogBuilder(requireContext())
                 .setTitle("Thông báo tài khoản")
                 .setMessage(sb.toString().trim())
                 .setPositiveButton("Đóng", null)

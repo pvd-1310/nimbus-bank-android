@@ -83,7 +83,7 @@ public final class InAppCameraDialogFragment extends DialogFragment {
         title.setGravity(Gravity.CENTER);
         header.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1));
         MaterialButton help = iconButton(R.drawable.ic_help, "Trợ giúp định danh");
-        help.setOnClickListener(v -> new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+        help.setOnClickListener(v -> new com.example.final_term.ui.common.ThemedDialogBuilder(requireContext())
                 .setTitle("Hướng dẫn chụp ảnh")
                 .setMessage(isFrontCamera()
                         ? "Giữ điện thoại ngang tầm mắt, nhìn thẳng và đưa toàn bộ khuôn mặt vào khung."
