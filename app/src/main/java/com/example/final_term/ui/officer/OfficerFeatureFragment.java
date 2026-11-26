@@ -37,6 +37,7 @@ import java.util.List;
 
 public final class OfficerFeatureFragment extends Fragment {
     private FragmentOfficerFeatureBinding binding;
+    private int ratePolicyLoadGeneration;
     private final List<JSONObject> currentEkycItems = new ArrayList<>();
     private int currentEkycFilter = 0; // 0: all, 1: reviewing, 2: verified
 
@@ -557,11 +558,12 @@ public final class OfficerFeatureFragment extends Fragment {
         binding.actionButton.setText("Cập nhật chính sách lãi suất");
 
         var current = binding;
+        int generation = ++ratePolicyLoadGeneration;
         current.itemsContainer.removeAllViews();
         current.statusText.setText("Đang tải chính sách lãi suất…");
         current.statusText.setOnClickListener(v -> renderRatePolicies(api));
         api.get("/officer/rate-policies?limit=100").addOnCompleteListener(task -> {
-            if (binding != current) return;
+            if (binding != current || generation != ratePolicyLoadGeneration) return;
             try {
                 if (!task.isSuccessful()) {
                     current.statusText.setText("Không thể kết nối để tải chính sách lãi suất. Chạm để thử lại.");
@@ -580,8 +582,15 @@ public final class OfficerFeatureFragment extends Fragment {
                 if (statusCode != 200)
                     throw new JSONException("Unavailable");
                 JSONArray items = new JSONObject(task.getResult().body).getJSONArray("items");
-                for (int i = 0; i < items.length(); i++) {
-                    JSONObject policy = items.getJSONObject(i);
+                List<JSONObject> policies = new ArrayList<>();
+                for (int i = 0; i < items.length(); i++) policies.add(items.getJSONObject(i));
+                policies.sort((left, right) -> {
+                    int byEffectiveDate = Long.compare(left.optLong("effectiveFrom"), right.optLong("effectiveFrom"));
+                    if (byEffectiveDate != 0) return byEffectiveDate;
+                    int byType = left.optString("rateType").compareTo(right.optString("rateType"));
+                    return byType != 0 ? byType : Integer.compare(left.optInt("version"), right.optInt("version"));
+                });
+                for (JSONObject policy : policies) {
                     int bps = policy.getInt("annualRateBasisPoints");
                     String rateType = policy.optString("rateType", "SAVINGS");
                     String state = policy.optString("status");

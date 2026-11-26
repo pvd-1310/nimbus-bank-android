@@ -200,7 +200,7 @@ public final class LoginFragment extends Fragment {
         if (state.getStatus() == AuthState.Status.ERROR) {
             preserveFaceError = false;
             binding.errorText.setVisibility(View.VISIBLE);
-            binding.errorText.setText(state.getMessage());
+            binding.errorText.setText(mapError(state.getMessage()));
         } else if (!loading && !preserveFaceError) {
             binding.errorText.setVisibility(View.GONE);
         }
@@ -208,6 +208,13 @@ public final class LoginFragment extends Fragment {
 
     private String mapError(String raw) {
         if (raw == null) return getString(R.string.error_sign_in);
+        String normalized = raw.toLowerCase(java.util.Locale.ROOT);
+        if (normalized.contains("supplied auth credential")
+                || normalized.contains("invalid_credential")
+                || normalized.contains("invalid-credential")
+                || normalized.contains("invalid_login_credentials")) {
+            return "Thông tin đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng kiểm tra lại.";
+        }
         if (raw.contains("PROFILE_NOT_FOUND")) return getString(R.string.error_profile_missing);
         if (raw.contains("PROFILE_NOT_ALLOWED")) return getString(R.string.error_profile_denied);
         if (raw.contains("FIREBASE_SETUP_REQUIRED")) return getString(R.string.production_configuration_required);
