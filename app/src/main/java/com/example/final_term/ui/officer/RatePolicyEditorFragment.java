@@ -132,7 +132,23 @@ public final class RatePolicyEditorFragment extends Fragment {
         if (selectedEffectiveFromUtc > 0) initialDate.setTimeInMillis(selectedEffectiveFromUtc);
         else initialDate.setTimeInMillis(minimumDate.getTimeInMillis());
 
-        DatePickerDialog picker = new DatePickerDialog(requireContext(), (view, year, month, day) -> {
+        com.google.android.material.datepicker.CalendarConstraints constraints =
+                new com.google.android.material.datepicker.CalendarConstraints.Builder()
+                        .setValidator(com.google.android.material.datepicker.DateValidatorPointForward.from(minimumDate.getTimeInMillis()))
+                        .build();
+        com.google.android.material.datepicker.MaterialDatePicker<Long> picker =
+                com.google.android.material.datepicker.MaterialDatePicker.Builder.datePicker()
+                        .setTitleText("Chọn ngày áp dụng")
+                        .setSelection(initialDate.getTimeInMillis())
+                        .setCalendarConstraints(constraints)
+                        .build();
+        picker.addOnPositiveButtonClickListener(selection -> {
+            if (selection == null) return;
+            Calendar utc = Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+            utc.setTimeInMillis(selection);
+            int year = utc.get(Calendar.YEAR);
+            int month = utc.get(Calendar.MONTH);
+            int day = utc.get(Calendar.DAY_OF_MONTH);
             Calendar selectedDate = Calendar.getInstance();
             selectedDate.clear();
             selectedDate.set(year, month, day, 0, 0, 0);
@@ -144,9 +160,8 @@ public final class RatePolicyEditorFragment extends Fragment {
             SimpleDateFormat display = new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault());
             dateInput.setText(display.format(new Date(selectedDate.getTimeInMillis())));
             dateError.setText("");
-        }, initialDate.get(Calendar.YEAR), initialDate.get(Calendar.MONTH), initialDate.get(Calendar.DAY_OF_MONTH));
-        picker.getDatePicker().setMinDate(minimumDate.getTimeInMillis());
-        picker.show();
+        });
+        picker.show(getParentFragmentManager(), "rate_effective_date");
     }
 
     private void clearErrors() { rateTypeError.setText(""); rateError.setText(""); dateError.setText(""); reasonError.setText(""); }

@@ -36,7 +36,7 @@ import com.example.final_term.data.BackendApiClient;
 import com.example.final_term.databinding.DialogEkycBinding;
 import com.google.android.gms.tasks.Task;
 import com.google.android.gms.tasks.Tasks;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.example.final_term.ui.common.ThemedDialogBuilder;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -116,11 +116,11 @@ public final class EkycDialogFragment extends DialogFragment {
                     if (path != null) state.cameraFileSelected(path);
                     else state.cameraFailed(error == null ? "Đã hủy chụp ảnh." : error);
                 });
-        binding.btnHelp.setOnClickListener(v -> new MaterialAlertDialogBuilder(requireContext())
-                .setTitle("Trợ giúp định danh eKYC")
+        binding.btnHelp.setOnClickListener(v -> new ThemedDialogBuilder(requireContext())
+                .setTitle("Trợ giúp định danh")
                 .setMessage(state.isDemo()
-                        ? "Chụp selfie ngay trong ứng dụng, đủ sáng và chỉ có một khuôn mặt. Bước này chưa xác minh CCCD hoặc danh tính pháp lý."
-                        : "Chụp hoặc tải ảnh mặt trước, mặt sau CCCD; sau đó chụp khuôn mặt ngay trong ứng dụng. Bạn có thể xem và chụp lại ảnh trước khi nộp.")
+                        ? "Chụp ảnh khuôn mặt ngay trong ứng dụng, đảm bảo đủ sáng và chỉ có một khuôn mặt."
+                        : "Chụp hoặc tải ảnh mặt trước, mặt sau CCCD; sau đó chụp ảnh khuôn mặt ngay trong ứng dụng. Bạn có thể xem và chụp lại ảnh trước khi gửi.")
                 .setPositiveButton("Đóng", null)
                 .show());
         binding.btnShutter.setContentDescription("Chụp ảnh bằng camera trong ứng dụng");
@@ -245,8 +245,8 @@ public final class EkycDialogFragment extends DialogFragment {
                         if (!task.isSuccessful() || task.getResult().statusCode != 200) throw new IOException("Recognition failed");
                         displayIdentityForm(new JSONObject(task.getResult().body));
                     } catch (Exception error) {
-                        new MaterialAlertDialogBuilder(requireContext()).setTitle("Không đọc được CCCD")
-                                .setMessage("Kiểm tra kết nối và dịch vụ nhận diện, hoặc chụp lại mặt trước CCCD rõ nét, đủ bốn góc.")
+                        new ThemedDialogBuilder(requireContext()).setTitle("Không đọc được CCCD")
+                                .setMessage("Vui lòng kiểm tra kết nối mạng hoặc chụp lại mặt trước CCCD rõ nét, đủ bốn góc.")
                                 .setCancelable(false)
                                 .setNegativeButton("Chụp lại", (d, w) -> { state.select(0); requestCapture(); identityDialogOpen = false; })
                                 .setPositiveButton("Thử lại", (d, w) -> { identityDialogOpen = false; showIdentityPreview(); })
@@ -262,7 +262,7 @@ public final class EkycDialogFragment extends DialogFragment {
         int padding = (int) (24 * getResources().getDisplayMetrics().density);
         form.setPadding(padding, 0, padding, 0);
         TextView help = new TextView(requireContext());
-        help.setText("Kiểm tra và chỉnh sửa thông tin theo CCCD. FPT.AI có thể đọc sai hoặc bỏ sót.");
+        help.setText("Kiểm tra và chỉnh sửa thông tin theo CCCD. Hệ thống nhận diện có thể đọc sai hoặc bỏ sót.");
         help.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
         help.setTextSize(14);
         help.setPadding(0, 0, 0, (int) (16 * getResources().getDisplayMetrics().density));
@@ -308,7 +308,7 @@ public final class EkycDialogFragment extends DialogFragment {
         form.addView(table);
         ScrollView scroll = new ScrollView(requireContext());
         scroll.addView(form);
-        var dialog = new MaterialAlertDialogBuilder(requireContext()).setTitle("Kiểm tra thông tin CCCD")
+        var dialog = new ThemedDialogBuilder(requireContext()).setTitle("Kiểm tra thông tin CCCD")
                 .setView(scroll).setCancelable(false).setNegativeButton("Chụp lại CCCD", (d, w) -> {
                     state.select(0); requestCapture(); identityDialogOpen = false;
                 }).setPositiveButton("Xác nhận", null).create();

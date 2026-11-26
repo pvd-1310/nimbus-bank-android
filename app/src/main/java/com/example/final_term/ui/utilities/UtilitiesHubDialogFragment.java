@@ -575,7 +575,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
             List<String> networks = new ArrayList<>(carriers.keySet());
             List<String> names = new ArrayList<>();
             for (String network : networks) names.add(carriers.get(network).optString("name", network));
-            new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+            new com.example.final_term.ui.common.ThemedDialogBuilder(requireContext())
                     .setTitle("Chọn nhà mạng")
                     .setItems(names.toArray(new String[0]), (dialog, index) -> {
                         selectedTopupCarrier = networks.get(index);
@@ -620,7 +620,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                 binding.utilElectricity, binding.utilWater, binding.utilMobile,
                 binding.utilFlight, binding.utilMovie, binding.utilHotel, binding.utilShopping
         };
-        new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+        new com.example.final_term.ui.common.ThemedDialogBuilder(requireContext())
                 .setTitle(R.string.utility_all)
                 .setItems(names, (dialog, index) -> {
                     if (index < shortcuts.length) shortcuts[index].performClick();
@@ -746,7 +746,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
             list.addView(card);
             optionCards.add(card);
         }
-        androidx.appcompat.app.AlertDialog chooser = new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+        androidx.appcompat.app.AlertDialog chooser = new com.example.final_term.ui.common.ThemedDialogBuilder(requireContext())
                 .setTitle(catalogTitle(activeCatalogCategory))
                 .setView(listScroll)
                 .setNegativeButton("Đóng", null)
@@ -855,7 +855,7 @@ public class UtilitiesHubDialogFragment extends DialogFragment {
                             + " · Trạng thái: " + fulfillmentStatusLabel(fulfillment));
                 }
                 hubStatus(rows.isEmpty() ? "Chưa có đơn hàng." : "Đã cập nhật danh sách đơn hàng.");
-                new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+                new com.example.final_term.ui.common.ThemedDialogBuilder(requireContext())
                 .setTitle("Đơn hàng")
                         .setItems(rows.toArray(new String[0]), (dialog, index) -> {
                             JSONObject order = items.optJSONObject(index);

@@ -26,7 +26,7 @@ import com.example.final_term.data.ReadModels;
 import com.example.final_term.data.ReadSummaryFormatter;
 import com.example.final_term.databinding.FragmentTransactionHistoryBinding;
 import com.example.final_term.databinding.ItemTransactionRowBinding;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.example.final_term.ui.common.ThemedDialogBuilder;
 
 import com.google.firebase.Timestamp;
 
@@ -72,7 +72,7 @@ public final class TransactionHistoryFragment extends Fragment {
         binding.loadMoreButton.setOnClickListener(v -> loadPage(nextCursor));
 
         binding.filterIconBtn.setOnClickListener(v -> {
-            new MaterialAlertDialogBuilder(requireContext())
+            new ThemedDialogBuilder(requireContext())
                     .setTitle("Thời gian giao dịch")
                     .setSingleChoiceItems(new String[]{"Mọi thời điểm", "Tháng này"}, thisMonth ? 1 : 0,
                             (dialog, which) -> {

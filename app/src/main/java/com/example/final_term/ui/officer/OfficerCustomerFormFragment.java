@@ -237,7 +237,7 @@ public final class OfficerCustomerFormFragment extends Fragment {
             String message = "Đã tạo hồ sơ ONBOARDING và tài khoản thanh toán " + account
                     + ". Khách hàng cần đặt mật khẩu qua email trước khi đăng nhập.";
             if (!reset.isSuccessful()) message += "\n\nEmail chưa gửi được; khách hàng có thể dùng mục Đặt/quên mật khẩu ở màn đăng nhập.";
-            new MaterialAlertDialogBuilder(requireContext()).setTitle("Đã tiếp nhận khách hàng")
+            new com.example.final_term.ui.common.ThemedDialogBuilder(requireContext()).setTitle("Đã tiếp nhận khách hàng")
                     .setMessage(message).setPositiveButton("Đóng", (dialog, which) -> Navigation.findNavController(binding.getRoot()).navigateUp()).show();
         });
     }

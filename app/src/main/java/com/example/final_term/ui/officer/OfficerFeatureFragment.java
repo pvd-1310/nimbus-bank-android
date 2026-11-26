@@ -338,7 +338,7 @@ public final class OfficerFeatureFragment extends Fragment {
             layout.addView(btnViewPhoto);
         }
 
-        new MaterialAlertDialogBuilder(requireContext())
+        new com.example.final_term.ui.common.ThemedDialogBuilder(requireContext())
                 .setTitle("Chi tiết hồ sơ eKYC")
                 .setView(scroll)
                 .setPositiveButton("Đóng", null)
@@ -380,8 +380,8 @@ public final class OfficerFeatureFragment extends Fragment {
                 }
                 int sc = urlTask.getResult().statusCode;
                 if (sc == 503) {
-                    new AlertDialog.Builder(requireContext())
-                            .setTitle("Thông báo S3")
+                    new com.example.final_term.ui.common.ThemedDialogBuilder(requireContext())
+                            .setTitle("Thông báo tải ảnh")
                             .setMessage("Chưa thể tải ảnh hồ sơ. Vui lòng thử lại sau hoặc liên hệ quản trị viên.")
                             .setPositiveButton("Đã hiểu", null)
                             .show();
@@ -418,20 +418,20 @@ public final class OfficerFeatureFragment extends Fragment {
                             iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
                             iv.setPadding(20, 20, 20, 20);
 
-                            AlertDialog photoDialog = new AlertDialog.Builder(requireContext())
+                            androidx.appcompat.app.AlertDialog photoDialog = new com.example.final_term.ui.common.ThemedDialogBuilder(requireContext())
                                     .setTitle("Bằng chứng: " + label)
                                     .setView(iv)
                                     .setPositiveButton("Đóng", (d, w) -> {
                                         iv.setImageBitmap(null);
                                         bitmap.recycle();
                                     })
-                                    .setOnDismissListener(d -> {
-                                        iv.setImageBitmap(null);
-                                        if (!bitmap.isRecycled()) {
-                                            bitmap.recycle();
-                                        }
-                                    })
                                     .create();
+                            photoDialog.setOnDismissListener(d -> {
+                                iv.setImageBitmap(null);
+                                if (!bitmap.isRecycled()) {
+                                    bitmap.recycle();
+                                }
+                            });
                             photoDialog.show();
                         });
                     });

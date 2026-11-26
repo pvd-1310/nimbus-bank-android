@@ -47,7 +47,7 @@ import androidx.fragment.app.Fragment;
 import com.example.final_term.R;
 import com.example.final_term.databinding.DialogFaceScanBinding;
 import com.example.final_term.ui.common.FullscreenInsets;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.example.final_term.ui.common.ThemedDialogBuilder;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.face.Face;
@@ -173,7 +173,7 @@ public final class FaceScanDialogFragment extends DialogFragment {
         }
         binding.btnBack.setOnClickListener(v -> dismiss());
         binding.btnCancel.setOnClickListener(v -> dismiss());
-        binding.btnHelp.setOnClickListener(v -> new MaterialAlertDialogBuilder(requireContext())
+        binding.btnHelp.setOnClickListener(v -> new ThemedDialogBuilder(requireContext())
                 .setTitle("Hướng dẫn quét khuôn mặt")
                 .setMessage("Giữ điện thoại ngang tầm mắt, đưa toàn bộ khuôn mặt vào giữa vòng tròn và giữ yên khoảng 1 giây. Hệ thống sẽ tự động chụp khi ảnh rõ nét.")
                 .setPositiveButton("Đã hiểu", null)

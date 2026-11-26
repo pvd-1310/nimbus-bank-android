@@ -89,7 +89,7 @@ public final class BranchLocatorFragment extends Fragment {
                 return;
             }
             String[] labels = branchOptions.keySet().toArray(new String[0]);
-            new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+            new com.example.final_term.ui.common.ThemedDialogBuilder(requireContext())
                     .setTitle("Chọn chi nhánh")
                     .setItems(labels, (dialog, index) -> selectBranch(labels[index]))
                     .show();
