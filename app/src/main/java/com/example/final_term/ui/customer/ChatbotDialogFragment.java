@@ -38,6 +38,7 @@ public final class ChatbotDialogFragment extends DialogFragment {
     private MaterialButton send;
     private boolean ready;
     private boolean sending;
+    private final java.util.List<JSONObject> chatHistory = new java.util.ArrayList<>();
     private static final int NAVY = 0xff2f3e6e, INK = 0xff1b2340, MUTED = 0xff56627f;
 
     @NonNull @Override public Dialog onCreateDialog(Bundle savedState) {
@@ -68,15 +69,19 @@ public final class ChatbotDialogFragment extends DialogFragment {
         scroll.addView(messages); root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         TextView today = text("Hôm nay", 11, MUTED, false); today.setGravity(Gravity.CENTER); today.setPadding(dp(14), dp(5), dp(14), dp(5)); today.setBackground(shape(0xaaffffff, 20));
         LinearLayout.LayoutParams day = new LinearLayout.LayoutParams(-2, -2); day.gravity = Gravity.CENTER_HORIZONTAL; day.bottomMargin = dp(12); messages.addView(today, day);
-        addMessage("Chào bạn! Tôi có thể hướng dẫn nạp điện thoại, thanh toán hóa đơn, xem giao dịch, chuyển khoản hoặc tìm chi nhánh. Vui lòng không nhập thông tin cá nhân.", false);
+        addMessage("Chào bạn! Tôi là trợ lý AI của Nimbus Bank. Tôi có thể kiểm tra số dư, chi tiêu tháng này, hóa đơn chưa thanh toán, tư vấn tiết kiệm/vay vốn hoặc mở nhanh các tính năng cho bạn.", false);
 
         LinearLayout footer = new LinearLayout(requireContext()); footer.setOrientation(LinearLayout.VERTICAL); footer.setPadding(dp(16), dp(4), dp(16), dp(12));
         HorizontalScrollView suggestions = new HorizontalScrollView(requireContext()); suggestions.setHorizontalScrollBarEnabled(false);
         LinearLayout chips = new LinearLayout(requireContext());
-        for (String prompt : new String[]{"✨ Hạn mức còn lại?", "📊 Giao dịch tháng này", "💸 Chuyển khoản", "⚡ Hóa đơn", "📱 Nạp điện thoại", "📍 Tìm chi nhánh"}) {
+        for (String prompt : new String[]{"Chi tiêu tháng này?", "Tôi còn hóa đơn nào?", "Số dư tài khoản?", "Lãi suất tiết kiệm?", "Nạp điện thoại", "Đặt vé xem phim", "Tìm chi nhánh"}) {
             TextView chip = text(prompt, 12, INK, true); chip.setGravity(Gravity.CENTER); chip.setPadding(dp(14), 0, dp(14), 0); chip.setBackground(shape(0xccffffff, 24));
-            LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-2, dp(44)); cp.rightMargin = dp(8); chips.addView(chip, cp);
-            chip.setOnClickListener(v -> { input.setText(prompt); input.setSelection(input.length()); });
+            LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-2, dp(40)); cp.rightMargin = dp(8); chips.addView(chip, cp);
+            chip.setOnClickListener(v -> {
+                input.setText(prompt);
+                input.setSelection(input.length());
+                if (ready && !sending) sendMessage();
+            });
         }
         suggestions.addView(chips); footer.addView(suggestions);
         LinearLayout composer = new LinearLayout(requireContext()); composer.setGravity(Gravity.CENTER_VERTICAL); composer.setPadding(dp(16), dp(4), dp(4), dp(4)); composer.setBackground(shape(0xeeffffff, 30));
@@ -85,9 +90,17 @@ public final class ChatbotDialogFragment extends DialogFragment {
         send = iconButton(R.drawable.ic_chat_send, "Gửi tin nhắn", true); composer.addView(send, new LinearLayout.LayoutParams(dp(48), dp(48)));
         send.setOnClickListener(v -> { if (!ready) checkService(); else sendMessage(); });
         input.setOnEditorActionListener((v, id, event) -> { if (id == EditorInfo.IME_ACTION_SEND) { if (ready) sendMessage(); return true; } return false; });
+        scroll.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+            if (bottom < oldBottom) scrollToBottom();
+        });
         root.addView(footer); dialog.setContentView(root);
         dialog.setOnShowListener(ignored -> checkService());
-        Window window = dialog.getWindow(); if (window != null) { window.setLayout(-1, -1); FullscreenInsets.apply(window, root); }
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setLayout(-1, -1);
+            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE | WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN);
+            FullscreenInsets.apply(window, root);
+        }
         return dialog;
     }
 
@@ -112,35 +125,160 @@ public final class ChatbotDialogFragment extends DialogFragment {
     private com.example.final_term.data.BackendApiClient api() { return ((FinalTermApplication) requireActivity().getApplication()).getAppContainer().getBackendApiClient(); }
     private void sendMessage() {
         String message = input.getText().toString().trim(); if (message.isEmpty() || sending) return;
-        sending = true; send.setEnabled(false); input.setEnabled(false); addMessage(message, true); String previousStatus = status.getText().toString(); status.setText("Nimbus đang soạn tin…");
-        try { api().post("/chatbot", new JSONObject().put("message", message).toString()).addOnCompleteListener(task -> {
-            if (!isAdded() || getDialog() == null || !getDialog().isShowing()) return;
-            sending = false; send.setEnabled(true); input.setEnabled(ready); status.setText(previousStatus);
-            String reply = "Chatbot tạm thời không phản hồi. Vui lòng thử lại."; String action = "";
-            if (!task.isSuccessful() && task.getException() instanceof java.net.SocketTimeoutException) reply = "Kết nối bị gián đoạn. Bạn có thể gửi lại câu hỏi.";
-            if (task.isSuccessful()) try {
-                var response = task.getResult(); JSONObject body = new JSONObject(response.body);
-                if (response.statusCode == 200) { reply = body.getString("text"); action = body.optString("action"); input.setText(""); }
-                else if ("CHATBOT_SETUP_REQUIRED".equals(body.optString("error"))) { reply = "Chatbot chưa được cấu hình."; ready = false; input.setEnabled(false); status.setText("Chưa cấu hình · Nhấn nút gửi để thử lại"); }
-                else if ("CHATBOT_TIMEOUT".equals(body.optString("error"))) reply = "Trợ lý phản hồi quá thời gian. Vui lòng thử lại.";
-                else if (response.statusCode == 429) reply = "Bạn đã gửi nhiều câu hỏi. Vui lòng chờ rồi thử lại.";
-            } catch (JSONException ignored) { }
-            LinearLayout bubble = addMessage(reply, false); addAction(bubble, action);
-        }); } catch (JSONException e) { sending = false; send.setEnabled(true); input.setEnabled(true); status.setText(previousStatus); addMessage("Không gửi được câu hỏi.", false); }
+        sending = true;
+        send.setEnabled(false);
+        send.setAlpha(0.5f);
+        input.setText("");
+        addMessage(message, true);
+        View typingBubble = addTypingIndicator();
+        String previousStatus = status.getText().toString();
+        status.setText("Nimbus đang trả lời…");
+        try {
+            JSONObject payload = new JSONObject().put("message", message);
+            if (!chatHistory.isEmpty()) {
+                org.json.JSONArray historyArray = new org.json.JSONArray();
+                int start = Math.max(0, chatHistory.size() - 6);
+                for (int i = start; i < chatHistory.size(); i++) historyArray.put(chatHistory.get(i));
+                payload.put("history", historyArray);
+            }
+            api().post("/chatbot", payload.toString()).addOnCompleteListener(task -> {
+                if (!isAdded() || getDialog() == null || !getDialog().isShowing()) return;
+                sending = false;
+                send.setEnabled(true);
+                send.setAlpha(1f);
+                status.setText(previousStatus);
+                messages.removeView(typingBubble);
+                String reply = "Chatbot tạm thời không phản hồi. Vui lòng thử lại."; String action = "";
+                if (!task.isSuccessful() && task.getException() instanceof java.net.SocketTimeoutException) reply = "Kết nối bị gián đoạn. Bạn có thể gửi lại câu hỏi.";
+                if (task.isSuccessful()) try {
+                    var response = task.getResult(); JSONObject body = new JSONObject(response.body);
+                    if (response.statusCode == 200) {
+                        reply = body.getString("text");
+                        action = body.optString("action");
+                        recordHistory("user", message);
+                        recordHistory("assistant", reply);
+                    }
+                    else if ("CHATBOT_SETUP_REQUIRED".equals(body.optString("error"))) { reply = "Chatbot chưa được cấu hình."; ready = false; input.setEnabled(false); status.setText("Chưa cấu hình · Nhấn nút gửi để thử lại"); }
+                    else if ("CHATBOT_TIMEOUT".equals(body.optString("error"))) reply = "Trợ lý phản hồi quá thời gian. Vui lòng thử lại.";
+                    else if (response.statusCode == 429) reply = "Bạn đã gửi nhiều câu hỏi. Vui lòng chờ rồi thử lại.";
+                } catch (JSONException ignored) { }
+                LinearLayout bubble = addMessage(reply, false); addAction(bubble, action);
+            });
+        } catch (JSONException e) {
+            sending = false;
+            send.setEnabled(true);
+            send.setAlpha(1f);
+            messages.removeView(typingBubble);
+            status.setText(previousStatus);
+            addMessage("Không gửi được câu hỏi.", false);
+        }
+    }
+
+    private View addTypingIndicator() {
+        LinearLayout bubble = new LinearLayout(requireContext());
+        bubble.setOrientation(LinearLayout.HORIZONTAL);
+        bubble.setGravity(Gravity.CENTER_VERTICAL);
+        bubble.setPadding(dp(14), dp(10), dp(14), dp(10));
+        bubble.setBackground(shape(0xe6ffffff, 20));
+        TextView dots = text("Nimbus đang suy nghĩ…", 13, MUTED, false);
+        bubble.addView(dots);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, -2);
+        params.gravity = Gravity.START;
+        params.bottomMargin = dp(12);
+        messages.addView(bubble, params);
+        bubble.setAlpha(0f);
+        bubble.animate().alpha(1f).setDuration(160).start();
+        scrollToBottom();
+        return bubble;
+    }
+
+    private void scrollToBottom() {
+        scroll.post(() -> scroll.smoothScrollTo(0, Math.max(0, messages.getBottom())));
+    }
+
+    private void recordHistory(String role, String text) {
+        try {
+            String clipped = text.length() > 450 ? text.substring(0, 450) : text;
+            chatHistory.add(new JSONObject().put("role", role).put("text", clipped));
+            while (chatHistory.size() > 10) chatHistory.remove(0);
+        } catch (JSONException ignored) { }
     }
     private LinearLayout addMessage(String content, boolean user) {
         LinearLayout bubble = new LinearLayout(requireContext()); bubble.setOrientation(LinearLayout.VERTICAL); bubble.setPadding(dp(14), dp(10), dp(14), dp(10)); bubble.setBackground(shape(user ? NAVY : 0xe6ffffff, 20));
         TextView body = text(content, 14, user ? Color.WHITE : INK, false); body.setLineSpacing(dp(2), 1); bubble.addView(body);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, -2); params.gravity = user ? Gravity.END : Gravity.START; params.bottomMargin = dp(12); params.leftMargin = user ? dp(48) : 0; params.rightMargin = user ? 0 : dp(32); messages.addView(bubble, params);
-        TextView time = text(DateFormat.getTimeInstance(DateFormat.SHORT).format(new Date()), 10, MUTED, false); LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(-2, -2); tp.gravity = user ? Gravity.END : Gravity.START; tp.bottomMargin = dp(10); tp.topMargin = -dp(8); messages.addView(time, tp); scroll.post(() -> scroll.fullScroll(View.FOCUS_DOWN)); return bubble;
+        bubble.setAlpha(0f); bubble.setTranslationY(dp(8)); bubble.animate().alpha(1f).translationY(0f).setDuration(180).start();
+        TextView time = text(DateFormat.getTimeInstance(DateFormat.SHORT).format(new Date()), 10, MUTED, false); LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(-2, -2); tp.gravity = user ? Gravity.END : Gravity.START; tp.bottomMargin = dp(10); tp.topMargin = -dp(8); messages.addView(time, tp);
+        scrollToBottom();
+        return bubble;
     }
     private void addAction(LinearLayout bubble, String action) {
-        String label; switch (action) { case "TOPUP": label = "Mở nạp điện thoại"; break; case "BILLS": label = "Mở hóa đơn"; break; case "HISTORY": label = "Xem giao dịch tháng"; break; case "TRANSFER": label = "Mở chuyển khoản"; break; case "BRANCHES": label = "Tìm chi nhánh"; break; case "DEPOSIT": label = "Mở yêu cầu nạp tiền"; break; default: return; }
-        Button button = new Button(requireContext()); button.setText(label); button.setAllCaps(false); button.setTextColor(NAVY); bubble.addView(button); button.setOnClickListener(v -> navigate(action));
+        String label = actionLabel(action);
+        if (label == null) return;
+        TextView button = text(label + "  →", 12, Color.WHITE, true);
+        button.setBackground(shape(NAVY, 18));
+        button.setPadding(dp(14), dp(8), dp(14), dp(8));
+        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, -2);
+        bp.topMargin = dp(10);
+        bubble.addView(button, bp);
+        button.setOnClickListener(v -> navigate(action));
     }
+
+    private String actionLabel(String action) {
+        if (action == null) return null;
+        switch (action) {
+            case "TOPUP": return "Mở nạp điện thoại";
+            case "ELECTRICITY": return "Mở hóa đơn tiền điện";
+            case "WATER": return "Mở hóa đơn tiền nước";
+            case "BILLS": return "Mở tiện ích";
+            case "HISTORY": return "Xem giao dịch tháng";
+            case "TRANSFER": return "Mở chuyển khoản";
+            case "DEPOSIT": return "Mở yêu cầu nạp tiền";
+            case "WITHDRAWAL": return "Mở yêu cầu rút tiền";
+            case "SAVINGS": return "Xem tài khoản tiết kiệm";
+            case "LOAN": return "Xem khoản vay";
+            case "MOVIE": return "Mở vé xem phim";
+            case "HOTEL": return "Mở đặt khách sạn";
+            case "FLIGHT": return "Mở đặt vé máy bay";
+            case "BRANCHES": return "Tìm chi nhánh";
+            default: return null;
+        }
+    }
+
     private void navigate(String action) {
         NavController nav = NavHostFragment.findNavController(requireParentFragment());
-        switch (action) { case "TOPUP": nav.navigate(R.id.mobileTopup); break; case "BILLS": nav.navigate(R.id.utilitiesHub); break; case "HISTORY": Bundle history = new Bundle(); history.putBoolean("thisMonth", true); nav.navigate(R.id.transactionHistory, history); break; case "TRANSFER": nav.navigate(R.id.transfer); break; case "BRANCHES": nav.navigate(R.id.branchLocator); break; case "DEPOSIT": Bundle deposit = new Bundle(); deposit.putString("operation", "DEPOSIT"); nav.navigate(R.id.moneyRequest, deposit); break; default: return; } dismiss();
+        switch (action) {
+            case "TOPUP": nav.navigate(R.id.mobileTopup); break;
+            case "ELECTRICITY": nav.navigate(R.id.electricityBill); break;
+            case "WATER": nav.navigate(R.id.waterBill); break;
+            case "BILLS": nav.navigate(R.id.utilitiesHub); break;
+            case "HISTORY":
+                Bundle history = new Bundle();
+                history.putBoolean("thisMonth", true);
+                nav.navigate(R.id.transactionHistory, history);
+                break;
+            case "TRANSFER": nav.navigate(R.id.transfer); break;
+            case "DEPOSIT":
+                Bundle deposit = new Bundle();
+                deposit.putString("operation", "DEPOSIT");
+                nav.navigate(R.id.moneyRequest, deposit);
+                break;
+            case "WITHDRAWAL":
+                Bundle withdrawal = new Bundle();
+                withdrawal.putString("operation", "WITHDRAWAL");
+                nav.navigate(R.id.moneyRequest, withdrawal);
+                break;
+            case "SAVINGS":
+            case "LOAN":
+                nav.navigate(R.id.accountList);
+                break;
+            case "MOVIE": nav.navigate(R.id.movieTickets); break;
+            case "HOTEL": nav.navigate(R.id.hotelBooking); break;
+            case "FLIGHT": nav.navigate(R.id.flightBooking); break;
+            case "BRANCHES": nav.navigate(R.id.branchLocator); break;
+            default: return;
+        }
+        dismiss();
     }
     private MaterialButton iconButton(int icon, String description, boolean primary) { MaterialButton b = new MaterialButton(requireContext()); b.setIconResource(icon); b.setIconSize(dp(20)); b.setIconPadding(0); b.setIconGravity(MaterialButton.ICON_GRAVITY_TEXT_START); b.setGravity(Gravity.CENTER); b.setPadding(0,0,0,0); b.setMinWidth(0); b.setInsetTop(0); b.setInsetBottom(0); b.setBackground(shape(primary ? NAVY : 0xccffffff, 24)); b.setBackgroundTintList(null); b.setIconTint(android.content.res.ColorStateList.valueOf(primary ? Color.WHITE : INK)); b.setContentDescription(description); return b; }
     private TextView text(String value, int size, int color, boolean bold) { TextView t = new TextView(requireContext()); t.setText(value); t.setTextSize(size); t.setTextColor(color); if (bold) t.setTypeface(null, Typeface.BOLD); return t; }
