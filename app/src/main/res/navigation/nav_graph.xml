@@ -53,12 +53,6 @@
         <argument android:name="serviceType" app:argType="string" android:defaultValue="HOTEL" />
     </fragment>
     <fragment
-        android:id="@+id/onlineShopping"
-        android:name="com.example.final_term.ui.utilities.UtilityCatalogFragment"
-        android:label="Mua sắm">
-        <argument android:name="serviceType" app:argType="string" android:defaultValue="ECOMMERCE" />
-    </fragment>
-    <fragment
         android:id="@+id/otherUtilities"
         android:name="com.example.final_term.ui.utilities.BillPaymentFragment"
         android:label="Hóa đơn dịch vụ">

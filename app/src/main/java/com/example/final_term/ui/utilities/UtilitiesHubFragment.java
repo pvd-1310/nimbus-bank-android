@@ -89,7 +89,6 @@ public final class UtilitiesHubFragment extends Fragment {
         utilityItems.add(new UtilityItem("Vé máy bay", "ve may bay flight", R.drawable.ic_flight, R.id.flightBooking));
         utilityItems.add(new UtilityItem("Vé xem phim", "ve phim movie", R.drawable.ic_utility_movie, R.id.movieTickets));
         utilityItems.add(new UtilityItem("Khách sạn", "khach san hotel", R.drawable.ic_utility_hotel, R.id.hotelBooking));
-        utilityItems.add(new UtilityItem("Mua sắm", "mua sam shopping ecommerce", R.drawable.ic_utility_shopping, R.id.onlineShopping));
         utilityItems.add(new UtilityItem("Khác", "khac internet hoa don dich vu", R.drawable.ic_utility_all, R.id.otherUtilities));
     }
 
