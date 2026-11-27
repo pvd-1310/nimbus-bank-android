@@ -304,7 +304,8 @@ public final class TransactionHistoryFragment extends Fragment {
                         ? com.example.final_term.data.ExternalBankCatalog.nameForCode(tx.destinationBankCode) : "");
                 args.putString("balance", tx.balanceAfterMinor == null ? "" :
                         ReadSummaryFormatter.formatCurrency(tx.balanceAfterMinor, tx.currency));
-                args.putString("note", "FAILED".equals(tx.status) ? ReadSummaryFormatter.transactionDetail(tx) : "");
+                args.putString("reference", tx.id == null ? "" : tx.id);
+                args.putString("note", ReadSummaryFormatter.transactionDetail(tx));
                 Navigation.findNavController(v).navigate(R.id.historyDetail, args);
             });
 

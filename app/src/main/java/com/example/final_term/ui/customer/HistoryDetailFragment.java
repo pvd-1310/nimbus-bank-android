@@ -39,8 +39,8 @@ public final class HistoryDetailFragment extends Fragment {
         boolean audit = a.getBoolean("audit", false);
 
         binding.backButton.setOnClickListener(v -> Navigation.findNavController(v).navigateUp());
-        binding.titleText.setText(audit ? "Chi tiết thao tác" : "Chi tiết giao dịch");
-        binding.eyebrowText.setText(audit ? "LỊCH SỬ THAO TÁC" : "LỊCH SỬ GIAO DỊCH");
+        binding.titleText.setText(audit ? "Chi tiết thao tác" : "Biên lai giao dịch");
+        binding.eyebrowText.setText(audit ? "LỊCH SỬ THAO TÁC" : "BIÊN LAI GIAO DỊCH");
         binding.headingText.setText(a.getString("title", audit ? "Chi tiết thao tác" : "Chi tiết giao dịch"));
 
         String status = a.getString("status", "Chỉ xem");
@@ -57,6 +57,7 @@ public final class HistoryDetailFragment extends Fragment {
             } else {
                 binding.amountText.setVisibility(View.GONE);
             }
+            addDetailRow("Mã giao dịch", a.getString("reference", ""));
             addDetailRow("Loại giao dịch", a.getString("type", "Giao dịch"));
             addDetailRow("Ngày giờ", a.getString("time", "Chưa có thông tin"));
             addDetailRow("Tài khoản thực hiện", a.getString("account", ""));
