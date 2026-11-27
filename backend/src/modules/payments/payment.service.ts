@@ -225,7 +225,7 @@ export class Payments {
   }
 
   async getTopup(a: Actor, id: string) {
-    return this.bank.store.run(async (t) => {
+    return this.bank.read(async (t) => {
       await this.bank.authorize(t, a);
       const payment = await t.get("payments/" + id);
       check(payment?.ownerUid === a.uid && payment.purpose === "TOP_UP", "NOT_FOUND", 404);
@@ -539,5 +539,43 @@ export class Payments {
     });
     if (success) await drainOutbox(this.bank.store);
     return outcome;
+  }
+
+  async listStripeCards(a: Actor) {
+    const customerId = await this.bank.read(async (t) => {
+      await this.bank.authorize(t, a);
+      const record = await t.get("stripeCustomers/" + digest([a.uid]));
+      return typeof record?.customerId === "string" ? record.customerId : undefined;
+    });
+    if (!this.provider) return { configured: false, cards: [] };
+    if (!customerId) return { configured: true, cards: [] };
+    const cards = await this.provider.listCardPaymentMethods(customerId);
+    return { configured: true, customerId, cards };
+  }
+
+  async prepareStripeCardSetup(a: Actor, requestId: string) {
+    check(this.provider, "SETUP_REQUIRED", 503);
+    key(requestId);
+    await this.bank.read((t) => this.bank.authorize(t, a));
+    const customerId = await this.getOrCreateStripeCustomer(a.uid, this.provider!);
+    const [setupIntentClientSecret, customerSessionClientSecret] = await Promise.all([
+      this.provider!.createSetupIntent(customerId, requestId),
+      this.provider!.createCustomerSession(customerId),
+    ]);
+    check(typeof setupIntentClientSecret === "string" && setupIntentClientSecret.length > 0, "PROVIDER_ERROR", 502);
+    return { customerId, customerSessionClientSecret, setupIntentClientSecret };
+  }
+
+  async removeStripeCard(a: Actor, paymentMethodId: string) {
+    check(this.provider, "SETUP_REQUIRED", 503);
+    key(paymentMethodId);
+    const customerId = await this.bank.read(async (t) => {
+      await this.bank.authorize(t, a);
+      const record = await t.get("stripeCustomers/" + digest([a.uid]));
+      check(typeof record?.customerId === "string", "NOT_FOUND", 404);
+      return record!.customerId as string;
+    });
+    await this.provider!.detachPaymentMethod(paymentMethodId, customerId);
+    return { removed: true, id: paymentMethodId };
   }
 }

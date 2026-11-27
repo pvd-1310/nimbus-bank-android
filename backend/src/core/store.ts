@@ -18,4 +18,5 @@ export interface Tx {
 }
 export interface Store {
   run<T>(work: (tx: Tx) => Promise<T>): Promise<T>;
+  read?<T>(work: (tx: Tx) => Promise<T>): Promise<T>;
 }

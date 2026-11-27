@@ -26,7 +26,7 @@ export interface AppDependencies {
   provision?: (a: Actor, body: Doc) => Promise<unknown>;
 }
 export type Route = (
-  method: "get" | "post" | "patch",
+  method: "get" | "post" | "patch" | "delete",
   path: string,
   handler: (actor: Actor, request: Request) => Promise<unknown>,
 ) => void;
@@ -75,7 +75,7 @@ export function authenticateRequests(d: AppDependencies) {
       /^\/ekyc\/[^/]+\/(uploads|submit|evidence\/[012])$/.test(req.path) ||
       /^\/uploads\/[^/]+\/confirm$/.test(req.path)
     );
-    await d.bank.store.run((t) => d.bank.authorize(t, res.locals.actor, undefined, onboardingPath));
+    await d.bank.read((t) => d.bank.authorize(t, res.locals.actor, undefined, onboardingPath));
     next();
   };
 }

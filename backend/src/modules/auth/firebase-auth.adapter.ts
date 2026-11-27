@@ -2,7 +2,7 @@ import type { Auth } from "firebase-admin/auth";
 import { check } from "../../shared/errors.js";
 export function createFirebaseAuthenticator(auth: Auth) {
   return async (token: string) => {
-    const decoded = await auth.verifyIdToken(token, true);
+    const decoded = await auth.verifyIdToken(token);
     check(
       decoded.role === "CUSTOMER" || decoded.role === "OFFICER",
       "FORBIDDEN",

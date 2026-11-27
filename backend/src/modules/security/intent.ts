@@ -220,7 +220,7 @@ export class IntentSecurity {
   }
 
   async describe(a: Actor, id: string) {
-    return this.bank.store.run(async (t) => {
+    return this.bank.read(async (t) => {
       await this.bank.authorize(t, a);
       const i = await this.bank.transfers.getIntent(t, a, id);
       const c = await t.get(challengePath(id));

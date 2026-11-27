@@ -10,7 +10,7 @@ export function registerPaymentsRoutes(route: Route, d: AppDependencies) {
     page(await d.bank.listOwned(a, "bills", r.query), r.query),
   );
   route("get", "/bills/lookup/:ref", (a, r) =>
-    d.bank.store.run(async (t) => {
+    d.bank.read(async (t) => {
       await d.bank.authorize(t, a);
       const ref = id.parse(r.params.ref);
       const direct = await t.get("bills/" + ref);
@@ -55,5 +55,13 @@ export function registerPaymentsRoutes(route: Route, d: AppDependencies) {
   });
   route("get", "/payments/:id", (a, r) =>
     d.bank.scoped(a, "payments", String(r.params.id)),
+  );
+  route("get", "/stripe/cards", (a) => d.payments.listStripeCards(a));
+  route("post", "/stripe/cards/setup-intent", (a, r) => {
+    const x = z.object({ requestId: id }).strict().parse(r.body);
+    return d.payments.prepareStripeCardSetup(a, x.requestId);
+  });
+  route("delete", "/stripe/cards/:id", (a, r) =>
+    d.payments.removeStripeCard(a, id.parse(r.params.id)),
   );
 }

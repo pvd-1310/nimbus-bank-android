@@ -16,7 +16,7 @@ async function orderStatus(tx: Tx, order: Doc, now: number) {
 
 export function registerOrdersRoutes(route: Route, d: AppDependencies) {
   route("get", "/catalog", async (_a, r) =>
-    d.bank.store.run(async (t) =>
+    d.bank.read(async (t) =>
       page(
         await t.list("catalog", {
           active: true,
@@ -100,7 +100,7 @@ export function registerOrdersRoutes(route: Route, d: AppDependencies) {
     d.bank.scoped(a, "orders", digest([a.uid, "ORDER", id.parse(r.params.id)])),
   );
   route("get", "/orders/:id", (a, r) =>
-    d.bank.store.run(async (t) => {
+    d.bank.read(async (t) => {
       await d.bank.authorize(t, a);
       const oid = id.parse(r.params.id);
       const order = await t.get("orders/" + oid);
@@ -110,7 +110,7 @@ export function registerOrdersRoutes(route: Route, d: AppDependencies) {
     }),
   );
   route("get", "/orders", async (a, r) =>
-    d.bank.store.run(async (t) => {
+    d.bank.read(async (t) => {
       await d.bank.authorize(t, a);
       const orders = page(await t.list("orders", { ownerUid: a.uid }, queryOptions(r.query)), r.query);
       return {

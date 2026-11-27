@@ -5,7 +5,7 @@ import type { Actor } from "../auth/auth.types.js";
 export class TransactionService {
   constructor(private bank: Banking) {}
   async list(a: Actor, filters: Doc) {
-    return this.bank.store.run(async (t) => {
+    return this.bank.read(async (t) => {
       await this.bank.authorize(t, a);
       const where: Doc = { ownerUid: a.uid };
       if (filters.accountId) where.sourceAccountId = filters.accountId;
@@ -43,7 +43,7 @@ export class TransactionService {
     });
   }
   async summary(a: Actor, month?: string) {
-    return this.bank.store.run(async (t) => {
+    return this.bank.read(async (t) => {
       await this.bank.authorize(t, a);
       const nowMs = this.bank.now();
       const targetMonth = month ?? new Date(nowMs).toISOString().slice(0, 7);
@@ -52,7 +52,7 @@ export class TransactionService {
       const monthIdx = match ? Number(match[2]) - 1 : new Date(nowMs).getUTCMonth();
       const monthStart = Date.UTC(year, monthIdx, 1);
       const monthEnd = Date.UTC(year, monthIdx + 1, 1);
-      const rows = await t.list("transactions", { ownerUid: a.uid }, { limit: 500 });
+      const rows = await t.list("transactions", { ownerUid: a.uid }, { from: monthStart, to: monthEnd - 1, limit: 500 });
       let totalInMinor = 0;
       let totalOutMinor = 0;
       for (const tx of rows) {

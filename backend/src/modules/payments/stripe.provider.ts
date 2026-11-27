@@ -33,6 +33,41 @@ export class StripeGateway {
     return session.client_secret;
   }
 
+  async listCardPaymentMethods(customerId: string) {
+    const list = await this.stripe.customers.listPaymentMethods(customerId, {
+      type: "card",
+      limit: 10,
+    });
+    return list.data.map((pm) => ({
+      id: pm.id,
+      brand: (pm.card?.brand ?? "visa").toUpperCase(),
+      last4: pm.card?.last4 ?? "",
+      expMonth: pm.card?.exp_month ?? null,
+      expYear: pm.card?.exp_year ?? null,
+    }));
+  }
+
+  async createSetupIntent(customerId: string, requestId: string) {
+    const setup = await this.stripe.setupIntents.create(
+      {
+        customer: customerId,
+        payment_method_types: ["card"],
+        usage: "off_session",
+      },
+      { idempotencyKey: "nimbus-setup-" + requestId },
+    );
+    check(setup.livemode === false, "LIVE_MODE_FORBIDDEN");
+    return setup.client_secret;
+  }
+
+  async detachPaymentMethod(paymentMethodId: string, expectedCustomerId: string) {
+    const pm = await this.stripe.paymentMethods.retrieve(paymentMethodId);
+    check(pm.livemode === false, "LIVE_MODE_FORBIDDEN");
+    const owner = typeof pm.customer === "string" ? pm.customer : pm.customer?.id;
+    check(owner === expectedCustomerId, "FORBIDDEN", 403);
+    await this.stripe.paymentMethods.detach(paymentMethodId);
+  }
+
   async create(id: string, amount: number, currency: string, customerId?: string, purpose = "BILL_PAYMENT") {
     const p = await this.stripe.paymentIntents.create(
       {

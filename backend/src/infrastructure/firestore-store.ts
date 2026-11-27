@@ -4,6 +4,55 @@ import { normalizeDocument } from "../database/template-schema.js";
 import { cursor, decode, decodePrefixCursor, prefixCursor } from "../shared/pagination.js";
 export class FirestoreStore implements Store {
   constructor(private db: Firestore) {}
+  private buildQuery(
+    c: string,
+    w: Record<string, unknown> = {},
+    o: Parameters<Tx["list"]>[2] = {},
+  ) {
+    let q: FirebaseFirestore.Query = this.db.collection(c);
+    for (const [k, v] of Object.entries(w)) q = q.where(k, "==", v);
+    if (o.arrayContains) q = q.where(o.arrayContains.field, "array-contains", o.arrayContains.value);
+    if (o.prefix) {
+      q = q.where(o.prefix.field, ">=", o.prefix.value)
+        .where(o.prefix.field, "<=", o.prefix.value + "\uf8ff")
+        .orderBy(o.prefix.field);
+    }
+    const dated = o.from !== undefined || o.to !== undefined;
+    if (o.from !== undefined) q = q.where("committedAt", ">=", o.from);
+    if (o.to !== undefined) q = q.where("committedAt", "<=", o.to);
+    if (dated) q = q.orderBy("committedAt");
+    q = q.orderBy(FieldPath.documentId());
+    if (o.after) {
+      if (o.prefix) q = q.startAfter(...decodePrefixCursor(o.after));
+      else q = dated ? q.startAfter(...decode(o.after)) : q.startAfter(o.after);
+    }
+    return { query: q.limit(o.limit ?? 100), dated, prefix: o.prefix };
+  }
+  private mapDocs(
+    snap: FirebaseFirestore.QuerySnapshot,
+    dated: boolean,
+    prefix: { field: string; value: string } | undefined,
+  ): Doc[] {
+    return snap.docs.map((d) => {
+      const data = { ...d.data(), id: d.id };
+      return { ...data, _cursor: prefix ? prefixCursor(data, prefix.field) : cursor(data, dated) };
+    });
+  }
+  read<T>(work: (tx: Tx) => Promise<T>): Promise<T> {
+    return work({
+      get: async (p) => {
+        const d = await this.db.doc(p).get();
+        return d.exists ? d.data() : undefined;
+      },
+      list: async (c, w = {}, o = {}) => {
+        const { query, dated, prefix } = this.buildQuery(c, w, o);
+        return this.mapDocs(await query.get(), dated, prefix);
+      },
+      set: () => {
+        throw new Error("READ_ONLY_STORE");
+      },
+    });
+  }
   run<T>(work: (tx: Tx) => Promise<T>): Promise<T> {
     return this.db.runTransaction(async (native) => {
       const writes = new Map<string, Doc>();
@@ -14,28 +63,8 @@ export class FirestoreStore implements Store {
           return d.exists ? d.data() : undefined;
         },
         list: async (c, w = {}, o = {}) => {
-          let q: FirebaseFirestore.Query = this.db.collection(c);
-          for (const [k, v] of Object.entries(w)) q = q.where(k, "==", v);
-          if (o.arrayContains) q = q.where(o.arrayContains.field, "array-contains", o.arrayContains.value);
-          if (o.prefix) {
-            q = q.where(o.prefix.field, ">=", o.prefix.value)
-              .where(o.prefix.field, "<=", o.prefix.value + "\uf8ff")
-              .orderBy(o.prefix.field);
-          }
-          const dated = o.from !== undefined || o.to !== undefined;
-          if (o.from !== undefined) q = q.where("committedAt", ">=", o.from);
-          if (o.to !== undefined) q = q.where("committedAt", "<=", o.to);
-          if (dated) q = q.orderBy("committedAt");
-          q = q.orderBy(FieldPath.documentId());
-          if (o.after) {
-            if (o.prefix) q = q.startAfter(...decodePrefixCursor(o.after));
-            else q = dated ? q.startAfter(...decode(o.after)) : q.startAfter(o.after);
-          }
-          const snap = await native.get(q.limit(o.limit ?? 100));
-          return snap.docs.map((d) => {
-            const data = { ...d.data(), id: d.id };
-            return { ...data, _cursor: o.prefix ? prefixCursor(data, o.prefix.field) : cursor(data, dated) };
-          });
+          const { query, dated, prefix } = this.buildQuery(c, w, o);
+          return this.mapDocs(await native.get(query), dated, prefix);
         },
         set: (p, d) => {
           writes.set(p, normalizeDocument(p, d));

@@ -518,7 +518,7 @@
                 android:fontFamily="sans-serif-medium"
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
-                android:text="Xác nhận &amp; nhập OTP"
+                android:text="Xác nhận"
                 android:textAllCaps="false"
                 android:textColor="@color/white"
                 android:textSize="15sp"

@@ -26,7 +26,10 @@ import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.navigation.Navigation;
+import androidx.recyclerview.widget.RecyclerView;
+import androidx.viewpager2.widget.ViewPager2;
 
+import com.example.final_term.BuildConfig;
 import com.example.final_term.R;
 import com.example.final_term.auth.AuthState;
 import com.example.final_term.auth.UserRole;
@@ -39,6 +42,9 @@ import com.example.final_term.databinding.FragmentAccountListBinding;
 import com.example.final_term.ui.common.SignatureBarChartView;
 import com.google.android.material.button.MaterialButton;
 import com.example.final_term.ui.common.ThemedDialogBuilder;
+import com.stripe.android.PaymentConfiguration;
+import com.stripe.android.paymentsheet.PaymentSheet;
+import com.stripe.android.paymentsheet.PaymentSheetResult;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -84,6 +90,15 @@ public final class AccountListFragment extends Fragment {
     private final Set<String> cardRequestsLoaded = new HashSet<>();
     private final Set<String> cardRequestsFailed = new HashSet<>();
     private String selectedCardAccountId;
+    private int selectedCardSlot = 0;
+    private boolean balanceVisible = false;
+    private PaymentSheet stripeSetupSheet;
+    private boolean stripeCardsLoading;
+    private boolean stripeCardsLoaded;
+    private boolean stripeCardsFailed;
+    private boolean stripeConfigured = true;
+    private boolean stripeSetupInFlight;
+    private final List<JSONObject> stripeCards = new ArrayList<>();
     private float cardSwipeStartX;
 
     @Nullable
@@ -98,6 +113,10 @@ public final class AccountListFragment extends Fragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle state) {
         super.onViewCreated(view, state);
         application = (FinalTermApplication) requireActivity().getApplication();
+        if (BuildConfig.STRIPE_PUBLISHABLE_KEY.startsWith("pk_test_")) {
+            PaymentConfiguration.init(requireContext(), BuildConfig.STRIPE_PUBLISHABLE_KEY);
+            stripeSetupSheet = new PaymentSheet.Builder(this::onStripeSetupResult).build(this);
+        }
 
         Bundle args = getArguments();
         if (args != null && args.containsKey("activeNavItem")) {
@@ -157,6 +176,12 @@ public final class AccountListFragment extends Fragment {
                             cardRequestsLoaded.clear();
                             cardRequestsFailed.clear();
                             selectedCardAccountId = null;
+                            selectedCardSlot = 0;
+                            stripeCards.clear();
+                            stripeCardsLoading = false;
+                            stripeCardsLoaded = false;
+                            stripeCardsFailed = false;
+                            stripeSetupInFlight = false;
                         }
                         uid = signedInUid;
                         role = authState.getUser().getRole();
@@ -271,53 +296,127 @@ public final class AccountListFragment extends Fragment {
             empty.addView(hint);
             binding.content.addView(empty);
         } else {
-            int selectedIndex = findSelectedCardIndex(cardAccounts);
-            ReadModels.AccountSummary selected = cardAccounts.get(selectedIndex);
-            selectedCardAccountId = selected.id;
-            FrameLayout stack = new FrameLayout(requireContext());
-            stack.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(380)));
-            if (cardAccounts.size() > 1) {
-                View leftPeek = createCardBackplate(false);
-                FrameLayout.LayoutParams leftParams = new FrameLayout.LayoutParams(dp(216), dp(330), Gravity.CENTER_VERTICAL | Gravity.START);
-                leftParams.leftMargin = dp(8);
-                stack.addView(leftPeek, leftParams);
-                View rightPeek = createCardBackplate(true);
-                FrameLayout.LayoutParams rightParams = new FrameLayout.LayoutParams(dp(216), dp(330), Gravity.CENTER_VERTICAL | Gravity.END);
-                rightParams.rightMargin = dp(8);
-                stack.addView(rightPeek, rightParams);
+            if (!stripeCardsLoaded && !stripeCardsLoading) {
+                loadStripeCards(false);
             }
-            View card = createPaymentCard(selected);
-            FrameLayout.LayoutParams cardParams = new FrameLayout.LayoutParams(dp(244), dp(356), Gravity.CENTER);
-            stack.addView(card, cardParams);
-            stack.setOnTouchListener((view, event) -> {
-                if (event.getAction() == MotionEvent.ACTION_DOWN) {
-                    cardSwipeStartX = event.getX();
-                    return true;
-                }
-                if (event.getAction() == MotionEvent.ACTION_UP) {
-                    float delta = event.getX() - cardSwipeStartX;
-                    if (Math.abs(delta) > dp(44) && cardAccounts.size() > 1) {
-                        int next = (selectedIndex + (delta < 0 ? 1 : -1) + cardAccounts.size()) % cardAccounts.size();
-                        selectedCardAccountId = cardAccounts.get(next).id;
-                        renderAll();
-                    }
-                    return true;
-                }
-                return true;
-            });
-            binding.content.addView(stack);
-            if (cardAccounts.size() > 1) binding.content.addView(createCardPagination(cardAccounts, selectedIndex));
-            binding.content.addView(createCardActions(selected));
+            int totalSlots = cardAccounts.size() + 1;
+            if (selectedCardSlot < 0 || selectedCardSlot >= totalSlots) {
+                selectedCardSlot = 0;
+            }
+            ReadModels.AccountSummary primaryChecking = cardAccounts.get(0);
+            selectedCardAccountId = selectedCardSlot < cardAccounts.size()
+                    ? cardAccounts.get(selectedCardSlot).id : primaryChecking.id;
 
-            MaterialButton details = new MaterialButton(requireContext());
-            details.setText("Chi tiết thẻ  ›");
-            details.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
-            details.setBackgroundTintList(ContextCompat.getColorStateList(requireContext(), R.color.glass));
-            details.setCornerRadius(dp(26));
-            details.setOnClickListener(v -> openDetails(v, selected));
-            LinearLayout.LayoutParams detailsParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52));
-            detailsParams.setMargins(dp(4), dp(8), dp(4), dp(18));
-            binding.content.addView(details, detailsParams);
+            ViewPager2 pager = new ViewPager2(requireContext());
+            pager.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(380)));
+            pager.setOffscreenPageLimit(2);
+            pager.setClipToPadding(false);
+            pager.setClipChildren(false);
+            if (pager.getChildAt(0) instanceof RecyclerView) {
+                RecyclerView rv = (RecyclerView) pager.getChildAt(0);
+                rv.setClipToPadding(false);
+                rv.setClipChildren(false);
+                rv.setOverScrollMode(View.OVER_SCROLL_NEVER);
+            }
+            pager.setPageTransformer((page, position) -> {
+                float absPos = Math.min(1f, Math.abs(position));
+                int width = page.getWidth();
+                if (width > 0) {
+                    page.setTranslationX(-position * width * 0.85f);
+                }
+                float scale = 1f - 0.10f * absPos;
+                page.setScaleX(scale);
+                page.setScaleY(scale);
+                page.setAlpha(1f - 0.42f * absPos);
+                page.setRotation(position * 7f);
+                page.setTranslationZ((1f - absPos) * dp(24));
+            });
+            pager.setAdapter(new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+                @NonNull
+                @Override
+                public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+                    FrameLayout slot = new FrameLayout(parent.getContext());
+                    slot.setLayoutParams(new ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                    slot.setClipChildren(false);
+                    return new RecyclerView.ViewHolder(slot) { };
+                }
+
+                @Override
+                public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
+                    FrameLayout slot = (FrameLayout) holder.itemView;
+                    slot.removeAllViews();
+                    View card = position >= cardAccounts.size()
+                            ? (stripeCards.isEmpty() ? createStripeUnlinkedCard() : createStripeVisaCard(stripeCards.get(0)))
+                            : createNapasCard(cardAccounts.get(position));
+                    FrameLayout.LayoutParams cardParams = new FrameLayout.LayoutParams(dp(244), dp(356), Gravity.CENTER);
+                    slot.addView(card, cardParams);
+                }
+
+                @Override
+                public int getItemCount() {
+                    return totalSlots;
+                }
+            });
+            pager.setCurrentItem(selectedCardSlot, false);
+            binding.content.addView(pager);
+
+            LinearLayout dotsContainer = new LinearLayout(requireContext());
+            dotsContainer.setOrientation(LinearLayout.VERTICAL);
+            if (totalSlots > 1) {
+                dotsContainer.addView(createCardSlotPagination(totalSlots, selectedCardSlot, pager));
+            }
+            binding.content.addView(dotsContainer);
+
+            LinearLayout cardDetailsContainer = new LinearLayout(requireContext());
+            cardDetailsContainer.setOrientation(LinearLayout.VERTICAL);
+            binding.content.addView(cardDetailsContainer);
+
+            Runnable updateSlotDetails = () -> {
+                if (binding == null) return;
+                boolean isStripeSlot = selectedCardSlot >= cardAccounts.size();
+                ReadModels.AccountSummary activeChecking = isStripeSlot
+                        ? primaryChecking : cardAccounts.get(selectedCardSlot);
+                selectedCardAccountId = activeChecking.id;
+
+                dotsContainer.removeAllViews();
+                if (totalSlots > 1) {
+                    dotsContainer.addView(createCardSlotPagination(totalSlots, selectedCardSlot, pager));
+                }
+
+                cardDetailsContainer.removeAllViews();
+                if (!isStripeSlot) {
+                    cardDetailsContainer.addView(createCardActions(activeChecking));
+                    cardDetailsContainer.addView(createNapasInfoPanel(activeChecking));
+
+                    MaterialButton details = new MaterialButton(requireContext());
+                    details.setText("Chi tiết tài khoản  ›");
+                    details.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
+                    details.setBackgroundTintList(ContextCompat.getColorStateList(requireContext(), R.color.glass));
+                    details.setCornerRadius(dp(26));
+                    details.setOnClickListener(v -> openDetails(v, activeChecking));
+                    LinearLayout.LayoutParams detailsParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52));
+                    detailsParams.setMargins(dp(4), dp(8), dp(4), dp(18));
+                    cardDetailsContainer.addView(details, detailsParams);
+                } else if (!stripeCards.isEmpty()) {
+                    JSONObject primaryStripe = stripeCards.get(0);
+                    cardDetailsContainer.addView(createStripeCardActions(primaryChecking, primaryStripe));
+                    cardDetailsContainer.addView(createStripeInfoPanel(primaryStripe));
+                } else {
+                    cardDetailsContainer.addView(createStripeUnlinkedInfoPanel());
+                }
+            };
+
+            updateSlotDetails.run();
+            pager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
+                @Override
+                public void onPageSelected(int position) {
+                    if (position != selectedCardSlot) {
+                        selectedCardSlot = position;
+                        updateSlotDetails.run();
+                    }
+                }
+            });
         }
 
         if (!otherAccounts.isEmpty()) {
@@ -369,17 +468,44 @@ public final class AccountListFragment extends Fragment {
         return plate;
     }
 
-    private View createPaymentCard(ReadModels.AccountSummary account) {
-        JSONObject snapshot = cardSnapshots.get(account.id);
-        JSONObject cardData = snapshot == null ? null : snapshot.optJSONObject("card");
+    private View createNapasCard(ReadModels.AccountSummary account) {
+        String rawId = account.id == null ? "" : account.id;
+        String last4 = rawId.length() >= 4 ? rawId.substring(rawId.length() - 4) : rawId;
+        return buildPaymentCardFrame(
+                "NAPAS",
+                last4,
+                "nimbus",
+                cardDrawable(0xFF43537D, 0xFFF4F7FC),
+                R.color.navy,
+                R.color.slate_blue,
+                false,
+                "Thẻ Napas tài khoản thanh toán" + (last4.isEmpty() ? "" : " kết thúc bằng " + last4)
+        );
+    }
+
+    private View createStripeVisaCard(JSONObject cardData) {
         String brand = cardData == null ? "VISA" : cardData.optString("brand", "VISA").toUpperCase(Locale.ROOT);
         String last4 = cardData == null ? "" : cardData.optString("last4", "");
+        return buildPaymentCardFrame(
+                brand,
+                last4,
+                "stripe",
+                cardDrawableDark(),
+                R.color.white,
+                R.color.glass_border,
+                true,
+                "Thẻ Stripe " + brand + (last4.isEmpty() ? "" : " kết thúc bằng " + last4)
+        );
+    }
 
+    private View buildPaymentCardFrame(String brand, String last4, String watermarkLabel,
+                                       GradientDrawable background, int numberColorRes,
+                                       int watermarkColorRes, boolean darkCard, String contentDesc) {
         FrameLayout card = new FrameLayout(requireContext());
         card.setPadding(dp(22), dp(24), dp(22), dp(22));
-        card.setBackground(cardDrawable(0xFF43537D, 0xFFF4F7FC));
+        card.setBackground(background);
         card.setElevation(dp(18));
-        card.setContentDescription("Thẻ thanh toán Nimbus" + (last4.isEmpty() ? "" : " kết thúc bằng " + last4));
+        card.setContentDescription(contentDesc);
         if (android.os.Build.VERSION.SDK_INT >= 21) card.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
 
         // Top-left: Metallic EMV Chip
@@ -389,20 +515,20 @@ public final class AccountListFragment extends Fragment {
         FrameLayout.LayoutParams chipParams = new FrameLayout.LayoutParams(dp(42), dp(32), Gravity.TOP | Gravity.START);
         card.addView(chip, chipParams);
 
-        // Top-right: Vertical VISA wordmark
+        // Top-right: Vertical brand wordmark (NAPAS / VISA)
         TextView brandText = walletText(brand, 22, R.color.white, true);
         brandText.setLetterSpacing(0.06f);
         brandText.setRotation(-90f);
         FrameLayout.LayoutParams brandParams = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END);
-        brandParams.topMargin = dp(12);
-        brandParams.rightMargin = dp(-10);
+        brandParams.topMargin = dp(14);
+        brandParams.rightMargin = brand.length() > 4 ? dp(-14) : dp(-10);
         card.addView(brandText, brandParams);
 
-        // Subtle center-bottom masked last 4 digits if available
-        if (!last4.isEmpty()) {
-            TextView number = walletText("••••  " + last4, 14, R.color.navy, true);
-            number.setAlpha(0.75f);
+        // Subtle center masked last 4 digits if available
+        if (last4 != null && !last4.isEmpty()) {
+            TextView number = walletText("••••  " + last4, 14, numberColorRes, true);
+            number.setAlpha(darkCard ? 0.88f : 0.75f);
             number.setLetterSpacing(0.08f);
             FrameLayout.LayoutParams numParams = new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
@@ -411,8 +537,8 @@ public final class AccountListFragment extends Fragment {
         }
 
         // Bottom-left: Vertical subtle brand watermark
-        TextView watermark = walletText("nimbus", 22, R.color.slate_blue, false);
-        watermark.setAlpha(0.55f);
+        TextView watermark = walletText(watermarkLabel, 22, watermarkColorRes, false);
+        watermark.setAlpha(darkCard ? 0.65f : 0.55f);
         watermark.setLetterSpacing(-0.02f);
         watermark.setRotation(-90f);
         FrameLayout.LayoutParams markParams = new FrameLayout.LayoutParams(
@@ -424,6 +550,10 @@ public final class AccountListFragment extends Fragment {
         // Bottom-right: Contactless NFC wave icon
         ImageView contactless = new ImageView(requireContext());
         contactless.setImageResource(R.drawable.ic_card_contactless);
+        if (darkCard) {
+            contactless.setImageTintList(ContextCompat.getColorStateList(requireContext(), R.color.white));
+            contactless.setAlpha(0.85f);
+        }
         contactless.setContentDescription(null);
         FrameLayout.LayoutParams contactParams = new FrameLayout.LayoutParams(dp(24), dp(24), Gravity.BOTTOM | Gravity.END);
         card.addView(contactless, contactParams);
@@ -431,9 +561,66 @@ public final class AccountListFragment extends Fragment {
         return card;
     }
 
+    private View createStripeUnlinkedCard() {
+        LinearLayout card = new LinearLayout(requireContext());
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setGravity(Gravity.CENTER);
+        card.setPadding(dp(24), dp(28), dp(24), dp(28));
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(dp(28));
+        bg.setColor(0xBFFFFFFF);
+        bg.setStroke(dp(1), 0x662F3E6E, dp(8), dp(6));
+        card.setBackground(bg);
+        card.setElevation(dp(12));
+
+        ImageView icon = new ImageView(requireContext());
+        icon.setImageResource(R.drawable.ic_nav_add);
+        icon.setImageTintList(ContextCompat.getColorStateList(requireContext(), R.color.navy));
+        icon.setBackgroundResource(R.drawable.circle_action_button);
+        icon.setPadding(dp(14), dp(14), dp(14), dp(14));
+        card.addView(icon, new LinearLayout.LayoutParams(dp(56), dp(56)));
+
+        TextView title = walletText(
+                stripeCardsLoading ? "Đang kiểm tra thẻ Stripe…" : "Chưa liên kết thẻ Stripe",
+                16, R.color.ink, true);
+        title.setGravity(Gravity.CENTER);
+        title.setPadding(0, dp(16), 0, dp(6));
+        card.addView(title);
+
+        TextView subtitle = walletText(
+                stripeCardsFailed
+                        ? "Không thể tải danh sách thẻ. Nhấn bên dưới để thử lại."
+                        : "Liên kết thẻ Visa / Mastercard để nạp tiền và thanh toán tiện ích.",
+                12, R.color.ink_muted, false);
+        subtitle.setGravity(Gravity.CENTER);
+        subtitle.setPadding(0, 0, 0, dp(18));
+        card.addView(subtitle);
+
+        MaterialButton linkBtn = new MaterialButton(requireContext());
+        linkBtn.setText(stripeCardsFailed ? "Thử lại" : (stripeSetupInFlight ? "Đang mở…" : "Liên kết thẻ ngay"));
+        linkBtn.setEnabled(!stripeCardsLoading && !stripeSetupInFlight);
+        linkBtn.setTextColor(ContextCompat.getColor(requireContext(), R.color.white));
+        linkBtn.setBackgroundTintList(ContextCompat.getColorStateList(requireContext(), R.color.navy));
+        linkBtn.setCornerRadius(dp(24));
+        linkBtn.setOnClickListener(v -> {
+            if (stripeCardsFailed) loadStripeCards(true);
+            else startStripeCardSetup();
+        });
+        card.addView(linkBtn, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)));
+        return card;
+    }
+
     private GradientDrawable cardDrawable(int startColor, int endColor) {
         GradientDrawable drawable = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
                 new int[]{startColor, 0xFF697AA3, 0xFFA6B4D0, 0xFFE8EEF7, endColor, 0xFFFFFFFF});
+        drawable.setCornerRadius(dp(28));
+        drawable.setStroke(dp(1), 0xE6FFFFFF);
+        return drawable;
+    }
+
+    private GradientDrawable cardDrawableDark() {
+        GradientDrawable drawable = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                new int[]{0xFF131C38, 0xFF222E55, 0xFF475888, 0xFF8FA0C6});
         drawable.setCornerRadius(dp(28));
         drawable.setStroke(dp(1), 0xE6FFFFFF);
         return drawable;
@@ -448,14 +635,14 @@ public final class AccountListFragment extends Fragment {
         return "Trạng thái thẻ chưa khả dụng";
     }
 
-    private View createCardPagination(List<ReadModels.AccountSummary> cardAccounts, int selectedIndex) {
+    private View createCardSlotPagination(int totalSlots, int selectedIndex, ViewPager2 pager) {
         LinearLayout dots = new LinearLayout(requireContext());
         dots.setGravity(Gravity.CENTER);
         dots.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(24));
         params.bottomMargin = dp(8);
         dots.setLayoutParams(params);
-        for (int i = 0; i < cardAccounts.size(); i++) {
+        for (int i = 0; i < totalSlots; i++) {
             final int index = i;
             View dot = new View(requireContext());
             GradientDrawable shape = new GradientDrawable();
@@ -464,15 +651,260 @@ public final class AccountListFragment extends Fragment {
                     : 0x99FFFFFF);
             if (i == selectedIndex) shape.setStroke(dp(1), 0x33777777);
             dot.setBackground(shape);
-            dot.setContentDescription("Thẻ " + (i + 1) + " trên " + cardAccounts.size());
+            dot.setContentDescription("Thẻ " + (i + 1) + " trên " + totalSlots);
             dot.setFocusable(true);
             dot.setClickable(true);
-            dot.setOnClickListener(v -> { selectedCardAccountId = cardAccounts.get(index).id; renderAll(); });
+            dot.setOnClickListener(v -> pager.setCurrentItem(index, true));
             LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(i == selectedIndex ? dp(24) : dp(8), dp(8));
             dotParams.setMargins(dp(4), 0, dp(4), 0);
             dots.addView(dot, dotParams);
         }
         return dots;
+    }
+
+    private View createNapasInfoPanel(ReadModels.AccountSummary account) {
+        LinearLayout panel = walletCard();
+        LinearLayout balanceHeader = new LinearLayout(requireContext());
+        balanceHeader.setOrientation(LinearLayout.HORIZONTAL);
+        balanceHeader.setGravity(Gravity.CENTER_VERTICAL);
+        balanceHeader.addView(walletText("Số dư khả dụng", 12, R.color.ink_muted, false),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        ImageButton eyeBtn = new ImageButton(requireContext());
+        eyeBtn.setImageResource(balanceVisible ? R.drawable.ic_eye : R.drawable.ic_eye_slash);
+        eyeBtn.setImageTintList(ContextCompat.getColorStateList(requireContext(), R.color.navy));
+        eyeBtn.setBackground(null);
+        eyeBtn.setContentDescription(balanceVisible ? "Ẩn số dư" : "Hiện số dư");
+        eyeBtn.setPadding(dp(4), dp(4), dp(4), dp(4));
+        eyeBtn.setOnClickListener(v -> {
+            balanceVisible = !balanceVisible;
+            renderAll();
+        });
+        balanceHeader.addView(eyeBtn, new LinearLayout.LayoutParams(dp(28), dp(28)));
+        panel.addView(balanceHeader);
+
+        long available = account.availableMinor != null ? account.availableMinor : account.balanceMinor;
+        String formatted = ReadSummaryFormatter.formatCurrency(available, account.currency);
+        TextView amountText = walletText(balanceVisible ? formatted : "•••••••• ₫", 20, R.color.ink, true);
+        amountText.setPadding(0, dp(4), 0, dp(10));
+        panel.addView(amountText);
+
+        addInfoRow(panel, "Tài khoản liên kết", "Thanh toán · " + account.currency);
+        addInfoRow(panel, "Số tài khoản", maskAccountId(account.id));
+        return panel;
+    }
+
+    private View createStripeInfoPanel(JSONObject cardData) {
+        LinearLayout panel = walletCard();
+        String brand = cardData.optString("brand", "VISA").toUpperCase(Locale.ROOT);
+        String last4 = cardData.optString("last4", "");
+        int expMonth = cardData.optInt("expMonth", 0);
+        int expYear = cardData.optInt("expYear", 0);
+        String expiry = (expMonth > 0 && expYear > 0)
+                ? String.format(Locale.US, "%02d/%d", expMonth, expYear) : "—";
+        addInfoRow(panel, "Cổng thanh toán", "Stripe · " + brand);
+        addInfoRow(panel, "Số thẻ", last4.isEmpty() ? "—" : "••••  ••••  ••••  " + last4);
+        addInfoRow(panel, "Hết hạn", expiry);
+        addInfoRow(panel, "Phạm vi", "Nạp tiền & Thanh toán tiện ích");
+        return panel;
+    }
+
+    private View createStripeUnlinkedInfoPanel() {
+        LinearLayout panel = walletCard();
+        panel.addView(walletText("Thẻ quốc tế (Stripe)", 14, R.color.ink, true));
+        TextView desc = walletText(
+                "Sau khi liên kết thẻ Visa hoặc Mastercard qua Stripe, bạn có thể dùng thẻ này để nạp tiền vào tài khoản Nimbus hoặc thanh toán hóa đơn nhanh.",
+                12, R.color.ink_muted, false);
+        desc.setPadding(0, dp(6), 0, 0);
+        panel.addView(desc);
+        return panel;
+    }
+
+    private void addInfoRow(LinearLayout parent, String label, String value) {
+        LinearLayout row = new LinearLayout(requireContext());
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(4), 0, dp(4));
+        row.addView(walletText(label, 12, R.color.ink_muted, false),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        row.addView(walletText(value, 13, R.color.ink, true));
+        parent.addView(row);
+    }
+
+    private String maskAccountId(String id) {
+        if (id == null || id.isEmpty()) return "—";
+        if (id.length() <= 4) return id;
+        return "••••  " + id.substring(id.length() - 4);
+    }
+
+    private View createStripeCardActions(ReadModels.AccountSummary checkingAccount, JSONObject cardData) {
+        LinearLayout actions = new LinearLayout(requireContext());
+        actions.setGravity(Gravity.CENTER);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rowParams.bottomMargin = dp(12);
+        actions.setLayoutParams(rowParams);
+
+        String[] titles = {"Nạp tiền", "Trả hóa đơn", "Đổi thẻ", "Hủy liên kết"};
+        int[] icons = {R.drawable.ic_nav_add, R.drawable.ic_receipt,
+                R.drawable.ic_swap_horizontal, R.drawable.ic_close};
+        for (int i = 0; i < titles.length; i++) {
+            final int actionIndex = i;
+            LinearLayout action = new LinearLayout(requireContext());
+            action.setOrientation(LinearLayout.VERTICAL);
+            action.setGravity(Gravity.CENTER);
+            action.setClickable(true);
+            action.setFocusable(true);
+            action.setContentDescription(titles[i]);
+
+            ImageView icon = new ImageView(requireContext());
+            icon.setImageResource(icons[i]);
+            icon.setImageTintList(ContextCompat.getColorStateList(requireContext(),
+                    actionIndex == 3 ? R.color.danger : R.color.navy));
+            icon.setBackgroundResource(R.drawable.circle_action_button);
+            icon.setPadding(dp(15), dp(15), dp(15), dp(15));
+            action.addView(icon, new LinearLayout.LayoutParams(dp(56), dp(56)));
+
+            TextView label = walletText(titles[i], 11, actionIndex == 3 ? R.color.danger : R.color.ink, true);
+            label.setGravity(Gravity.CENTER);
+            LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            labelParams.topMargin = dp(6);
+            action.addView(label, labelParams);
+
+            action.setOnClickListener(view -> {
+                if (actionIndex == 0) {
+                    Bundle args = new Bundle();
+                    args.putString("demoCashOperation", "DEPOSIT");
+                    args.putString("accountId", checkingAccount.id);
+                    Navigation.findNavController(view).navigate(R.id.transfer, args);
+                } else if (actionIndex == 1) {
+                    Navigation.findNavController(view).navigate(R.id.utilitiesHub);
+                } else if (actionIndex == 2) {
+                    startStripeCardSetup();
+                } else {
+                    confirmDetachStripeCard(cardData);
+                }
+            });
+            actions.addView(action, new LinearLayout.LayoutParams(0, dp(88), 1f));
+        }
+        return actions;
+    }
+
+    private void loadStripeCards(boolean force) {
+        if (stripeCardsLoading || (stripeCardsLoaded && !force)) return;
+        stripeCardsLoading = true;
+        stripeCardsFailed = false;
+        var current = binding;
+        String requestedUid = uid;
+        application.getAppContainer().getBackendApiClient().get("/stripe/cards").addOnCompleteListener(task -> {
+            if (binding != current || !java.util.Objects.equals(uid, requestedUid)) return;
+            stripeCardsLoading = false;
+            stripeCardsLoaded = true;
+            stripeCards.clear();
+            try {
+                if (task.isSuccessful() && task.getResult() != null && task.getResult().statusCode == 200) {
+                    JSONObject body = new JSONObject(task.getResult().body);
+                    stripeConfigured = body.optBoolean("configured", true);
+                    JSONArray arr = body.optJSONArray("cards");
+                    if (arr != null) {
+                        for (int i = 0; i < arr.length(); i++) {
+                            stripeCards.add(arr.getJSONObject(i));
+                        }
+                    }
+                } else {
+                    stripeCardsFailed = true;
+                }
+            } catch (Exception ignored) {
+                stripeCardsFailed = true;
+            }
+            renderAll();
+        });
+    }
+
+    private void startStripeCardSetup() {
+        if (stripeSetupInFlight) return;
+        if (stripeSetupSheet == null || !stripeConfigured) {
+            Toast.makeText(requireContext(), "Cổng thẻ Stripe chưa được cấu hình.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        stripeSetupInFlight = true;
+        renderAll();
+        var current = binding;
+        String requestedUid = uid;
+        try {
+            JSONObject payload = new JSONObject().put("requestId", UUID.randomUUID().toString());
+            application.getAppContainer().getBackendApiClient()
+                    .post("/stripe/cards/setup-intent", payload.toString())
+                    .addOnCompleteListener(task -> {
+                        if (binding != current || !java.util.Objects.equals(uid, requestedUid)) return;
+                        stripeSetupInFlight = false;
+                        try {
+                            if (task.isSuccessful() && task.getResult() != null && task.getResult().statusCode == 200) {
+                                JSONObject res = new JSONObject(task.getResult().body);
+                                String setupSecret = res.optString("setupIntentClientSecret", "");
+                                if (setupSecret.isEmpty()) {
+                                    Toast.makeText(requireContext(), "Không thể khởi tạo liên kết thẻ.", Toast.LENGTH_SHORT).show();
+                                    renderAll();
+                                    return;
+                                }
+                                PaymentSheet.Configuration.Builder cfg = new PaymentSheet.Configuration.Builder("Nimbus Bank");
+                                if (!res.isNull("customerId") && !res.isNull("customerSessionClientSecret")) {
+                                    cfg.customer(PaymentSheet.CustomerConfiguration.Companion.createWithCustomerSession(
+                                            res.getString("customerId"), res.getString("customerSessionClientSecret")));
+                                }
+                                stripeSetupSheet.presentWithSetupIntent(setupSecret, cfg.build());
+                                return;
+                            }
+                        } catch (Exception ignored) { }
+                        Toast.makeText(requireContext(), "Không thể mở biểu mẫu liên kết thẻ Stripe.", Toast.LENGTH_SHORT).show();
+                        renderAll();
+                    });
+        } catch (Exception e) {
+            stripeSetupInFlight = false;
+            renderAll();
+        }
+    }
+
+    private void onStripeSetupResult(@NonNull PaymentSheetResult result) {
+        if (binding == null) return;
+        if (result instanceof PaymentSheetResult.Completed) {
+            Toast.makeText(requireContext(), "Đã liên kết thẻ Stripe thành công.", Toast.LENGTH_SHORT).show();
+            stripeCardsLoaded = false;
+            loadStripeCards(true);
+        } else if (result instanceof PaymentSheetResult.Failed) {
+            Toast.makeText(requireContext(), "Liên kết thẻ thất bại. Vui lòng thử lại.", Toast.LENGTH_SHORT).show();
+            renderAll();
+        } else {
+            renderAll();
+        }
+    }
+
+    private void confirmDetachStripeCard(JSONObject cardData) {
+        String pmId = cardData == null ? "" : cardData.optString("id", "");
+        String last4 = cardData == null ? "" : cardData.optString("last4", "");
+        if (pmId.isEmpty()) return;
+        new ThemedDialogBuilder(requireContext())
+                .setTitle("Hủy liên kết thẻ Stripe")
+                .setMessage("Bạn có chắc muốn gỡ thẻ kết thúc bằng " + last4 + " khỏi Nimbus Bank?")
+                .setNegativeButton("Giữ lại", null)
+                .setPositiveButton("Hủy liên kết", (dialog, which) -> {
+                    var current = binding;
+                    String requestedUid = uid;
+                    application.getAppContainer().getBackendApiClient()
+                            .delete("/stripe/cards/" + android.net.Uri.encode(pmId))
+                            .addOnCompleteListener(task -> {
+                                if (binding != current || !java.util.Objects.equals(uid, requestedUid)) return;
+                                if (task.isSuccessful() && task.getResult() != null && task.getResult().statusCode == 200) {
+                                    Toast.makeText(requireContext(), "Đã hủy liên kết thẻ Stripe.", Toast.LENGTH_SHORT).show();
+                                    stripeCardsLoaded = false;
+                                    loadStripeCards(true);
+                                } else {
+                                    Toast.makeText(requireContext(), "Không thể hủy liên kết thẻ. Vui lòng thử lại.", Toast.LENGTH_SHORT).show();
+                                }
+                            });
+                })
+                .show();
     }
 
     private View createCardActions(ReadModels.AccountSummary account) {

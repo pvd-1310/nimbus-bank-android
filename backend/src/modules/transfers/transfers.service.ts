@@ -292,7 +292,7 @@ export class TransferService {
   }
   async recentRecipients(a: Actor) {
     check(a.role === "CUSTOMER", "FORBIDDEN", 403);
-    return this.bank.store.run(async (t) => {
+    return this.bank.read(async (t) => {
       await this.bank.authorize(t, a);
       const txs = await t.list("transactions", { ownerUid: a.uid }, { limit: 100 });
       const seen = new Set<string>();

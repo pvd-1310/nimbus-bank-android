@@ -16,7 +16,7 @@ export class AccountService {
       } as Doc
     )[acc.type];
     check(collection, "INVALID_TYPE");
-    return this.bank.store.run(async (t) => {
+    return this.bank.read(async (t) => {
       await this.bank.authorize(t, a);
       await this.bank.owned(t, a, acc.id);
       const detail = await t.get(collection + "/" + acc.id);
@@ -25,7 +25,7 @@ export class AccountService {
     });
   }
   async limits(a: Actor, id: string) {
-    return this.bank.store.run(async (t) => {
+    return this.bank.read(async (t) => {
       await this.bank.authorize(t, a);
       const acc = await this.bank.owned(t, a, id);
       const detail = acc.type === "CHECKING" ? await t.get("checkingDetails/" + acc.id) : null;
@@ -35,7 +35,7 @@ export class AccountService {
       const now = new Date(this.bank.now());
       const dayStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
       const monthStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
-      const txs = await t.list("transactions", { ownerUid: a.uid, sourceAccountId: acc.id }, { limit: 500 });
+      const txs = await t.list("transactions", { ownerUid: a.uid, sourceAccountId: acc.id }, { from: Math.min(dayStart, monthStart), limit: 500 });
       let dailyUsedMinor = 0;
       let monthlyUsedMinor = 0;
       for (const tx of txs) {
@@ -84,7 +84,7 @@ export class AccountService {
     });
   }
   async savings(a: Actor, id: string, month?: string) {
-    return this.bank.store.run(async (t) => {
+    return this.bank.read(async (t) => {
       await this.bank.authorize(t, a);
       const acc = await this.bank.owned(t, a, id);
       check(acc.type === "SAVINGS", "INVALID_TYPE");
@@ -182,7 +182,7 @@ export class AccountService {
     });
   }
   async mortgage(a: Actor, id: string, frequency?: "MONTHLY" | "BIWEEKLY") {
-    return this.bank.store.run(async (t) => {
+    return this.bank.read(async (t) => {
       await this.bank.authorize(t, a);
       const acc = await this.bank.owned(t, a, id);
       check(acc.type === "MORTGAGE", "INVALID_TYPE");
@@ -230,13 +230,13 @@ export class AccountService {
     });
   }
   async list(a: Actor, q: Doc = {}) {
-    return this.bank.store.run(async (t) => {
+    return this.bank.read(async (t) => {
       await this.bank.authorize(t, a);
       return t.list("accounts", { ownerUid: a.uid }, queryOptions(q));
     });
   }
   async get(a: Actor, id: string) {
-    return this.bank.store.run(async (t) => {
+    return this.bank.read(async (t) => {
       await this.bank.authorize(t, a);
       return this.bank.owned(t, a, id);
     });

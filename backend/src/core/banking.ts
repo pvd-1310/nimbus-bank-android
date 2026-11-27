@@ -109,15 +109,18 @@ export class Banking {
       beforeAfterSummary,
     });
   }
+  read<T>(work: (tx: Tx) => Promise<T>): Promise<T> {
+    return this.store.read ? this.store.read(work) : this.store.run(work);
+  }
   async listOwned(a: Actor, collection: string, q: Doc = {}) {
-    return this.store.run(async (t) => {
+    return this.read(async (t) => {
       await this.authorize(t, a);
       return t.list(collection, { ownerUid: a.uid }, queryOptions(q));
     });
   }
   async scoped(a: Actor, collection: string, id: string): Promise<Doc> {
     key(id);
-    return this.store.run(async (t) => {
+    return this.read(async (t) => {
       await this.authorize(t, a);
       const d = await t.get(collection + "/" + id);
       check(d, "NOT_FOUND", 404);

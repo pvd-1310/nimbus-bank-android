@@ -743,7 +743,18 @@ public final class TransactionExecutionFragment extends Fragment {
                     intentId = newIntentId;
                     requestId = json.optString("requestId", requestId);
                     faceRequired = json.optBoolean("faceRequired", faceRequired);
-                    inspectIntent(true);
+                    String status = json.optString("status", "CREATED");
+                    if (!recovering && "CREATED".equalsIgnoreCase(status)) {
+                        commitPending = false;
+                        renderConfirmationStep();
+                        if (faceRequired && !faceVerified) {
+                            showToast("Giao dịch cần xác minh khuôn mặt trước khi nhập OTP.");
+                        } else {
+                            openOtpAndRequestCode();
+                        }
+                    } else {
+                        inspectIntent(true);
+                    }
                 } catch (JSONException e) {
                     showToast("Chưa đọc được phản hồi giao dịch. Vui lòng thử lại.");
                 }
@@ -1559,7 +1570,7 @@ public final class TransactionExecutionFragment extends Fragment {
     private void updateConfirmButtonState() {
         if (binding == null) return;
         boolean enabled = !busy && !completed;
-        String buttonText = "Xác nhận & nhập OTP";
+        String buttonText = "Xác nhận";
         if (isBillOrOrderPayment() && "NIMBUS_ACCOUNT".equals(selectedPaymentMethod)) {
             if (selectedPaymentAccountId == null) {
                 enabled = false;

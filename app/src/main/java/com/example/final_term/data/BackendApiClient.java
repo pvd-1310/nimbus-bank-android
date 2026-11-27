@@ -38,9 +38,9 @@ public final class BackendApiClient {
 
     private static OkHttpClient newHttpClient() {
         var builder = new OkHttpClient.Builder()
-            .connectTimeout(5, TimeUnit.SECONDS)
-            .readTimeout(5, TimeUnit.SECONDS)
-            .writeTimeout(5, TimeUnit.SECONDS)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .writeTimeout(15, TimeUnit.SECONDS)
             .followRedirects(false)
             .retryOnConnectionFailure(false);
         String host = URI.create(BASE_URL).getHost();
@@ -58,7 +58,7 @@ public final class BackendApiClient {
     private final OkHttpClient cameraHttp = http.newBuilder().callTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS).build();
     private final FirebaseAuth auth;
-    private final ExecutorService executor = Executors.newFixedThreadPool(2);
+    private final ExecutorService executor = Executors.newFixedThreadPool(8);
 
     public BackendApiClient(FirebaseAuth auth) { this.auth = auth; }
 
@@ -86,6 +86,10 @@ public final class BackendApiClient {
 
     public Task<Response> patch(@NonNull String path, @NonNull String jsonBody) {
         return request("PATCH", path, jsonBody);
+    }
+
+    public Task<Response> delete(@NonNull String path) {
+        return request("DELETE", path, null);
     }
 
     public Task<Response> verifyIntentOtp(OtpVerification verification) {
