@@ -356,8 +356,9 @@ public final class BranchLocatorFragment extends Fragment {
                             branchOptions.put(label, branch);
                         }
                         renderBranchMarkers();
+                        binding.searchInput.setDropDownBackgroundResource(R.drawable.bg_nimbus_dropdown_popup);
                         binding.searchInput.setAdapter(new ArrayAdapter<>(requireContext(),
-                                android.R.layout.simple_dropdown_item_1line, new ArrayList<>(branchOptions.keySet())));
+                                R.layout.item_nimbus_dropdown, new ArrayList<>(branchOptions.keySet())));
                         binding.searchInput.setOnItemClickListener((parent, itemView, position, id) ->
                                 selectBranch((String) parent.getItemAtPosition(position)));
                         setBranchStatus(!mapsConfigured

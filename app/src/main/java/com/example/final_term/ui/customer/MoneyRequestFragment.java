@@ -126,7 +126,7 @@ public final class MoneyRequestFragment extends Fragment {
                 if ("CHECKING".equalsIgnoreCase(account.type) && "ACTIVE".equalsIgnoreCase(account.status)
                         && "VND".equalsIgnoreCase(account.currency)) {
                     accountIds.add(account.id);
-                    labels.add(account.id + " · VND");
+                    labels.add(account.displayAccountNumber() + " · VND");
                 }
             }
         }
@@ -143,7 +143,9 @@ public final class MoneyRequestFragment extends Fragment {
     }
 
     private ArrayAdapter<String> adapter(List<String> labels) {
-        return new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_dropdown_item, labels);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(), R.layout.item_nimbus_spinner, labels);
+        adapter.setDropDownViewResource(R.layout.item_nimbus_dropdown);
+        return adapter;
     }
 
     private void updateControls() {

@@ -36,7 +36,7 @@
     <string name="utility_hotel">Khách sạn</string>
     <string name="utility_shopping">Mua sắm</string>
     <string name="utility_all">Tất cả</string>
-    <string name="utility_internet">Internet &amp; Dịch vụ</string>
+    <string name="utility_internet">Internet</string>
     <string name="utility_pending_order">Kiểm tra đơn hàng đang tạo</string>
 
     <!-- Navigation Labels -->
@@ -64,8 +64,8 @@
     <string name="income_activity">Hoạt động thu nhập</string>
 
     <!-- Wallet & Accounts -->
-    <string name="wallet_title">Ví &amp; Hạn mức</string>
-    <string name="cards_title">Tài khoản &amp; Thẻ</string>
+    <string name="wallet_title">Ví của tôi</string>
+    <string name="cards_title">Tài khoản</string>
     <string name="account_details_btn">Chi tiết tài khoản</string>
     <string name="lock_card">Khóa thẻ</string>
     <string name="nfc_toggle">NFC Chạm</string>
@@ -95,7 +95,7 @@
     <string name="share_receipt">Chia sẻ biên lai</string>
 
     <!-- Money Requests -->
-    <string name="money_request_title">Nạp / Rút tiền</string>
+    <string name="money_request_title">Nạp rút tiền</string>
     <string name="tab_deposit">Nạp tiền</string>
     <string name="tab_withdrawal">Rút tiền</string>
     <string name="money_request_notice">Số dư chỉ thay đổi khi giao dịch được xác nhận hoàn tất.</string>
@@ -104,7 +104,7 @@
     <string name="quick_actions_title">Thao tác nhanh</string>
     <string name="quick_actions_subtitle">Chọn tiện ích giao dịch bạn cần thực hiện</string>
     <string name="quick_action_transfer">Chuyển tiền</string>
-    <string name="quick_action_deposit_withdraw">Nạp / Rút tiền</string>
+    <string name="quick_action_deposit_withdraw">Nạp rút tiền</string>
     <string name="quick_action_bill">Hóa đơn</string>
     <string name="quick_action_topup">Nạp ĐT</string>
     <string name="quick_action_booking">Đặt vé</string>
@@ -113,13 +113,13 @@
     <string name="quick_action_history">Lịch sử</string>
 
     <!-- Branch Locator -->
-    <string name="branch_locator_title">Chi nhánh &amp; ATM</string>
+    <string name="branch_locator_title">Chi nhánh</string>
     <string name="search_branch_hint">Tìm chi nhánh Nimbus Bank gần bạn…</string>
     <string name="walking_route_btn">Chỉ đường đi bộ</string>
 
     <!-- eKYC -->
     <string name="ekyc_title">Định danh eKYC</string>
-    <string name="ekyc_cccd_step">Chụp ảnh CCCD / Hộ chiếu</string>
+    <string name="ekyc_cccd_step">Chụp ảnh CCCD</string>
     <string name="ekyc_face_step">Xác thực khuôn mặt</string>
 
     <!-- Officer Strings -->

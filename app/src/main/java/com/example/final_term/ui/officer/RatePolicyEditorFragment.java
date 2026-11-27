@@ -75,8 +75,8 @@ public final class RatePolicyEditorFragment extends Fragment {
         rateTypeLabels.add("Lãi suất tiết kiệm");
         rateTypes.add("LOAN");
         rateTypeLabels.add("Lãi vay");
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_item, rateTypeLabels);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(), R.layout.item_nimbus_spinner, rateTypeLabels);
+        adapter.setDropDownViewResource(R.layout.item_nimbus_dropdown);
         rateTypeSpinner.setAdapter(adapter);
         status.setText("Chọn hôm nay để áp dụng ngay, hoặc chọn ngày tương lai để đặt lịch cho toàn ngân hàng.");
     }

@@ -22,6 +22,10 @@ const app = createApp({
   updateUserPassword: async (uid, password) => {
     await r.auth.updateUser(uid, { password });
   },
+  createCustomerIdentity: async (uid, email, password) => {
+    await r.auth.createUser({ uid, email, password, emailVerified: false });
+    await r.auth.setCustomUserClaims(uid, { role: "CUSTOMER", permissions: [] });
+  },
   authenticate: createFirebaseAuthenticator(r.auth),
 });
 const server = app.listen(r.cfg.port, r.cfg.host, () =>

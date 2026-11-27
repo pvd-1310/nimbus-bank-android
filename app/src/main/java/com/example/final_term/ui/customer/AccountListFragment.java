@@ -1972,7 +1972,7 @@ public final class AccountListFragment extends Fragment {
                 String maskedOwner = account.ownerUid.isEmpty() ? "" :
                         "Khách hàng: " + (account.ownerUid.length() > 6 ? account.ownerUid.substring(0, 3) + "••••" : account.ownerUid) + "\n";
                 TextView row = addLine(maskedOwner + Phase2Presentation.accountTitle(account.type) + "  •  " + account.status,
-                        "Mã tài khoản: " + account.id);
+                        "Số tài khoản: " + account.displayAccountNumber());
                 row.setBackgroundResource(R.drawable.glass_panel_card);
                 row.setClickable(true);
                 row.setFocusable(true);

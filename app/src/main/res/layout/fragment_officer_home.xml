@@ -147,7 +147,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Quản lý khách hàng &amp; tài khoản"
+                                android:text="Quản lý khách hàng"
                                 android:textColor="@color/ink"
                                 android:textSize="15sp"
                                 android:textStyle="bold" />
@@ -284,7 +284,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Kiểm tra giao dịch &amp; lịch sử thao tác"
+                                android:text="Kiểm tra giao dịch"
                                 android:textColor="@color/ink"
                                 android:textSize="15sp"
                                 android:textStyle="bold" />

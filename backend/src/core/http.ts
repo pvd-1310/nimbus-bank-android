@@ -29,6 +29,7 @@ export interface AppDependencies {
   authenticate: (token: string) => Promise<Actor>;
   lookupUserByEmail?: (email: string) => Promise<{ uid: string; disabled: boolean } | null>;
   updateUserPassword?: (uid: string, password: string) => Promise<void>;
+  createCustomerIdentity?: (uid: string, email: string, password: string) => Promise<void>;
   provision?: (a: Actor, body: Doc) => Promise<unknown>;
 }
 export type Route = (

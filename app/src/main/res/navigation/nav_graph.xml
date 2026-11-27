@@ -17,7 +17,7 @@
     <fragment
         android:id="@+id/utilitiesHub"
         android:name="com.example.final_term.ui.utilities.UtilitiesHubFragment"
-        android:label="Tiện ích &amp; Dịch vụ" />
+        android:label="Tiện ích" />
     <fragment
         android:id="@+id/electricityBill"
         android:name="com.example.final_term.ui.utilities.BillPaymentFragment"
@@ -69,7 +69,7 @@
     <fragment
         android:id="@+id/officerCustomers"
         android:name="com.example.final_term.ui.officer.OfficerCheckingAccountsFragment"
-        android:label="Quản lý khách hàng &amp; tài khoản thanh toán" />
+        android:label="Quản lý khách hàng" />
     <fragment
         android:id="@+id/officerCustomerForm"
         android:name="com.example.final_term.ui.officer.OfficerCustomerFormFragment"
@@ -106,7 +106,7 @@
     <fragment android:id="@+id/historyDetail" android:name="com.example.final_term.ui.customer.HistoryDetailFragment" android:label="Chi tiết lịch sử" />
     <fragment android:id="@+id/savingsDetail" android:name="com.example.final_term.ui.customer.SavingsDetailFragment" android:label="Tài khoản tiết kiệm" />
     <fragment android:id="@+id/mortgageDetail" android:name="com.example.final_term.ui.customer.MortgageDetailFragment" android:label="Khoản vay thế chấp" />
-    <fragment android:id="@+id/moneyRequest" android:name="com.example.final_term.ui.customer.MoneyRequestFragment" android:label="Yêu cầu nạp/rút" />
+    <fragment android:id="@+id/moneyRequest" android:name="com.example.final_term.ui.customer.MoneyRequestFragment" android:label="Nạp rút tiền" />
     <fragment android:id="@+id/transfer" android:name="com.example.final_term.ui.customer.TransferFragment" android:label="Chuyển tiền" />
     <fragment
         android:id="@+id/transactionFlow"
@@ -121,4 +121,8 @@
         android:id="@+id/resetPassword"
         android:name="com.example.final_term.ui.auth.ResetPasswordFragment"
         android:label="Đặt lại mật khẩu" />
+    <fragment
+        android:id="@+id/register"
+        android:name="com.example.final_term.ui.auth.RegisterFragment"
+        android:label="Đăng ký tài khoản" />
 </navigation>

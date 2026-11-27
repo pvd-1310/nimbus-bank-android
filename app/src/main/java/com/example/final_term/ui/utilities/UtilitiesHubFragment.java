@@ -99,35 +99,35 @@ public final class UtilitiesHubFragment extends Fragment {
         for (UtilityItem item : utilityItems) {
             if (!query.isEmpty() && !item.keywords.contains(query)
                     && !item.title.toLowerCase(new Locale("vi", "VN")).contains(query)) continue;
-            MaterialCardView tile = new MaterialCardView(requireContext());
-            tile.setRadius(dp(20));
-            tile.setCardBackgroundColor(ContextCompat.getColor(requireContext(), R.color.glass_card));
-            tile.setStrokeColor(ContextCompat.getColor(requireContext(), R.color.glass_border));
-            tile.setStrokeWidth(dp(1));
-            tile.setRippleColor(ContextCompat.getColorStateList(requireContext(), R.color.glass_card_pressed));
-            LinearLayout content = new LinearLayout(requireContext());
-            content.setOrientation(LinearLayout.VERTICAL);
-            content.setGravity(Gravity.CENTER);
-            content.setPadding(dp(4), dp(10), dp(4), dp(8));
+            LinearLayout tile = new LinearLayout(requireContext());
+            tile.setOrientation(LinearLayout.VERTICAL);
+            tile.setGravity(Gravity.CENTER_HORIZONTAL);
+            tile.setPadding(dp(4), dp(8), dp(4), dp(8));
+            android.util.TypedValue outValue = new android.util.TypedValue();
+            requireContext().getTheme().resolveAttribute(
+                    android.R.attr.selectableItemBackgroundBorderless, outValue, true);
+            tile.setBackgroundResource(outValue.resourceId);
+
             ImageView icon = new ImageView(requireContext());
             icon.setImageResource(item.icon);
-            icon.setBackgroundResource(R.drawable.utility_icon_circle);
-            icon.setPadding(dp(9), dp(9), dp(9), dp(9));
+            icon.setBackgroundResource(R.drawable.circle_action_button);
+            icon.setElevation(dp(3));
+            icon.setPadding(dp(16), dp(16), dp(16), dp(16));
             icon.setColorFilter(ContextCompat.getColor(requireContext(), R.color.navy));
-            LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(42), dp(42));
-            content.addView(icon, iconParams);
+            LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(56), dp(56));
+            tile.addView(icon, iconParams);
+
             TextView label = new TextView(requireContext());
             label.setText(item.title);
             label.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
-            label.setTextSize(11);
+            label.setTextSize(12);
             label.setGravity(Gravity.CENTER);
             label.setMaxLines(2);
-            label.setMinLines(2);
             LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             labelParams.topMargin = dp(6);
-            content.addView(label, labelParams);
-            tile.addView(content);
+            tile.addView(label, labelParams);
+
             tile.setClickable(true);
             tile.setFocusable(true);
             tile.setContentDescription(item.title);
@@ -135,8 +135,8 @@ public final class UtilitiesHubFragment extends Fragment {
             GridLayout.LayoutParams params = new GridLayout.LayoutParams(
                     GridLayout.spec(GridLayout.UNDEFINED, 1f), GridLayout.spec(GridLayout.UNDEFINED, 1f));
             params.width = 0;
-            params.height = dp(96);
-            params.setMargins(dp(4), dp(4), dp(4), dp(4));
+            params.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+            params.setMargins(dp(4), dp(4), dp(4), dp(6));
             grid.addView(tile, params);
         }
     }

@@ -316,7 +316,7 @@ export class Evidence {
     });
   }
 
-  async submit(a: Actor, id: string, _identity?: Doc) {
+  async submit(a: Actor, id: string, identity?: Doc) {
     const snapshot = await this.bank.store.run(async (t) => {
       await this.customer(t, a);
       const record = await this.owned(t, a, id);
@@ -386,6 +386,62 @@ export class Evidence {
       check(user?.role === "CUSTOMER" && ["ONBOARDING", "ACTIVE"].includes(user.status), "INVALID_CUSTOMER_STATE", 409);
       const customer = await this.bank.linkedProfile(t, "customers", a.uid);
       check(customer, "CUSTOMER_NOT_FOUND", 404);
+      if (user.selfRegistered === true && user.status === "ONBOARDING") {
+        const { id: customerId, _cursor, ...customerData } = customer;
+        void _cursor;
+        if (identity && typeof identity.nationalIdNumber === "string" && customerData.nationalIdNumber) {
+          check(
+            identity.nationalIdNumber === customerData.nationalIdNumber,
+            "NATIONAL_ID_MISMATCH",
+            409,
+          );
+        }
+        const now = this.bank.now();
+        const checkingAccounts = await t.list("accounts", { ownerUid: a.uid, type: "CHECKING" }, { limit: 100 });
+        t.set(`users/${a.uid}`, {
+          ...user,
+          active: true,
+          status: "ACTIVE",
+        });
+        t.set(`customers/${customerId}`, {
+          ...customerData,
+          ...(identity?.dateOfBirth ? { dateOfBirth: identity.dateOfBirth } : {}),
+          ...(identity?.address ? { address: identity.address } : {}),
+          ...(identity?.gender ? { gender: identity.gender } : {}),
+          ...(identity?.nationality ? { nationality: identity.nationality } : {}),
+          ...(identity?.identityDocumentExpiry ? { identityDocumentExpiry: identity.identityDocumentExpiry } : {}),
+          status: "ACTIVE",
+          kycStatus: "VERIFIED",
+        });
+        for (const account of checkingAccounts) {
+          const { id: accountId, _cursor: accountCursor, ...accountData } = account;
+          void accountCursor;
+          t.set(`accounts/${accountId}`, {
+            ...accountData,
+            status: accountData.status === "CLOSED" ? "CLOSED" : "ACTIVE",
+          });
+        }
+        t.set(faceTemplatePath(a.uid), enrollment!);
+        const verified: EvidenceRecord = {
+          ...record,
+          reviewStatus: "VERIFIED",
+          reviewedBy: "SYSTEM_SELF_REGISTER",
+          reviewedAt: now,
+        };
+        await this.writeStatus(t, verified);
+        this.bank.audit(t, a, "EKYC_AUTO_VERIFIED", id, "", {
+          before: { reviewStatus: "DRAFT" }, after: { reviewStatus: "VERIFIED", mode: record.mode, selfRegistered: true },
+        });
+        this.bank.notifications.emit(t, {
+          id: `ekyc_${id}_verified`,
+          ownerUid: a.uid,
+          type: "EKYC",
+          title: "Xác thực eKYC thành công",
+          body: "Hồ sơ định danh và tài khoản thanh toán của bạn đã được kích hoạt.",
+          refId: id,
+        });
+        return response(verified);
+      }
       const next: EvidenceRecord & { enrolledTemplate?: unknown } = {
         ...record,
         reviewStatus: "REVIEWING",

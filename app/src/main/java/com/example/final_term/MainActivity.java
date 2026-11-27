@@ -121,12 +121,13 @@ public class MainActivity extends AppCompatActivity {
         }
         if (route == RootViewModel.RootRoute.CUSTOMER_HOME && current != R.id.customerHome) {
             navController.navigate(R.id.customerHome);
-        } else if (route == RootViewModel.RootRoute.ONBOARDING && current != R.id.profile) {
+        } else if (route == RootViewModel.RootRoute.ONBOARDING
+                && current != R.id.profile && current != R.id.register) {
             navController.navigate(R.id.profile);
         } else if (route == RootViewModel.RootRoute.OFFICER_HOME && current != R.id.officerHome) {
             navController.navigate(R.id.officerHome);
         } else if (route == RootViewModel.RootRoute.LOGIN && current != R.id.login
-                && current != R.id.resetPassword) {
+                && current != R.id.resetPassword && current != R.id.register) {
             navController.navigate(R.id.login, null,
                     new androidx.navigation.NavOptions.Builder()
                             .setPopUpTo(navController.getGraph().getId(), true)
@@ -174,6 +175,7 @@ public class MainActivity extends AppCompatActivity {
         boolean onboarding = latestAuthState != null && latestAuthState.getUser() != null
                 && latestAuthState.getUser().isOnboarding();
         boolean show = destination != R.id.login && destination != R.id.resetPassword
+                && destination != R.id.register
                 && destination != R.id.branchLocator
                 && destination != R.id.officerCustomerForm && destination != R.id.transactionFlow
                 && destination != R.id.personalInfo

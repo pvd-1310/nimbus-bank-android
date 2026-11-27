@@ -1,13 +1,56 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <style name="Base.Theme.Final_term" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="android:fontFamily">sans</item>
-        <item name="fontFamily">sans</item>
+    <style name="Base.Theme.Final_term" parent="Theme.Material3.Light.NoActionBar">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="fontFamily">sans-serif</item>
         <item name="android:colorAccent">@color/navy</item>
         <item name="colorPrimary">@color/navy</item>
         <item name="colorOnPrimary">@color/white</item>
+        <item name="colorSecondary">@color/slate_blue</item>
+        <item name="colorOnSecondary">@color/white</item>
+        <item name="colorSurface">@color/bg_mist</item>
+        <item name="colorOnSurface">@color/ink</item>
+        <item name="colorOnSurfaceVariant">@color/ink_muted</item>
+        <item name="colorOutline">@color/bg_slate_soft</item>
+        <item name="colorError">@color/danger</item>
+        <item name="android:textColorPrimary">@color/ink</item>
+        <item name="android:textColorSecondary">@color/ink_muted</item>
+        <item name="android:textColorHint">@color/ink_faint</item>
+        <item name="textInputStyle">@style/NimbusTextInputLayout</item>
+        <item name="android:spinnerStyle">@style/NimbusSpinnerStyle</item>
+        <item name="spinnerStyle">@style/NimbusSpinnerStyle</item>
+        <item name="materialCalendarTheme">@style/NimbusCalendarTheme</item>
+        <item name="materialCalendarFullscreenTheme">@style/NimbusCalendarTheme</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@color/bg_slate</item>
         <item name="android:windowLightStatusBar">true</item>
+    </style>
+
+    <style name="NimbusTextInputLayout" parent="Widget.Material3.TextInputLayout.OutlinedBox">
+        <item name="boxBackgroundColor">@color/glass_card</item>
+        <item name="boxStrokeColor">@color/text_input_stroke</item>
+        <item name="boxCornerRadiusTopStart">16dp</item>
+        <item name="boxCornerRadiusTopEnd">16dp</item>
+        <item name="boxCornerRadiusBottomStart">16dp</item>
+        <item name="boxCornerRadiusBottomEnd">16dp</item>
+        <item name="hintTextColor">@color/navy</item>
+        <item name="android:textColorHint">@color/ink_muted</item>
+    </style>
+
+    <style name="NimbusSpinnerStyle" parent="Widget.AppCompat.Spinner">
+        <item name="android:popupBackground">@drawable/bg_nimbus_dropdown_popup</item>
+        <item name="android:dropDownVerticalOffset">6dp</item>
+    </style>
+
+    <style name="NimbusCalendarTheme" parent="ThemeOverlay.Material3.MaterialCalendar">
+        <item name="colorPrimary">@color/navy</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorSurface">@color/glass_sheet</item>
+        <item name="colorSurfaceContainerHigh">@color/bg_mist</item>
+        <item name="colorOnSurface">@color/ink</item>
+        <item name="colorOnSurfaceVariant">@color/ink_muted</item>
+        <item name="colorOutline">@color/bg_slate_soft</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="fontFamily">sans-serif</item>
     </style>
 
     <style name="Theme.Final_term" parent="Base.Theme.Final_term" />

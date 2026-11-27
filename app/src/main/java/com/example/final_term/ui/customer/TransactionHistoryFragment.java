@@ -89,8 +89,10 @@ public final class TransactionHistoryFragment extends Fragment {
         binding.summaryMonthLabel.setOnClickListener(openTimeFilter);
         updateSummaryMonthLabel();
 
-        binding.statusFilter.setAdapter(new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_dropdown_item,
-                new String[]{"Mọi trạng thái", "Hoàn tất", "Đang xử lý", "Thất bại"}));
+        ArrayAdapter<String> statusAdapter = new ArrayAdapter<>(requireContext(), R.layout.item_nimbus_spinner,
+                new String[]{"Mọi trạng thái", "Hoàn tất", "Đang xử lý", "Thất bại"});
+        statusAdapter.setDropDownViewResource(R.layout.item_nimbus_dropdown);
+        binding.statusFilter.setAdapter(statusAdapter);
 
         TextWatcher watcher = new TextWatcher() {
             public void beforeTextChanged(CharSequence s, int st, int c, int a) { }

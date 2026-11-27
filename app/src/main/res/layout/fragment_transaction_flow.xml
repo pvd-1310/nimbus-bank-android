@@ -72,7 +72,7 @@
                 android:layout_width="40dp"
                 android:layout_height="40dp"
                 android:background="@drawable/circle_action_button"
-                android:contentDescription="Bảo mật &amp; thông tin"
+                android:contentDescription="Thông tin bảo mật"
                 android:padding="10dp"
                 android:scaleType="centerInside"
                 android:src="@drawable/ic_shield"
@@ -373,7 +373,7 @@
                                 android:layout_marginTop="2dp"
                                 android:ellipsize="end"
                                 android:maxLines="1"
-                                android:text="Thanh toán qua thẻ quốc tế Visa / Mastercard"
+                                android:text="Thanh toán qua thẻ quốc tế"
                                 android:textColor="@color/ink_muted"
                                 android:textSize="12sp" />
                         </LinearLayout>

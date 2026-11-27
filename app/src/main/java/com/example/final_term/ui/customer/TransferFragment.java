@@ -324,8 +324,8 @@ public final class TransferFragment extends Fragment {
 
     private void setupExternalBankPicker() {
         ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(),
-                android.R.layout.simple_spinner_item, ExternalBankCatalog.names());
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+                R.layout.item_nimbus_spinner, ExternalBankCatalog.names());
+        adapter.setDropDownViewResource(R.layout.item_nimbus_dropdown);
         binding.externalBankSpinner.setAdapter(adapter);
         binding.externalBankSpinner.setSelection(ExternalBankCatalog.positionForCode(externalBankCode), false);
         binding.externalBankSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
@@ -674,12 +674,14 @@ public final class TransferFragment extends Fragment {
         for (ReadModels.AccountSummary account : result.getData()) {
             if ("ACTIVE".equalsIgnoreCase(account.status) && "CHECKING".equals(account.type)) {
                 sourceIds.add(account.id);
-                labels.add(account.id + " · " + account.currency);
+                labels.add(account.displayAccountNumber() + " · " + account.currency);
             }
         }
         if (labels.isEmpty()) labels.add("Không có tài khoản nguồn khả dụng");
-        binding.sourceInput.setAdapter(new ArrayAdapter<>(requireContext(),
-                android.R.layout.simple_spinner_dropdown_item, labels));
+        ArrayAdapter<String> sourceAdapter = new ArrayAdapter<>(requireContext(),
+                R.layout.item_nimbus_spinner, labels);
+        sourceAdapter.setDropDownViewResource(R.layout.item_nimbus_dropdown);
+        binding.sourceInput.setAdapter(sourceAdapter);
         if (!cashArgumentsApplied && cashOperation != null) {
             int selected = sourceIds.indexOf(initialCashAccount);
             if (selected >= 0) binding.sourceInput.setSelection(selected);

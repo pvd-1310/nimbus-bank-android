@@ -92,6 +92,7 @@ public final class LoginFragment extends Fragment {
         }
         binding.signInButton.setOnClickListener(v -> signIn());
         binding.resetPasswordButton.setOnClickListener(v -> openResetPassword());
+        binding.registerButton.setOnClickListener(v -> openRegister());
     }
 
     private void signInWithFace(byte[] image) {
@@ -156,6 +157,12 @@ public final class LoginFragment extends Fragment {
         Bundle args = new Bundle();
         args.putString(ResetPasswordFragment.ARG_EMAIL, email);
         androidx.navigation.fragment.NavHostFragment.findNavController(this).navigate(R.id.resetPassword, args);
+    }
+
+    private void openRegister() {
+        preserveFaceError = false;
+        binding.errorText.setVisibility(View.GONE);
+        androidx.navigation.fragment.NavHostFragment.findNavController(this).navigate(R.id.register);
     }
 
     private void signIn() {
