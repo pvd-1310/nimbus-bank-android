@@ -639,7 +639,7 @@ public final class TransactionExecutionFragment extends Fragment {
             JSONObject body = new JSONObject()
                     .put("requestId", orderRequestId)
                     .put("productId", request.productId)
-                    .put("quantity", 1)
+                    .put("quantity", Math.max(1, request.quantity))
                     .put("expectedAmountMinor", request.amountMinor)
                     .put("expectedCurrency", request.currency);
             String details = request.orderCustomerDetails != null ? request.orderCustomerDetails

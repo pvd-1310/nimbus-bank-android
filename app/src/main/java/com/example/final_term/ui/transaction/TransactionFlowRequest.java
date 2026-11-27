@@ -58,6 +58,7 @@ public final class TransactionFlowRequest implements Parcelable {
     public final String serviceName;
     @Nullable
     public final String providerName;
+    public final int quantity;
 
     private TransactionFlowRequest(
             @NonNull Kind kind,
@@ -80,6 +81,34 @@ public final class TransactionFlowRequest implements Parcelable {
             @Nullable String orderCustomerDetails,
             @Nullable String serviceName,
             @Nullable String providerName) {
+        this(kind, amountMinor, currency, sourceAccountId, sourceLabel, recipientName,
+                recipientVerified, bankName, bankSubtitle, bankCode, targetNumber, methodLabel,
+                note, recipientAccountId, billId, orderCategory, productId, orderCustomerDetails,
+                serviceName, providerName, 1);
+    }
+
+    private TransactionFlowRequest(
+            @NonNull Kind kind,
+            long amountMinor,
+            @Nullable String currency,
+            @Nullable String sourceAccountId,
+            @Nullable String sourceLabel,
+            @Nullable String recipientName,
+            boolean recipientVerified,
+            @Nullable String bankName,
+            @Nullable String bankSubtitle,
+            @Nullable String bankCode,
+            @Nullable String targetNumber,
+            @Nullable String methodLabel,
+            @Nullable String note,
+            @Nullable String recipientAccountId,
+            @Nullable String billId,
+            @Nullable String orderCategory,
+            @Nullable String productId,
+            @Nullable String orderCustomerDetails,
+            @Nullable String serviceName,
+            @Nullable String providerName,
+            int quantity) {
         this.kind = kind;
         this.amountMinor = amountMinor;
         this.currency = isBlank(currency) ? "VND" : currency.trim();
@@ -100,6 +129,7 @@ public final class TransactionFlowRequest implements Parcelable {
         this.orderCustomerDetails = normalize(orderCustomerDetails);
         this.serviceName = normalize(serviceName);
         this.providerName = normalize(providerName);
+        this.quantity = Math.max(1, quantity);
     }
 
     public static TransactionFlowRequest internalTransfer(
@@ -294,6 +324,34 @@ public final class TransactionFlowRequest implements Parcelable {
             long amountMinor,
             @Nullable String currency,
             @Nullable String sourceAccountId) {
+        return orderPayment(
+                orderCategory,
+                productId,
+                providerName,
+                serviceName,
+                targetNumber,
+                note,
+                billId,
+                orderCustomerDetails,
+                amountMinor,
+                1,
+                currency,
+                sourceAccountId);
+    }
+
+    public static TransactionFlowRequest orderPayment(
+            @Nullable String orderCategory,
+            @Nullable String productId,
+            @Nullable String providerName,
+            @Nullable String serviceName,
+            @Nullable String targetNumber,
+            @Nullable String note,
+            @Nullable String billId,
+            @Nullable String orderCustomerDetails,
+            long amountMinor,
+            int quantity,
+            @Nullable String currency,
+            @Nullable String sourceAccountId) {
         String method = isBlank(sourceAccountId) ? "Thanh toán qua Stripe" : "Tài khoản thanh toán";
         return new TransactionFlowRequest(
                 Kind.ORDER_PAYMENT,
@@ -315,7 +373,8 @@ public final class TransactionFlowRequest implements Parcelable {
                 productId,
                 orderCustomerDetails,
                 serviceName,
-                providerName
+                providerName,
+                quantity
         );
     }
 
@@ -365,6 +424,7 @@ public final class TransactionFlowRequest implements Parcelable {
         this.orderCustomerDetails = in.readString();
         this.serviceName = in.readString();
         this.providerName = in.readString();
+        this.quantity = Math.max(1, in.readInt());
     }
 
     @Override
@@ -389,6 +449,7 @@ public final class TransactionFlowRequest implements Parcelable {
         dest.writeString(orderCustomerDetails);
         dest.writeString(serviceName);
         dest.writeString(providerName);
+        dest.writeInt(quantity);
     }
 
     @Override
