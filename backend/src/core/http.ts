@@ -12,7 +12,13 @@ import type { Banking } from "./banking.js";
 import type { Doc } from "./store.js";
 export interface AppDependencies {
   chatbotMode?: "DEMO_ONLY";
-  chatbot?: (message: string) => Promise<{ action: string | null; text: string }>;
+  chatbot?: (
+    message: string,
+    options?: {
+      history?: Array<{ role: "user" | "assistant"; text: string }>;
+      context?: string;
+    },
+  ) => Promise<{ action: string | null; text: string }>;
   createFaceToken?: (uid: string) => Promise<string>;
   bank: Banking;
   evidence: Evidence;
