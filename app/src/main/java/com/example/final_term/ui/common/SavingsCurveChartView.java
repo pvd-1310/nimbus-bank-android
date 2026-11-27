@@ -22,8 +22,33 @@ public class SavingsCurveChartView extends View {
     private final Paint labelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path linePath = new Path();
     private final Path fillPath = new Path();
-    private final float[] points = {0.12f, 0.19f, 0.27f, 0.36f, 0.45f, 0.54f, 0.63f, 0.72f, 0.80f, 0.88f, 0.94f, 1.0f};
+    private float[] points = {0.12f, 0.19f, 0.27f, 0.36f, 0.45f, 0.54f, 0.63f, 0.72f, 0.80f, 0.88f, 0.94f, 1.0f};
     private final String[] labels = {"T1", "T3", "T6", "T9", "T12"};
+
+    public void setProjectionData(long principalMinor, int annualRateBasisPoints, int termMonths) {
+        int months = termMonths > 0 ? Math.min(36, termMonths) : 12;
+        int steps = Math.max(4, Math.min(12, months));
+        float[] computed = new float[steps];
+        double monthlyRate = Math.max(0.0, annualRateBasisPoints / 10000.0) / 12.0;
+        double maxGain = monthlyRate > 0.0
+                ? Math.pow(1.0 + monthlyRate, months) - 1.0
+                : 1.0;
+        if (maxGain <= 0.0) maxGain = 1.0;
+        for (int i = 0; i < steps; i++) {
+            double monthProgress = 1.0 + ((months - 1.0) * i) / (steps - 1.0);
+            double gain = monthlyRate > 0.0
+                    ? (Math.pow(1.0 + monthlyRate, monthProgress) - 1.0) / maxGain
+                    : monthProgress / months;
+            computed[i] = Math.max(0.08f, Math.min(1.0f, (float) gain));
+        }
+        points = computed;
+        labels[0] = "T1";
+        labels[1] = "T" + Math.max(2, Math.round(months * 0.25f));
+        labels[2] = "T" + Math.max(3, Math.round(months * 0.5f));
+        labels[3] = "T" + Math.max(4, Math.round(months * 0.75f));
+        labels[4] = "T" + months;
+        invalidate();
+    }
 
     public SavingsCurveChartView(Context context) {
         super(context);
@@ -105,12 +130,17 @@ public class SavingsCurveChartView extends View {
         canvas.drawPath(fillPath, fillPaint);
         canvas.drawPath(linePath, linePaint);
 
-        // Milestone dots (T3, T6, T9, T12)
-        int[] milestones = {2, 5, 8, 11};
+        // Milestone dots (every quarter + maturity)
+        int[] milestones = {
+                Math.max(1, (points.length - 1) / 4),
+                Math.max(2, (points.length - 1) / 2),
+                Math.max(3, ((points.length - 1) * 3) / 4),
+                points.length - 1
+        };
         for (int idx : milestones) {
             float x = padX + (chartW * idx) / (points.length - 1);
             float y = topPad + chartH * (1f - points[idx]);
-            canvas.drawCircle(x, y, idx == 11 ? dp(5) : dp(3.5f), dotPaint);
+            canvas.drawCircle(x, y, idx == points.length - 1 ? dp(5) : dp(3.5f), dotPaint);
         }
 
         for (int i = 0; i < labels.length; i++) {

@@ -323,36 +323,6 @@
                         android:textColor="@color/ink_muted"
                         android:textSize="13sp" />
 
-                    <LinearLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:gravity="center"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:background="@drawable/badge_status_success"
-                            android:paddingHorizontal="10dp"
-                            android:paddingVertical="4dp"
-                            android:text="☀ Đủ ánh sáng"
-                            android:textColor="@color/success"
-                            android:textSize="11sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
-                            android:background="@drawable/glass_pill_bg"
-                            android:paddingHorizontal="10dp"
-                            android:paddingVertical="4dp"
-                            android:text="Nhìn thẳng · Quay trái · Chớp mắt"
-                            android:textColor="@color/navy"
-                            android:textSize="11sp" />
-                    </LinearLayout>
-
                     <!-- Viewport Container with Image Preview -->
                     <FrameLayout
                         android:layout_width="match_parent"

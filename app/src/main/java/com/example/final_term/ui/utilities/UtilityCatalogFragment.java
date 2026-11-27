@@ -85,8 +85,6 @@ public final class UtilityCatalogFragment extends Fragment {
                 .getAppContainer().getBackendApiClient();
         String title = serviceTitle(serviceType);
         binding.headerTitle.setText(title);
-        binding.catalogIntroTitle.setText(introTitle(serviceType));
-        binding.catalogIcon.setImageResource(serviceIcon(serviceType));
         binding.catalogSectionTitle.setText(sectionTitle(serviceType));
         binding.backButton.setOnClickListener(v -> {
             if (showingMyBookings) {
@@ -109,7 +107,6 @@ public final class UtilityCatalogFragment extends Fragment {
         if ("MOVIE".equals(serviceType)) {
             binding.scrollContent.setPadding(dp(20), dp(10), dp(20), dp(20));
         }
-        binding.catalogIntroSubtitle.setText(introSubtitle(serviceType));
         if ("FLIGHT".equals(serviceType)) {
             binding.routeSwapButton.setOnClickListener(v -> swapRoute());
             binding.searchFlightsButton.setOnClickListener(v -> {
@@ -129,7 +126,6 @@ public final class UtilityCatalogFragment extends Fragment {
         boolean flights = "FLIGHT".equals(serviceType);
         boolean redesignedUtility = "HOTEL".equals(serviceType) || "MOVIE".equals(serviceType);
         binding.headerTitle.setText(serviceTitle(serviceType));
-        binding.catalogIntroCard.setVisibility(redesignedUtility ? View.GONE : View.VISIBLE);
         binding.flightResultsHeader.setVisibility(redesignedUtility ? View.GONE : View.VISIBLE);
         binding.flightSearchPanel.setVisibility(flights ? View.VISIBLE : View.GONE);
         binding.filterButton.setVisibility(flights ? View.VISIBLE : View.GONE);
@@ -150,7 +146,6 @@ public final class UtilityCatalogFragment extends Fragment {
         if (binding == null) return;
         binding.headerTitle.setText("HOTEL".equals(serviceType) ? "Phòng đã đặt" : "Vé của tôi");
         binding.myBookingsButton.setVisibility(View.GONE);
-        binding.catalogIntroCard.setVisibility(View.GONE);
         binding.flightResultsHeader.setVisibility(View.GONE);
         binding.flightSearchPanel.setVisibility(View.GONE);
         binding.movieBottomBar.setVisibility(View.GONE);
@@ -986,59 +981,10 @@ public final class UtilityCatalogFragment extends Fragment {
             return;
         }
 
-        String[] ratings = {"★ 4.8 (240)", "★ 4.9 (118)", "★ 4.7 (195)"};
-        String[] locations = {"Trung tâm Đà Lạt", "Quận 1, TP.HCM", "Biển Mỹ Khê"};
-        int[][] bannerColors = {
-                {0xFF3B4F86, 0xFF6A82B5, 0xFFA6B8DC},
-                {0xFF273763, 0xFF536BA3, 0xFF8CA1CE},
-                {0xFF2E4A7D, 0xFF5A7FB8, 0xFF9BB8E3}
-        };
-
         for (int i = 0; i < matching.size(); i++) {
             JSONObject product = matching.get(i);
             LinearLayout card = createGlassCard();
             LinearLayout col = createCardColumn(card);
-
-            // Gradient banner (.hotel-thumb) with floating badges
-            android.widget.FrameLayout thumb = new android.widget.FrameLayout(requireContext());
-            android.graphics.drawable.GradientDrawable thumbBg = new android.graphics.drawable.GradientDrawable(
-                    android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
-                    bannerColors[i % bannerColors.length]);
-            thumbBg.setCornerRadius(dp(16));
-            thumb.setBackground(thumbBg);
-            thumb.setPadding(dp(10), dp(10), dp(10), dp(10));
-            LinearLayout.LayoutParams thumbParams = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, dp(112));
-            thumbParams.bottomMargin = dp(10);
-
-            TextView leftBadge = new TextView(requireContext());
-            leftBadge.setText(ratings[i % ratings.length]);
-            leftBadge.setTextSize(11);
-            leftBadge.setTextColor(ContextCompat.getColor(requireContext(), R.color.white));
-            leftBadge.setTypeface(null, android.graphics.Typeface.BOLD);
-            leftBadge.setPadding(dp(10), dp(4), dp(10), dp(4));
-            android.graphics.drawable.GradientDrawable darkPill = new android.graphics.drawable.GradientDrawable();
-            darkPill.setColor(0xB81B2340);
-            darkPill.setCornerRadius(dp(99));
-            leftBadge.setBackground(darkPill);
-            android.widget.FrameLayout.LayoutParams lbParams = new android.widget.FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.START);
-            thumb.addView(leftBadge, lbParams);
-
-            TextView rightBadge = new TextView(requireContext());
-            rightBadge.setText(locations[i % locations.length]);
-            rightBadge.setTextSize(11);
-            rightBadge.setTextColor(ContextCompat.getColor(requireContext(), R.color.navy));
-            rightBadge.setTypeface(null, android.graphics.Typeface.BOLD);
-            rightBadge.setPadding(dp(10), dp(4), dp(10), dp(4));
-            android.graphics.drawable.GradientDrawable lightPill = new android.graphics.drawable.GradientDrawable();
-            lightPill.setColor(0xE0FFFFFF);
-            lightPill.setCornerRadius(dp(99));
-            rightBadge.setBackground(lightPill);
-            android.widget.FrameLayout.LayoutParams rbParams = new android.widget.FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END);
-            thumb.addView(rightBadge, rbParams);
-            col.addView(thumb, thumbParams);
 
             col.addView(flightText(product.optString("name", "Khách sạn"), 15, R.color.ink, true));
             String desc = product.optString("description", "").trim();
@@ -1049,10 +995,6 @@ public final class UtilityCatalogFragment extends Fragment {
                 sp.topMargin = dp(3);
                 col.addView(sub, sp);
             }
-
-            // Tags row
-            LinearLayout tagsRow = createTagsRow(Arrays.asList("Ăn sáng miễn phí", "Wifi tốc độ cao", "Hủy miễn phí"));
-            col.addView(tagsRow);
 
             addDivider(col);
 

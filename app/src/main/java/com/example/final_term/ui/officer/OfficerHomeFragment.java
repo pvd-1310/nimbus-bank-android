@@ -34,10 +34,11 @@ public final class OfficerHomeFragment extends Fragment {
                 requireActivity().getOnBackPressedDispatcher().onBackPressed();
                 return;
             }
-            binding.roleText.setText(getString(R.string.role_officer));
             String fullName = authState.getUser().getFullName();
-            binding.identityText.setText(fullName == null || fullName.trim().isEmpty()
-                    ? authState.getUser().getEmail() : fullName);
+            String displayName = fullName == null || fullName.trim().isEmpty()
+                    ? authState.getUser().getEmail() : fullName.trim();
+            binding.identityText.setText(displayName);
+            binding.avatarInitialsText.setText(initialsFrom(displayName));
         });
         binding.checkingAccountsButton.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.officerCheckingAccounts));
         binding.historyButton.setOnClickListener(v -> openFeature(v, R.id.officerAudit,
@@ -57,6 +58,16 @@ public final class OfficerHomeFragment extends Fragment {
         args.putString("title", title);
         args.putString("subtitle", subtitle);
         Navigation.findNavController(anchor).navigate(destination, args);
+    }
+
+    private String initialsFrom(String name) {
+        if (name == null || name.trim().isEmpty()) return "CB";
+        String[] parts = name.trim().split("\\s+");
+        if (parts.length == 1) {
+            return parts[0].substring(0, Math.min(2, parts[0].length())).toUpperCase(java.util.Locale.ROOT);
+        }
+        return (parts[0].substring(0, 1) + parts[parts.length - 1].substring(0, 1))
+                .toUpperCase(java.util.Locale.ROOT);
     }
 
     @Override public void onDestroyView() { super.onDestroyView(); binding = null; }

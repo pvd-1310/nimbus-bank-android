@@ -127,7 +127,7 @@ public final class ProfileFragment extends Fragment {
                                     ? "Đang hoạt động" : "Tạm khóa");
                             binding.personalInfoSummary.setText("Xem mã cán bộ, email công vụ và quyền hạn");
                             binding.logoutButton.setText("Đăng xuất");
-                            binding.languageStatusText.setText("Tiếng Việt");
+                            binding.itemLanguage.setVisibility(View.GONE);
                             binding.itemPersonalInfo.setOnClickListener(v -> showOfficerDetailsDialog());
                             binding.itemOfficerAudit.setOnClickListener(v -> {
                                 Bundle officerArgs = new Bundle();
@@ -141,8 +141,6 @@ public final class ProfileFragment extends Fragment {
                                 officerArgs.putString("subtitle", "Quản lý biểu lãi suất hiện hành và ngày hiệu lực.");
                                 NavHostFragment.findNavController(this).navigate(R.id.officerRates, officerArgs);
                             });
-                            binding.itemLanguage.setOnClickListener(v ->
-                                    Toast.makeText(requireContext(), "Ứng dụng đang sử dụng Tiếng Việt.", Toast.LENGTH_SHORT).show());
                             binding.ekycBadge.setOnClickListener(null);
                         }
                         loadProfile();
@@ -155,9 +153,6 @@ public final class ProfileFragment extends Fragment {
         binding.logoutButton.setOnClickListener(v -> app.getAppContainer().getAuthRepository().signOut());
 
         binding.itemCameraSecurity.setOnClickListener(v -> showCameraAndBiometricDialog());
-
-        binding.itemNotifications.setOnClickListener(v -> openProfileEditor());
-        binding.itemLanguage.setOnClickListener(v -> openProfileEditor());
 
         fetchCameraAndCapabilitiesStatus();
     }

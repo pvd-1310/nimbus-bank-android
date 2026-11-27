@@ -169,7 +169,6 @@ public class AccountDetailFragment extends Fragment {
                 binding.balanceText.setText(ReadSummaryFormatter.formatCurrency(currentBalance, currentCurrency));
                 binding.heroMeta.setVisibility(View.VISIBLE);
                 binding.heroMeta.setText("Tài khoản thanh toán Platinum");
-                binding.miniVisaBadge.setVisibility(View.VISIBLE);
                 binding.checkingLimitBox.setVisibility(View.VISIBLE);
                 binding.checkingLimitBar.setProgress(0.64f);
                 binding.genericDetails.setVisibility(View.VISIBLE);
@@ -385,6 +384,10 @@ public class AccountDetailFragment extends Fragment {
         binding.savingsProfit.setText("+" + formatMoney(terms.getLong("profitMinor"), currency));
         long maturityProfit = terms.optLong("maturityProfitMinor", terms.getLong("profitMinor") * 12L);
         binding.savingsMaturityProfit.setText("+" + formatMoney(maturityProfit, currency) + " khi đáo hạn");
+        binding.savingsCurveChart.setProjectionData(
+                terms.optLong("principalMinor", currentBalance),
+                terms.getInt("annualRateBasisPoints"),
+                terms.optInt("termMonths", 12));
     }
 
     private void renderMortgage(JSONObject terms) throws JSONException {

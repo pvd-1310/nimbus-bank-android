@@ -125,19 +125,6 @@
                         android:textSize="34sp"
                         android:textStyle="normal"
                         tools:text="62.500.000 ₫" />
-
-                    <TextView
-                        android:id="@+id/mini_visa_badge"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:background="@drawable/navy_button_pill"
-                        android:paddingHorizontal="12dp"
-                        android:paddingVertical="8dp"
-                        android:text="NIMBUS\nVISA"
-                        android:textColor="@color/white"
-                        android:textSize="10sp"
-                        android:textStyle="bold"
-                        android:visibility="gone" />
                 </LinearLayout>
 
                 <LinearLayout
@@ -362,6 +349,7 @@
                     </LinearLayout>
 
                     <com.example.final_term.ui.common.SavingsCurveChartView
+                        android:id="@+id/savings_curve_chart"
                         android:layout_width="match_parent"
                         android:layout_height="120dp"
                         android:layout_marginTop="8dp" />

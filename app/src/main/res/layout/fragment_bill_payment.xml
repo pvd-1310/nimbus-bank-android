@@ -175,14 +175,6 @@
                     android:text="Tra cứu hóa đơn"
                     android:textColor="@color/white"
                     app:cornerRadius="16dp" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="Bảo mật 2 lớp qua Nimbus Smart OTP"
-                    android:textColor="@color/ink_muted"
-                    android:textSize="11sp" />
             </LinearLayout>
 
             <TextView

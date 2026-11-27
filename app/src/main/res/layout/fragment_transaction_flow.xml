@@ -397,41 +397,6 @@
                     </LinearLayout>
                 </LinearLayout>
 
-                <!-- Security Guarantee Banner -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:background="@drawable/glass_pill_button"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
-                    android:padding="12dp">
-
-                    <FrameLayout
-                        android:layout_width="32dp"
-                        android:layout_height="32dp"
-                        android:background="@drawable/circle_action_button">
-
-                        <ImageView
-                            android:layout_width="18dp"
-                            android:layout_height="18dp"
-                            android:layout_gravity="center"
-                            android:contentDescription="@null"
-                            android:src="@drawable/ic_lock"
-                            app:tint="@color/navy_deep" />
-                    </FrameLayout>
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp"
-                        android:layout_weight="1"
-                        android:lineSpacingExtra="2dp"
-                        android:text="Giao dịch được bảo vệ bằng mã hóa bảo mật và xác thực an toàn qua Nimbus Smart OTP."
-                        android:textColor="@color/ink_muted"
-                        android:textSize="12sp" />
-                </LinearLayout>
-
                 <!-- Optional Face Step-Up Card -->
                 <LinearLayout
                     android:id="@+id/face_step_up_card"
@@ -715,32 +680,6 @@
                     android:background="@drawable/glass_panel_card"
                     android:orientation="vertical"
                     android:padding="20dp" />
-
-                <!-- Trust Assurance Note -->
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
-                    android:paddingStart="4dp"
-                    android:paddingEnd="4dp">
-
-                    <ImageView
-                        android:layout_width="15dp"
-                        android:layout_height="15dp"
-                        android:layout_marginEnd="6dp"
-                        android:contentDescription="@null"
-                        android:src="@drawable/ic_shield"
-                        app:tint="@color/navy" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Giao dịch được bảo mật bởi Nimbus SafeGuard 256-bit"
-                        android:textColor="@color/ink_muted"
-                        android:textSize="11sp" />
-                </LinearLayout>
             </LinearLayout>
         </ScrollView>
 

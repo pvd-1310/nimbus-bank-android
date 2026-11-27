@@ -185,11 +185,6 @@ public final class OfficerFeatureFragment extends Fragment {
                             wrapper.setOrientation(LinearLayout.VERTICAL);
                             wrapper.setPadding(dp(16), dp(6), dp(16), 0);
                             wrapper.addView(card);
-                            TextView note = new TextView(requireContext());
-                            note.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
-                            note.setTextSize(12f);
-                            note.setPadding(0, dp(10), 0, 0);
-                            wrapper.addView(note);
 
                             new com.example.final_term.ui.common.ThemedDialogBuilder(requireContext())
                                     .setTitle("Thẩm định hồ sơ vay")
@@ -1168,6 +1163,7 @@ public final class OfficerFeatureFragment extends Fragment {
     }
 
     private void renderGenericFeature() {
+        binding.filterScroll.setVisibility(View.GONE);
         binding.actionButton.setVisibility(View.GONE);
     }
 

@@ -63,18 +63,6 @@
         android:orientation="horizontal">
 
         <TextView
-            android:id="@+id/badge_auto_scan"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:background="@drawable/glass_pill_bg"
-            android:paddingHorizontal="12dp"
-            android:paddingVertical="5dp"
-            android:text="Tự động quét · Không cần bấm chụp"
-            android:textColor="@color/navy"
-            android:textSize="11.5sp"
-            android:textStyle="bold" />
-
-        <TextView
             android:id="@+id/badge_lighting"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

@@ -203,14 +203,6 @@ public final class TransferFragment extends Fragment {
             startActivity(Intent.createChooser(share, "Chia sẻ biên lai giao dịch"));
         });
 
-        binding.qrScanShortcut.setOnClickListener(v -> {
-            new ThemedDialogBuilder(requireContext())
-                    .setTitle("Quét mã QR chuyển khoản")
-                    .setMessage("Tính năng quét mã QR chuyển khoản đang được hoàn thiện.")
-                    .setPositiveButton("Đóng", null)
-                    .show();
-        });
-
         setBusy(false);
         showStep(intentId == null ? Step.INPUT : Step.OTP);
         app.getAppContainer().getAuthRepository().observeAuthState().observe(getViewLifecycleOwner(), auth -> {

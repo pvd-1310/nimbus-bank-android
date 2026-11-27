@@ -610,15 +610,6 @@
                                 android:minLines="2"
                                 android:textColor="@color/ink" />
                         </com.google.android.material.textfield.TextInputLayout>
-
-                        <TextView
-                            android:id="@+id/audit_note"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="10dp"
-                            android:text="Mọi thay đổi sẽ được lưu vào lịch sử thao tác của ngân hàng."
-                            android:textColor="@color/ink_muted"
-                            android:textSize="12sp" />
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
             </LinearLayout>

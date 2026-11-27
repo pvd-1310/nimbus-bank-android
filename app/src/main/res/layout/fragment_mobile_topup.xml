@@ -80,13 +80,6 @@
                         android:textColor="@color/ink_muted"
                         android:textSize="11sp"
                         android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Nạp tiền điện thoại"
-                        android:textColor="@color/ink_muted"
-                        android:textSize="11sp" />
                 </LinearLayout>
 
                 <FrameLayout
@@ -185,13 +178,6 @@
                     android:textColor="@color/ink_muted"
                     android:textSize="11sp"
                     android:textStyle="bold" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Chọn một mệnh giá"
-                    android:textColor="@color/ink_muted"
-                    android:textSize="11sp" />
             </LinearLayout>
 
             <GridLayout
@@ -278,14 +264,5 @@
             android:text="Nạp ngay"
             android:textColor="@color/white"
             app:cornerRadius="18dp" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="5dp"
-            android:gravity="center"
-            android:text="Bảo mật 2 lớp qua Nimbus Smart OTP"
-            android:textColor="@color/ink_muted"
-            android:textSize="11sp" />
     </LinearLayout>
 </LinearLayout>

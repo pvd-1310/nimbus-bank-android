@@ -48,7 +48,9 @@ public final class BranchLocatorFragment extends Fragment {
     private GoogleMap map;
     private ActivityResultLauncher<String[]> locationPermission;
     private final Map<String, Marker> branchMarkers = new HashMap<>();
+    private final List<JSONObject> allBranches = new ArrayList<>();
     private final Map<String, JSONObject> branchOptions = new java.util.LinkedHashMap<>();
+    private String activeFilter = "ALL";
     private String selectedBranchId;
     private boolean mapsConfigured;
     private Polyline walkingRoute;
@@ -83,6 +85,10 @@ public final class BranchLocatorFragment extends Fragment {
             if (!nav.popBackStack(R.id.customerHome, false)) nav.navigate(R.id.customerHome);
         });
         binding.locateButton.setOnClickListener(v -> startRoute());
+        binding.chipAll.setOnClickListener(v -> applyBranchFilter("ALL"));
+        binding.chipBranch.setOnClickListener(v -> applyBranchFilter("BRANCH"));
+        binding.chipAtm.setOnClickListener(v -> applyBranchFilter("ATM"));
+        binding.chipOpenNow.setOnClickListener(v -> applyBranchFilter("OPEN"));
         binding.searchButton.setOnClickListener(v -> {
             if (branchOptions.isEmpty()) {
                 loadBranches();
@@ -346,24 +352,13 @@ public final class BranchLocatorFragment extends Fragment {
                             setBranchStatus("Chưa có dữ liệu chi nhánh trong khu vực.");
                             return;
                         }
-                        branchOptions.clear();
+                        allBranches.clear();
                         for (int i = 0; i < branches.length(); i++) {
                             JSONObject branch = branches.getJSONObject(i);
                             if (branch.optString("id").isEmpty()) continue;
-                            String label = branch.optString("name", "Chi nhánh Nimbus")
-                                    + " · " + branch.optString("address", "Chưa có địa chỉ");
-                            if (branchOptions.containsKey(label)) label += " · " + branch.getString("id");
-                            branchOptions.put(label, branch);
+                            allBranches.add(branch);
                         }
-                        renderBranchMarkers();
-                        binding.searchInput.setDropDownBackgroundResource(R.drawable.bg_nimbus_dropdown_popup);
-                        binding.searchInput.setAdapter(new ArrayAdapter<>(requireContext(),
-                                R.layout.item_nimbus_dropdown, new ArrayList<>(branchOptions.keySet())));
-                        binding.searchInput.setOnItemClickListener((parent, itemView, position, id) ->
-                                selectBranch((String) parent.getItemAtPosition(position)));
-                        setBranchStatus(!mapsConfigured
-                                ? "Chưa cấu hình bản đồ. Dùng danh sách để xem địa chỉ chi nhánh."
-                                : "Chọn một chi nhánh để xem địa chỉ hoặc tìm đường đi bộ.");
+                        applyBranchFilter(activeFilter);
                     } catch (JSONException ignored) {
                         setBranchStatus("Dữ liệu chi nhánh không đúng định dạng.");
                     }
@@ -373,6 +368,77 @@ public final class BranchLocatorFragment extends Fragment {
                         setBranchStatus("Không kết nối được máy chủ để tải chi nhánh.");
                     }
                 });
+    }
+
+    private void applyBranchFilter(String filter) {
+        activeFilter = filter;
+        if (binding == null) return;
+        styleFilterChip(binding.chipAll, "ALL".equals(filter));
+        styleFilterChip(binding.chipBranch, "BRANCH".equals(filter));
+        styleFilterChip(binding.chipAtm, "ATM".equals(filter));
+        styleFilterChip(binding.chipOpenNow, "OPEN".equals(filter));
+
+        branchOptions.clear();
+        for (JSONObject branch : allBranches) {
+            if (!matchesFilter(branch, filter)) continue;
+            String label = branch.optString("name", "Chi nhánh Nimbus")
+                    + " · " + branch.optString("address", "Chưa có địa chỉ");
+            if (branchOptions.containsKey(label)) label += " · " + branch.optString("id");
+            branchOptions.put(label, branch);
+        }
+
+        renderBranchMarkers();
+        binding.searchInput.setDropDownBackgroundResource(R.drawable.bg_nimbus_dropdown_popup);
+        binding.searchInput.setAdapter(new ArrayAdapter<>(requireContext(),
+                R.layout.item_nimbus_dropdown, new ArrayList<>(branchOptions.keySet())));
+        binding.searchInput.setOnItemClickListener((parent, itemView, position, id) ->
+                selectBranch((String) parent.getItemAtPosition(position)));
+
+        if (branchOptions.isEmpty()) {
+            setBranchStatus("Không có điểm giao dịch phù hợp bộ lọc.");
+        } else if (!mapsConfigured) {
+            setBranchStatus("Chưa cấu hình bản đồ. Hiện có " + branchOptions.size() + " điểm trong danh sách.");
+        } else {
+            setBranchStatus("Tìm thấy " + branchOptions.size() + " điểm giao dịch. Chọn một điểm để xem đường đi.");
+        }
+    }
+
+    private void styleFilterChip(android.widget.TextView chip, boolean selected) {
+        chip.setBackgroundResource(selected ? R.drawable.navy_button_pill : R.drawable.glass_pill_bg);
+        chip.setTextColor(ContextCompat.getColor(requireContext(), selected ? R.color.white : R.color.ink));
+        chip.setTypeface(null, selected ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+    }
+
+    private boolean matchesFilter(JSONObject branch, String filter) {
+        if ("ALL".equals(filter)) return true;
+        String name = branch.optString("name", "").toLowerCase(Locale.ROOT);
+        String hours = branch.optString("openingHours", "").toLowerCase(Locale.ROOT);
+        String type = branch.optString("type", "").toUpperCase(Locale.ROOT);
+        boolean isAtm = "ATM".equals(type) || branch.optBoolean("hasAtm", false)
+                || name.contains("atm") || hours.contains("24/7");
+        if ("ATM".equals(filter)) return isAtm;
+        if ("BRANCH".equals(filter)) return !"ATM".equals(type) && !name.contains("atm");
+        if ("OPEN".equals(filter)) {
+            if (hours.contains("24/7")) return true;
+            if (hours.contains("đóng")) return false;
+            return isCurrentlyOpen(hours);
+        }
+        return true;
+    }
+
+    private boolean isCurrentlyOpen(String hours) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d{1,2}):(\\d{2})\\s*[-–]\\s*(\\d{1,2}):(\\d{2})")
+                .matcher(hours);
+        if (!m.find()) return true;
+        try {
+            int startMin = Integer.parseInt(m.group(1)) * 60 + Integer.parseInt(m.group(2));
+            int endMin = Integer.parseInt(m.group(3)) * 60 + Integer.parseInt(m.group(4));
+            java.util.Calendar now = java.util.Calendar.getInstance();
+            int nowMin = now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE);
+            return nowMin >= startMin && nowMin <= endMin;
+        } catch (Exception ignored) {
+            return true;
+        }
     }
 
     private void renderBranchMarkers() {
@@ -406,6 +472,7 @@ public final class BranchLocatorFragment extends Fragment {
         if (locationRequest != null) locationRequest.cancel();
         locationRequest = null;
         selectedBranchId = null;
+        allBranches.clear();
         branchOptions.clear();
         walkingRoute = null;
         branchMarkers.clear();
