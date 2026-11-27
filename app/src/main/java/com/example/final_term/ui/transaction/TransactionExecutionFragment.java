@@ -71,8 +71,8 @@ public final class TransactionExecutionFragment extends Fragment {
     private static final String STATE_COMPLETED_AT_MILLIS = "tx_completed_at_millis";
 
     private static final String PREFS_PENDING_TRANSFER = "pending_bank_transfer";
-    private static final int MAX_DEMO_RECONCILE_RETRIES = 6;
-    private static final long DEMO_RECONCILE_DELAY_MS = 1500L;
+    private static final int MAX_DEMO_RECONCILE_RETRIES = 10;
+    private static final long DEMO_RECONCILE_DELAY_MS = 650L;
     private static final int MAX_STRIPE_POLL_RETRIES = 20;
     private static final long STRIPE_POLL_DELAY_MS = 2000L;
 
@@ -221,6 +221,7 @@ public final class TransactionExecutionFragment extends Fragment {
             faceCamera.open();
         });
         binding.btnPendingAction.setOnClickListener(v -> resumePendingTransaction());
+        binding.btnReceiptRetry.setOnClickListener(v -> resumePendingTransaction());
         binding.successCloseButton.setOnClickListener(v -> navigateHome());
         binding.btnSuccessHome.setOnClickListener(v -> navigateHome());
 
@@ -464,23 +465,42 @@ public final class TransactionExecutionFragment extends Fragment {
     }
 
     private void renderSuccessStep() {
+        renderReceiptStep(false, false);
+    }
+
+    private void renderProcessingReceiptStep(boolean showManualRetry) {
+        renderReceiptStep(true, showManualRetry);
+    }
+
+    private void renderReceiptStep(boolean pending, boolean showManualRetry) {
         if (binding == null || request == null) return;
         dismissOtpDialog();
         binding.stepConfirmContainer.setVisibility(View.GONE);
         binding.stepSuccessContainer.setVisibility(View.VISIBLE);
 
-        if (completedAtMillis <= 0L) {
-            completedAtMillis = System.currentTimeMillis();
+        long displayTimestamp = completedAtMillis > 0L ? completedAtMillis : System.currentTimeMillis();
+        if (!pending && completedAtMillis <= 0L) {
+            completedAtMillis = displayTimestamp;
         }
         TransactionPresentation.ReceiptModel receipt = TransactionPresentation.buildReceipt(
-                request, intentId, providerReference, authoritativeFee, completedAtMillis,
-                isBillOrOrderPayment() ? selectedPaymentMethod : null, selectedPaymentAccountId);
+                request, intentId, providerReference, authoritativeFee, displayTimestamp,
+                isBillOrOrderPayment() ? selectedPaymentMethod : null, selectedPaymentAccountId, pending);
 
         binding.successMiniTitle.setText(receipt.miniHeaderTitle);
         binding.successHeadline.setText(receipt.headline);
         binding.successTimestamp.setText(receipt.timestampText);
         bindHeroAmount(binding.successAmountValue, binding.successCurrencySymbol,
                 request.amountMinor, request.currency, receipt.amountFormatted);
+
+        binding.successBadgeCircle.setBackgroundTintList(ContextCompat.getColorStateList(
+                requireContext(), pending ? R.color.warning : R.color.navy));
+        binding.successBadgeIcon.setVisibility(pending ? View.GONE : View.VISIBLE);
+        binding.successBadgeSpinner.setVisibility(pending ? View.VISIBLE : View.GONE);
+
+        binding.successShareTopButton.setVisibility(pending ? View.INVISIBLE : View.VISIBLE);
+        binding.btnShareReceipt.setVisibility(pending ? View.GONE : View.VISIBLE);
+        binding.btnReceiptRetry.setVisibility(pending && showManualRetry ? View.VISIBLE : View.GONE);
+        binding.btnReceiptRetry.setEnabled(!busy);
 
         populateDetailRows(binding.receiptDetailsCard, receipt.rows, true);
 
@@ -552,7 +572,8 @@ public final class TransactionExecutionFragment extends Fragment {
             rowBinding.rowValue.setPadding(0, 0, 0, 0);
             if (row.monospace) {
                 rowBinding.rowValue.setTypeface(Typeface.MONOSPACE);
-            } else if (row.methodPill || ("Trạng thái".equals(row.label) && "Hoàn tất".equals(row.value))) {
+            } else if (row.methodPill || ("Trạng thái".equals(row.label)
+                    && ("Hoàn tất".equals(row.value) || "Đang xử lý".equals(row.value)))) {
                 rowBinding.rowValue.setTypeface(Typeface.DEFAULT_BOLD);
             } else {
                 rowBinding.rowValue.setTypeface(Typeface.DEFAULT);
@@ -568,6 +589,9 @@ public final class TransactionExecutionFragment extends Fragment {
                 rowBinding.rowVerifiedBadge.setVisibility(View.GONE);
             } else if ("Trạng thái".equals(row.label) && "Hoàn tất".equals(row.value)) {
                 rowBinding.rowValue.setTextColor(ContextCompat.getColor(requireContext(), R.color.success));
+                rowBinding.rowVerifiedBadge.setVisibility(View.GONE);
+            } else if ("Trạng thái".equals(row.label) && "Đang xử lý".equals(row.value)) {
+                rowBinding.rowValue.setTextColor(ContextCompat.getColor(requireContext(), R.color.warning));
                 rowBinding.rowVerifiedBadge.setVisibility(View.GONE);
             } else {
                 rowBinding.rowValue.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
@@ -1141,12 +1165,11 @@ public final class TransactionExecutionFragment extends Fragment {
             commitPending = "COMMIT_PENDING".equalsIgnoreCase(state);
             if (commitPending) {
                 dismissOtpDialog();
-                showPendingCard("Giao dịch đang được đối soát…");
-                if (demoReconcileRemaining > 0) {
+                boolean canAutoPoll = demoReconcileRemaining > 0;
+                renderProcessingReceiptStep(!canAutoPoll);
+                if (canAutoPoll) {
                     demoReconcileRemaining--;
                     handler.postDelayed(this::reconcileDemo, DEMO_RECONCILE_DELAY_MS);
-                } else {
-                    showPendingCard("Giao dịch đang được xử lý. Bấm kiểm tra trạng thái sau ít phút.");
                 }
             }
         } catch (JSONException e) {
@@ -1306,7 +1329,7 @@ public final class TransactionExecutionFragment extends Fragment {
         setBusy(false);
         commitPending = true;
         if (result instanceof PaymentSheetResult.Completed) {
-            showPendingCard("Đang chờ xác nhận thanh toán…");
+            renderProcessingReceiptStep(false);
             stripePollsRemaining = MAX_STRIPE_POLL_RETRIES;
             if (request.kind == TransactionFlowRequest.Kind.DEPOSIT) {
                 recoverTopupStatus(true);
@@ -1343,8 +1366,13 @@ public final class TransactionExecutionFragment extends Fragment {
                     showToast("Thanh toán không thành công.");
                 } else {
                     commitPending = true;
-                    showPendingCard("Đang chờ xác nhận thanh toán. Số dư sẽ cập nhật sau khi hoàn tất.");
-                    if (keepPolling && stripePollsRemaining-- > 0) {
+                    boolean willPoll = keepPolling && stripePollsRemaining-- > 0;
+                    if (binding.stepSuccessContainer.getVisibility() == View.VISIBLE) {
+                        renderProcessingReceiptStep(!willPoll);
+                    } else {
+                        showPendingCard("Đang chờ xác nhận thanh toán. Số dư sẽ cập nhật sau khi hoàn tất.");
+                    }
+                    if (willPoll) {
                         handler.postDelayed(() -> recoverTopupStatus(true), STRIPE_POLL_DELAY_MS);
                     }
                 }
@@ -1376,8 +1404,13 @@ public final class TransactionExecutionFragment extends Fragment {
                     showToast("Thanh toán không thành công.");
                 } else {
                     commitPending = true;
-                    showPendingCard("Đang chờ xác nhận thanh toán…");
-                    if (stripePollsRemaining-- > 0) {
+                    boolean willPoll = stripePollsRemaining-- > 0;
+                    if (binding.stepSuccessContainer.getVisibility() == View.VISIBLE) {
+                        renderProcessingReceiptStep(!willPoll);
+                    } else {
+                        showPendingCard("Đang chờ xác nhận thanh toán…");
+                    }
+                    if (willPoll) {
                         handler.postDelayed(this::pollPaymentIntentUntilSettled, STRIPE_POLL_DELAY_MS);
                     }
                 }
@@ -1450,6 +1483,10 @@ public final class TransactionExecutionFragment extends Fragment {
         }
         if (busy) return;
         if (commitPending) {
+            if (binding != null && binding.stepSuccessContainer.getVisibility() == View.VISIBLE) {
+                navigateHome();
+                return;
+            }
             showPendingCard("Giao dịch đang chờ hoàn tất. Vui lòng kiểm tra trạng thái trước khi thoát.");
             showToast("Giao dịch đang chờ hoàn tất. Không thể hủy lúc này.");
             return;

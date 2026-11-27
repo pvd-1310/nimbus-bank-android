@@ -229,6 +229,19 @@ public final class TransactionPresentation {
             long completedAtMillis,
             @Nullable String paymentMethod,
             @Nullable String paymentAccountId) {
+        return buildReceipt(req, fullTxId, providerReference, feeMinor, completedAtMillis,
+                paymentMethod, paymentAccountId, false);
+    }
+
+    public static ReceiptModel buildReceipt(
+            @NonNull TransactionFlowRequest req,
+            @Nullable String fullTxId,
+            @Nullable String providerReference,
+            long feeMinor,
+            long completedAtMillis,
+            @Nullable String paymentMethod,
+            @Nullable String paymentAccountId,
+            boolean pending) {
         String amountFormatted = ReadSummaryFormatter.formatCurrency(req.amountMinor, req.currency);
         String timestampText = formatTimestamp(completedAtMillis);
         String shortId = shortTransactionId(providerReference, fullTxId);
@@ -242,21 +255,21 @@ public final class TransactionPresentation {
             case INTERNAL_TRANSFER:
             case EXTERNAL_TRANSFER:
                 miniHeaderTitle = "BIÊN LAI CHUYỂN KHOẢN";
-                headline = "Chuyển tiền thành công";
+                headline = pending ? "Đang xử lý chuyển tiền" : "Chuyển tiền thành công";
                 break;
             case DEPOSIT:
                 miniHeaderTitle = "BIÊN LAI NẠP TIỀN";
-                headline = "Nạp tiền thành công";
+                headline = pending ? "Đang xử lý nạp tiền" : "Nạp tiền thành công";
                 break;
             case WITHDRAWAL:
                 miniHeaderTitle = "BIÊN LAI RÚT TIỀN";
-                headline = "Rút tiền thành công";
+                headline = pending ? "Đang xử lý rút tiền" : "Rút tiền thành công";
                 break;
             case BILL_PAYMENT:
             case ORDER_PAYMENT:
             default:
                 miniHeaderTitle = "BIÊN LAI THANH TOÁN";
-                headline = "Thanh toán thành công";
+                headline = pending ? "Đang xử lý thanh toán" : "Thanh toán thành công";
                 break;
         }
 
@@ -280,7 +293,9 @@ public final class TransactionPresentation {
         if (!isBlank(req.note)) {
             rows.add(DetailRow.plain("Nội dung", req.note.trim()));
         }
-        rows.add(DetailRow.verified("Trạng thái", "Hoàn tất", true));
+        rows.add(pending
+                ? DetailRow.plain("Trạng thái", "Đang xử lý")
+                : DetailRow.verified("Trạng thái", "Hoàn tất", true));
 
         String shareId = copyId != null ? copyId : shortId;
         StringBuilder share = new StringBuilder();

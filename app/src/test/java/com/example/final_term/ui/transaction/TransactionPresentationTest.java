@@ -102,5 +102,12 @@ public class TransactionPresentationTest {
                 orderReq, "tx_1234567890", "", 0L, 1794820800000L, "NIMBUS_ACCOUNT", "acc_88884125");
         assertEquals("Nguồn thanh toán", receipt.rows.get(1).label);
         assertEquals("Tài khoản Nimbus (••• 4125)", receipt.rows.get(1).value);
+
+        TransactionPresentation.ReceiptModel pendingExt = TransactionPresentation.buildReceipt(
+                TransactionFlowRequest.externalTransfer(
+                        "acc_88884125", 500_000L, "VND", "VCB", "Vietcombank", "0000000001", null),
+                "tx_ext_1", "DEMO-123", 0L, 1794820800000L, null, null, true);
+        assertEquals("Đang xử lý chuyển tiền", pendingExt.headline);
+        assertEquals("Đang xử lý", pendingExt.rows.get(pendingExt.rows.size() - 1).value);
     }
 }

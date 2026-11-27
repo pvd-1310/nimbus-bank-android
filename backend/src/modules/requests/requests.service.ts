@@ -120,7 +120,7 @@ export class RequestService {
       const pending = {
         ...intent, status: "COMMIT_PENDING",
         providerReference: "DEMO-" + id,
-        reconcileAfter: this.bank.now() + 5000,
+        reconcileAfter: this.bank.now() + 1200,
       };
       t.set("transactionIntents/" + id, pending);
       await this.updateRequest(t, pending, "PENDING");

@@ -629,6 +629,7 @@
                         android:background="@drawable/bg_success_outer_ring">
 
                         <FrameLayout
+                            android:id="@+id/success_badge_circle"
                             android:layout_width="44dp"
                             android:layout_height="44dp"
                             android:layout_gravity="center"
@@ -636,12 +637,23 @@
                             android:backgroundTint="@color/navy">
 
                             <ImageView
+                                android:id="@+id/success_badge_icon"
                                 android:layout_width="24dp"
                                 android:layout_height="24dp"
                                 android:layout_gravity="center"
                                 android:contentDescription="Thành công"
                                 android:src="@drawable/ic_check"
                                 app:tint="@color/white" />
+
+                            <ProgressBar
+                                android:id="@+id/success_badge_spinner"
+                                style="?android:attr/progressBarStyleSmall"
+                                android:layout_width="22dp"
+                                android:layout_height="22dp"
+                                android:layout_gravity="center"
+                                android:indeterminate="true"
+                                android:indeterminateTint="@color/white"
+                                android:visibility="gone" />
                         </FrameLayout>
                     </FrameLayout>
                 </FrameLayout>
@@ -741,6 +753,24 @@
             android:paddingTop="8dp"
             android:paddingEnd="20dp"
             android:paddingBottom="16dp">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_receipt_retry"
+                android:layout_width="match_parent"
+                android:layout_height="50dp"
+                android:layout_marginBottom="10dp"
+                android:fontFamily="sans-serif-medium"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:text="Kiểm tra trạng thái"
+                android:textAllCaps="false"
+                android:textColor="@color/navy"
+                android:textSize="15sp"
+                android:visibility="gone"
+                app:backgroundTint="#A6FFFFFF"
+                app:cornerRadius="999dp"
+                app:strokeColor="@color/white"
+                app:strokeWidth="1dp" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_share_receipt"
