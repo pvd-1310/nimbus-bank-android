@@ -30,9 +30,11 @@ async function recordBillPayment(t: Tx, id: string, payment: Doc, intent: Doc | 
     type: "BILL_PAYMENT",
     paymentId: id,
     billId: payment.billId,
+    ...(payment.sourceAccountId ? { sourceAccountId: payment.sourceAccountId } : {}),
     amountMinor: payment.amountMinor,
     currency: payment.currency,
     status: "SETTLED",
+    paymentMethod: payment.paymentMethod ?? "STRIPE_CARD",
     committedAt,
   });
 }
@@ -42,8 +44,10 @@ export class Payments {
     private bank: Banking,
     readonly provider: StripeGateway | undefined,
   ) {}
-  async prepare(a: Actor, billId: string, requestId: string) {
-    check(this.provider, "SETUP_REQUIRED", 503);
+  async prepare(a: Actor, billId: string, requestId: string, paymentMethod = "STRIPE_CARD", sourceAccountId?: string) {
+    check(paymentMethod === "STRIPE_CARD" || paymentMethod === "NIMBUS_ACCOUNT", "INVALID_PAYMENT_METHOD");
+    if (paymentMethod === "STRIPE_CARD") check(this.provider, "SETUP_REQUIRED", 503);
+    if (paymentMethod === "NIMBUS_ACCOUNT") key(sourceAccountId);
     key(billId);
     key(requestId);
     return this.bank.store.run(async (t) => {
@@ -70,6 +74,8 @@ export class Payments {
           "PAYMENT_RECONCILIATION_REQUIRED",
           409,
         );
+        check((intent.paymentMethod ?? "STRIPE_CARD") === paymentMethod &&
+          (intent.sourceAccountId ?? undefined) === (paymentMethod === "NIMBUS_ACCOUNT" ? sourceAccountId : undefined), "IDEMPOTENCY_CONFLICT", 409);
         if (payment.amountMinor === 0 && payment.status === "CREATED" && !payment.providerId) {
           // Stripe rejected the zero amount. The corrected amount needs its own OTP.
           t.set("payments/" + lock.paymentId, { ...payment, status: "CANCELLED" });
@@ -97,7 +103,13 @@ export class Payments {
         ? digest(["PAYMENT_INVALID_AMOUNT", originalId])
         : requestId;
       const id = replacesInvalidAmount ? digest([a.uid, "PAYMENT", paymentRequestId]) : originalId;
-      const hash = digest([billId, bill.amountMinor, bill.currency]);
+      if (paymentMethod === "NIMBUS_ACCOUNT") {
+        const account = await this.bank.owned(t, a, sourceAccountId!);
+        check(account.type === "CHECKING" && account.status === "ACTIVE" && account.currency === "VND" && bill.currency === "VND", "INVALID_ACCOUNT", 409);
+      }
+      const hash = paymentMethod === "STRIPE_CARD"
+        ? digest([billId, bill.amountMinor, bill.currency])
+        : digest([billId, bill.amountMinor, bill.currency, paymentMethod, sourceAccountId]);
       const old = replacesInvalidAmount ? await t.get("transactionIntents/" + id) : original;
       if (old) {
         check((old.payloadDigest ?? old.digest) === hash, "IDEMPOTENCY_CONFLICT", 409);
@@ -107,7 +119,9 @@ export class Payments {
       this.checkQuote(bill);
       const intent = {
         id,
-        sourceId: "STRIPE",
+        sourceId: paymentMethod === "NIMBUS_ACCOUNT" ? sourceAccountId : "STRIPE",
+        ...(paymentMethod === "NIMBUS_ACCOUNT" ? { sourceAccountId } : {}),
+        paymentMethod,
         feeMinor: 0,
         securityVersion: 1,
         faceRequired: this.bank.security.requiresFace(bill.currency, bill.amountMinor),
@@ -244,8 +258,8 @@ export class Payments {
     });
   }
 
-  async create(a: Actor, billId: string, requestId: string) {
-    check(this.provider, "SETUP_REQUIRED", 503);
+  async create(a: Actor, billId: string, requestId: string, paymentMethod = "STRIPE_CARD", sourceAccountId?: string) {
+    if (paymentMethod === "STRIPE_CARD") check(this.provider, "SETUP_REQUIRED", 503);
     key(billId);
     key(requestId);
     const id = digest([a.uid, "PAYMENT", requestId]);
@@ -256,11 +270,13 @@ export class Payments {
         check(existing.ownerUid === a.uid, "FORBIDDEN", 403);
         check(existing.gateway !== "SIMULATOR", "INVALID_STATE", 409);
         check(existing.billId === billId, "IDEMPOTENCY_CONFLICT", 409);
+        check((existing.paymentMethod ?? "STRIPE_CARD") === paymentMethod && (existing.sourceAccountId ?? undefined) === (paymentMethod === "NIMBUS_ACCOUNT" ? sourceAccountId : undefined), "IDEMPOTENCY_CONFLICT", 409);
         return existing;
       }
       const i = await this.bank.transfers.getIntent(t, a, id),
         bill = await t.get("bills/" + billId);
       check(i.kind === "PAYMENT" && i.sourceId !== "SIMULATOR" && i.billId === billId, "INVALID_INTENT");
+      check((i.paymentMethod ?? "STRIPE_CARD") === paymentMethod && (i.sourceAccountId ?? undefined) === (paymentMethod === "NIMBUS_ACCOUNT" ? sourceAccountId : undefined), "IDEMPOTENCY_CONFLICT", 409);
       minor(i.amountMinor);
       await this.bank.security.consume(t, i);
       check(
@@ -279,6 +295,28 @@ export class Payments {
         "PAYMENT_IN_PROGRESS",
         409,
       );
+      if (paymentMethod === "NIMBUS_ACCOUNT") {
+        const account = await this.bank.owned(t, a, sourceAccountId!);
+        check(account.type === "CHECKING" && account.status === "ACTIVE" && account.currency === "VND" && bill.currency === "VND", "INVALID_ACCOUNT", 409);
+        check(Number.isSafeInteger(account.availableMinor) && account.availableMinor >= i.amountMinor, "INSUFFICIENT_FUNDS", 409);
+        const settledAt = this.bank.now();
+        const availableMinor = account.availableMinor - i.amountMinor;
+        const bookedMinor = account.bookedMinor - i.amountMinor;
+        check(bookedMinor >= 0 && Number.isSafeInteger(bookedMinor), "INSUFFICIENT_FUNDS", 409);
+        const p = { id, ownerUid: a.uid, purpose: "BILL_PAYMENT", billId, amountMinor: i.amountMinor, currency: i.currency,
+          paymentMethod, sourceAccountId, status: "SUCCEEDED", gateway: "NIMBUS", authorizationDigest: i.digest, createdAt: settledAt, updatedAt: settledAt };
+        t.set("accounts/" + sourceAccountId, { ...account, availableMinor, bookedMinor, balanceMinor: bookedMinor, version: (account.version ?? 0) + 1 });
+        t.set("payments/" + id, p);
+        t.set("transactions/stripe_" + id, { ownerUid: a.uid, actorUid: a.uid, requestId, type: "BILL_PAYMENT", paymentId: id, billId, sourceAccountId, paymentMethod, amountMinor: i.amountMinor, currency: i.currency, status: "SETTLED", balanceAfterMinor: bookedMinor, committedAt: settledAt });
+        t.set("ledgerEntries/" + id + "_debit", { transactionId: id, accountId: sourceAccountId, signedMinor: -i.amountMinor, amountMinor: i.amountMinor, direction: "DEBIT", currency: i.currency, postedAt: settledAt });
+        t.set("ledgerEntries/" + id + "_clearing", { transactionId: id, accountId: "NIMBUS_BILLING_CLEARING", signedMinor: i.amountMinor, amountMinor: i.amountMinor, direction: "CREDIT", currency: i.currency, postedAt: settledAt });
+        t.set("transactionIntents/" + id, { ...i, status: "COMMITTED", committedAt: settledAt });
+        t.set("bills/" + billId, { ...bill, status: "PAID", paymentId: id });
+        t.set("billPaymentLocks/" + billId, { paymentId: id });
+        t.set("outbox/" + id, { paymentId: id, billId, ownerUid: a.uid, status: "PENDING", attempts: 0, createdAt: settledAt });
+        this.bank.audit(t, a, "NIMBUS_PAYMENT_SETTLED", id, requestId);
+        return { ...p, _nimbusSettled: true };
+      }
       const p = {
         id,
         ownerUid: a.uid,
@@ -288,6 +326,7 @@ export class Payments {
         currency: i.currency,
         status: "CREATED",
         authorizationDigest: i.digest,
+        paymentMethod: "STRIPE_CARD",
         savedCardsEnabled: true,
         createdAt: this.bank.now(),
       };
@@ -297,20 +336,27 @@ export class Payments {
       this.bank.audit(t, a, "PAYMENT_CREATE", id, requestId);
       return p;
     });
+    if (record._nimbusSettled === true || (record.paymentMethod === "NIMBUS_ACCOUNT" && record.status === "SUCCEEDED")) {
+      await drainOutbox(this.bank.store);
+      const { _nimbusSettled, ...result } = record;
+      return { ...result, id, paymentId: id, gateway: "NIMBUS", status: "SUCCEEDED" };
+    }
     if (record.status === "SUCCEEDED" || record.status === "CANCELLED")
       return { id, paymentId: id, gateway: "STRIPE", status: record.status };
     minor(record.amountMinor);
+    const provider = this.provider;
+    check(provider, "SETUP_REQUIRED", 503);
     check(record.authorizationDigest, "REAUTHORIZE_REQUIRED", 409);
     check(record.providerId || this.bank.now() - record.createdAt < 23 * 3_600_000,
       "PAYMENT_RECONCILIATION_REQUIRED", 409);
     // Older pending payments must keep the Stripe parameters they were created with.
     const customerId = record.savedCardsEnabled === true
-      ? await this.getOrCreateStripeCustomer(a.uid, this.provider)
+      ? await this.getOrCreateStripeCustomer(a.uid, provider)
       : undefined;
     const operation = record.providerId ? "retrieve" : "create";
     const result = await (record.providerId
-      ? this.provider.retrieve(record.providerId)
-      : this.provider.create(id, record.amountMinor, record.currency, customerId)
+      ? provider.retrieve(record.providerId)
+      : provider.create(id, record.amountMinor, record.currency, customerId)
     ).catch((error: unknown) => {
       const code = typeof error === "object" && error !== null && "code" in error &&
         typeof error.code === "string" ? error.code : undefined;
@@ -332,7 +378,7 @@ export class Payments {
       });
     });
     const customerSession = customerId && result.client_secret
-      ? { customerId, customerSessionClientSecret: await this.provider.createCustomerSession(customerId) }
+      ? { customerId, customerSessionClientSecret: await provider.createCustomerSession(customerId) }
       : {};
     return {
       id,

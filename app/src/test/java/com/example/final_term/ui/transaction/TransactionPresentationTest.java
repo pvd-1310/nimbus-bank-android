@@ -68,4 +68,39 @@ public class TransactionPresentationTest {
         assertEquals("DEMO-ABC12345", TransactionPresentation.shortTransactionId("DEMO-ABC12345", "fullhash"));
         assertEquals("—", TransactionPresentation.shortTransactionId("", ""));
     }
+
+    @Test
+    public void billAndOrderPaymentConfirmationSyncsSourceAndMethodOnSwitch() {
+        TransactionFlowRequest billReq = TransactionFlowRequest.billPayment(
+                "bill_evn_01", "Thanh toán tiền điện", "EVNHCMC", "PE01000123",
+                null, 450_000L, "VND", null);
+
+        TransactionPresentation.ConfirmationModel stripeBill =
+                TransactionPresentation.buildConfirmation(billReq, 0L, "STRIPE_CARD", null);
+        assertEquals("Nguồn thanh toán", stripeBill.rows.get(0).label);
+        assertEquals("Thẻ (Stripe)", stripeBill.rows.get(0).value);
+        assertEquals("Phương thức", stripeBill.rows.get(stripeBill.rows.size() - 1).label);
+        assertEquals("Thẻ Stripe", stripeBill.rows.get(stripeBill.rows.size() - 1).value);
+
+        TransactionPresentation.ConfirmationModel nimbusBill =
+                TransactionPresentation.buildConfirmation(billReq, 0L, "NIMBUS_ACCOUNT", "acc_checking");
+        assertEquals("Nguồn thanh toán", nimbusBill.rows.get(0).label);
+        assertEquals("Tài khoản Nimbus (••• king)", nimbusBill.rows.get(0).value);
+        assertEquals("Phương thức", nimbusBill.rows.get(nimbusBill.rows.size() - 1).label);
+        assertEquals("Tài khoản Nimbus", nimbusBill.rows.get(nimbusBill.rows.size() - 1).value);
+
+        TransactionFlowRequest orderReq = TransactionFlowRequest.orderPayment(
+                "HOTEL", "prod_hotel_1", "Đặt khách sạn", "Phòng Superior · một đêm tại TP. Đà Lạt",
+                null, null, null, null, 1_250_000L, "VND", null);
+
+        TransactionPresentation.ConfirmationModel nimbusOrder =
+                TransactionPresentation.buildConfirmation(orderReq, 0L, "NIMBUS_ACCOUNT", "acc_88884125");
+        assertEquals("Tài khoản Nimbus (••• 4125)", nimbusOrder.rows.get(0).value);
+        assertEquals("Tài khoản Nimbus", nimbusOrder.rows.get(nimbusOrder.rows.size() - 1).value);
+
+        TransactionPresentation.ReceiptModel receipt = TransactionPresentation.buildReceipt(
+                orderReq, "tx_1234567890", "", 0L, 1794820800000L, "NIMBUS_ACCOUNT", "acc_88884125");
+        assertEquals("Nguồn thanh toán", receipt.rows.get(1).label);
+        assertEquals("Tài khoản Nimbus (••• 4125)", receipt.rows.get(1).value);
+    }
 }

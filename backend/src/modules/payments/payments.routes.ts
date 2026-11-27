@@ -39,7 +39,7 @@ export function registerPaymentsRoutes(route: Route, d: AppDependencies) {
   route("get", "/topups/:id", (a, r) => d.payments.getTopup(a, String(r.params.id)));
   route("post", "/payments/intents", async (a, r) => {
     const x = paymentRequest.parse(r.body);
-    return d.payments.prepare(a, x.billId, x.requestId);
+    return d.payments.prepare(a, x.billId, x.requestId, x.paymentMethod, x.sourceAccountId);
   });
   route("post", "/payments", async (a, r) => {
     const x = paymentRequest.parse(r.body);
@@ -51,7 +51,7 @@ export function registerPaymentsRoutes(route: Route, d: AppDependencies) {
         return d.stripeSandboxMovements.commit(a, intentId, "PAYMENT");
       }
     }
-    return d.payments.create(a, x.billId, x.requestId);
+    return d.payments.create(a, x.billId, x.requestId, x.paymentMethod, x.sourceAccountId);
   });
   route("get", "/payments/:id", (a, r) =>
     d.bank.scoped(a, "payments", String(r.params.id)),

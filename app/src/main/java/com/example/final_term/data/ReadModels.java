@@ -56,6 +56,8 @@ public final class ReadModels {
         public final Long balanceAfterMinor;
         public final String destinationBankCode;
         public final String counterpartyName;
+        public final String paymentMethod;
+        public final String sourceAccountId;
 
         public TransactionSummary(@NonNull String id, String accountId, String type, String currency,
                                    long amountMinor, String status, Timestamp createdAt) {
@@ -80,6 +82,14 @@ public final class ReadModels {
                                    long amountMinor, String status, Timestamp createdAt,
                                    String failureCode, Long balanceAfterMinor, String destinationBankCode,
                                    String counterpartyName) {
+            this(id, accountId, type, currency, amountMinor, status, createdAt, failureCode,
+                    balanceAfterMinor, destinationBankCode, counterpartyName, null, null);
+        }
+
+        public TransactionSummary(@NonNull String id, String accountId, String type, String currency,
+                                   long amountMinor, String status, Timestamp createdAt,
+                                   String failureCode, Long balanceAfterMinor, String destinationBankCode,
+                                   String counterpartyName, String paymentMethod, String sourceAccountId) {
             this.id = id;
             this.accountId = accountId == null ? "" : accountId;
             this.type = type == null ? "TRANSACTION" : type;
@@ -91,6 +101,8 @@ public final class ReadModels {
             this.balanceAfterMinor = balanceAfterMinor;
             this.destinationBankCode = destinationBankCode == null ? "" : destinationBankCode;
             this.counterpartyName = counterpartyName == null ? "" : counterpartyName;
+            this.paymentMethod = paymentMethod == null ? "" : paymentMethod;
+            this.sourceAccountId = sourceAccountId == null ? "" : sourceAccountId;
         }
 
         public boolean isBillPayment() { return "BILL_PAYMENT".equals(type); }

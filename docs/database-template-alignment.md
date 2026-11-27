@@ -21,7 +21,7 @@ The executable data dictionary is `backend/src/database/template-schema.ts` (`te
 | otpChallenges | challengeId, intentId, actorUid, otpHashOrProviderRef, expiry, attempts, usedAt | Preserve hash/expiresAt aliases for already-issued challenges; no plaintext OTP is stored here |
 | ekycRequests | requestId, customerUid, consentAt, storageRefs, reviewStatus, reviewedBy, reviewedAt | storageRefs stores private S3 key/version pairs; reviewer fields are null before a decision |
 | bills | billId, ownerUid, provider, invoiceRef, amountMinor, dueAt, status | dueAt may be null when no due date applies |
-| payments | paymentId, billOrOrderRef, gateway, merchantRef, amountMinor, status, providerTxnRef | gateway STRIPE; merchantRef is server payment ID; providerTxnRef is Stripe PaymentIntent ID; legacy billId/providerId retained |
+| payments | paymentId, billOrOrderRef, gateway, merchantRef, amountMinor, status, providerTxnRef | gateway STRIPE or NIMBUS (SIMULATOR only for demo records); merchantRef is server payment ID; providerTxnRef is Stripe PaymentIntent ID; legacy billId/providerId retained |
 | orders | orderId, ownerUid, serviceType, quoteRef, amountMinor, fulfillmentStatus, paymentId | Freeze quote reference; paymentId is null until linked |
 | ratePolicies | policyId, accountProduct, annualRateBasisPoints, effectiveFrom, version, updatedBy | Preserve productId alias; savingsDetails.productId is unchanged |
 | bankBranches | branchId, name, address, latitude, longitude, active, openingHours | No route result is fabricated |

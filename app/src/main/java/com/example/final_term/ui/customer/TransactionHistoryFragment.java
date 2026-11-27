@@ -194,7 +194,8 @@ public final class TransactionHistoryFragment extends Fragment {
                             item.getString("status"), time,
                             item.isNull("failureCode") ? null : item.getString("failureCode"),
                             item.isNull("balanceAfterMinor") ? null : item.getLong("balanceAfterMinor"),
-                            item.optString("destinationBankCode", "")));
+                            item.optString("destinationBankCode", ""), item.optString("counterpartyName", ""),
+                            item.optString("paymentMethod", ""), item.optString("sourceAccountId", "")));
                 }
                 nextCursor = page.isNull("nextCursor") ? null : page.getString("nextCursor");
                 rows = loaded;
@@ -293,6 +294,9 @@ public final class TransactionHistoryFragment extends Fragment {
                                 java.text.DateFormat.SHORT, java.util.Locale.forLanguageTag("vi-VN"))
                                 .format(tx.createdAt.toDate()));
                 args.putString("account", "Tài khoản ngân hàng");
+                if (!tx.paymentMethod.isEmpty()) args.putString("paymentMethod", "NIMBUS_ACCOUNT".equals(tx.paymentMethod)
+                        ? "Tài khoản Nimbus" : "Thẻ Stripe");
+                if (!tx.sourceAccountId.isEmpty()) args.putString("sourceAccount", tx.sourceAccountId);
                 args.putString("bank", "DEMO_EXTERNAL_TRANSFER".equals(tx.type)
                         ? com.example.final_term.data.ExternalBankCatalog.nameForCode(tx.destinationBankCode) : "");
                 args.putString("balance", tx.balanceAfterMinor == null ? "" :

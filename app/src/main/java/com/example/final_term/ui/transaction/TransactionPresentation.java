@@ -146,6 +146,12 @@ public final class TransactionPresentation {
 
     @NonNull
     public static ConfirmationModel buildConfirmation(@NonNull TransactionFlowRequest req, long feeMinor) {
+        return buildConfirmation(req, feeMinor, null, null);
+    }
+
+    public static ConfirmationModel buildConfirmation(@NonNull TransactionFlowRequest req, long feeMinor,
+                                                       @Nullable String paymentMethod,
+                                                       @Nullable String paymentAccountId) {
         String amountFormatted = ReadSummaryFormatter.formatCurrency(req.amountMinor, req.currency);
         boolean feeFree = feeMinor <= 0;
         String feeText = feeFree
@@ -191,8 +197,11 @@ public final class TransactionPresentation {
                 headerTitle = "Xác nhận thanh toán";
                 heroLabel = "Tổng tiền thanh toán";
                 addEntityRows(rows, req);
-                String defaultMethod = !isBlank(req.sourceAccountId) ? "Tài khoản thanh toán" : "Thanh toán qua Stripe";
-                rows.add(DetailRow.method("Phương thức", defaultIfBlank(req.methodLabel, defaultMethod)));
+                if (!rows.isEmpty() && "Nguồn thanh toán".equals(rows.get(0).label)) rows.remove(0);
+                boolean nimbus = "NIMBUS_ACCOUNT".equals(paymentMethod);
+                rows.add(0, DetailRow.wallet("Nguồn thanh toán", nimbus
+                        ? maskAccountLabel(paymentAccountId, "Tài khoản Nimbus") : "Thẻ (Stripe)"));
+                rows.add(DetailRow.method("Phương thức", nimbus ? "Tài khoản Nimbus" : "Thẻ Stripe"));
                 break;
         }
         if (!isBlank(req.note)) {
@@ -209,6 +218,17 @@ public final class TransactionPresentation {
             @Nullable String providerReference,
             long feeMinor,
             long completedAtMillis) {
+        return buildReceipt(req, fullTxId, providerReference, feeMinor, completedAtMillis, null, null);
+    }
+
+    public static ReceiptModel buildReceipt(
+            @NonNull TransactionFlowRequest req,
+            @Nullable String fullTxId,
+            @Nullable String providerReference,
+            long feeMinor,
+            long completedAtMillis,
+            @Nullable String paymentMethod,
+            @Nullable String paymentAccountId) {
         String amountFormatted = ReadSummaryFormatter.formatCurrency(req.amountMinor, req.currency);
         String timestampText = formatTimestamp(completedAtMillis);
         String shortId = shortTransactionId(providerReference, fullTxId);
@@ -243,6 +263,14 @@ public final class TransactionPresentation {
         List<DetailRow> rows = new ArrayList<>();
         rows.add(DetailRow.copyable("Mã giao dịch", shortId, copyId));
         addEntityRows(rows, req);
+        if ((req.kind == TransactionFlowRequest.Kind.BILL_PAYMENT || req.kind == TransactionFlowRequest.Kind.ORDER_PAYMENT)
+                && paymentMethod != null) {
+            if (rows.size() > 1 && "Nguồn thanh toán".equals(rows.get(1).label)) rows.remove(1);
+            boolean nimbus = "NIMBUS_ACCOUNT".equals(paymentMethod);
+            rows.add(1, DetailRow.wallet("Nguồn thanh toán", nimbus
+                    ? maskAccountLabel(paymentAccountId, "Tài khoản Nimbus") : "Thẻ (Stripe)"));
+            rows.add(DetailRow.method("Phương thức", nimbus ? "Tài khoản Nimbus" : "Thẻ Stripe"));
+        }
 
         String feeDisplay = feeMinor <= 0
                 ? ReadSummaryFormatter.formatCurrency(0L, req.currency) + " (Miễn phí)"

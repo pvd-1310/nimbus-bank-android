@@ -251,7 +251,9 @@ export function normalizeDocument(path: string, input: Doc): Doc {
       break;
     case "payments":
       assign("billOrOrderRef", out.billId);
-      assign("gateway", out.demo === true && out.gateway === "SIMULATOR" ? "SIMULATOR" : "STRIPE");
+      assign("gateway", out.gateway === "NIMBUS"
+        ? "NIMBUS"
+        : out.demo === true && out.gateway === "SIMULATOR" ? "SIMULATOR" : "STRIPE");
       assign("merchantRef", id);
       assign("providerTxnRef", out.providerId);
       if (out.providerTxnRef === undefined) out.providerTxnRef = null;

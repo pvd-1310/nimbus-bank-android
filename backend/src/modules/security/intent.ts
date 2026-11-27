@@ -25,6 +25,7 @@ export function intentDigest(i: Doc) {
     i.amountMinor,
     i.feeMinor,
     i.currency,
+    ...(i.paymentMethod ? [i.paymentMethod] : []),
     i.policyDigest ?? null,
     i.faceRequired,
   ]);
@@ -244,6 +245,7 @@ export class IntentSecurity {
         ...(i.failureCode && { failureCode: i.failureCode }),
         id,
         intentId: id,
+        requestId: i.requestId,
         kind: i.kind ?? "TRANSFER",
         ...(i.provider && { provider: i.provider }),
         ...(i.sourceId === "SIMULATOR" && { demo: true }),
@@ -254,6 +256,8 @@ export class IntentSecurity {
         status,
         expiresAt: i.expiresAt,
         sourceId: i.sourceId ?? i.sourceAccountId,
+        ...(i.paymentMethod ? { paymentMethod: i.paymentMethod } : {}),
+        ...(i.sourceAccountId ? { sourceAccountId: i.sourceAccountId } : {}),
         target:
           i.target ??
           (i.billId

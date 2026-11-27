@@ -15,6 +15,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.app.AlertDialog;
 import android.widget.Toast;
 
 import androidx.activity.OnBackPressedCallback;
@@ -41,6 +42,7 @@ import com.stripe.android.paymentsheet.PaymentSheet;
 import com.stripe.android.paymentsheet.PaymentSheetResult;
 
 import org.json.JSONException;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.text.NumberFormat;
@@ -92,6 +94,12 @@ public final class TransactionExecutionFragment extends Fragment {
     private long authoritativeFee;
     private String providerReference;
     private long completedAtMillis;
+    private String selectedPaymentMethod = "STRIPE_CARD";
+    private String selectedPaymentAccountId;
+    private String selectedPaymentAccountName;
+    private long selectedPaymentAvailableMinor;
+    private boolean accountsLoading;
+    private final java.util.ArrayList<JSONObject> eligiblePaymentAccounts = new java.util.ArrayList<>();
 
     private String customerUid;
     private boolean storedPendingCommit;
@@ -119,6 +127,10 @@ public final class TransactionExecutionFragment extends Fragment {
             authoritativeFee = savedInstanceState.getLong(STATE_AUTHORITATIVE_FEE);
             providerReference = savedInstanceState.getString(STATE_PROVIDER_REFERENCE);
             completedAtMillis = savedInstanceState.getLong(STATE_COMPLETED_AT_MILLIS);
+            selectedPaymentMethod = savedInstanceState.getString("payment_method", "STRIPE_CARD");
+            selectedPaymentAccountId = savedInstanceState.getString("payment_account_id");
+            selectedPaymentAccountName = savedInstanceState.getString("payment_account_name");
+            selectedPaymentAvailableMinor = savedInstanceState.getLong("payment_account_available");
         }
         if (request == null) {
             request = TransactionFlowRequest.fromBundle(getArguments());
@@ -147,6 +159,10 @@ public final class TransactionExecutionFragment extends Fragment {
         outState.putLong(STATE_AUTHORITATIVE_FEE, authoritativeFee);
         outState.putString(STATE_PROVIDER_REFERENCE, providerReference);
         outState.putLong(STATE_COMPLETED_AT_MILLIS, completedAtMillis);
+        outState.putString("payment_method", selectedPaymentMethod);
+        outState.putString("payment_account_id", selectedPaymentAccountId);
+        outState.putString("payment_account_name", selectedPaymentAccountName);
+        outState.putLong("payment_account_available", selectedPaymentAvailableMinor);
     }
 
     @Nullable
@@ -185,6 +201,13 @@ public final class TransactionExecutionFragment extends Fragment {
 
         binding.securityButton.setOnClickListener(v -> showSecurityInfoDialog());
         binding.btnConfirmSubmit.setOnClickListener(v -> onConfirmSubmitClicked());
+        binding.cardPayStripe.setOnClickListener(v -> selectPaymentMethod("STRIPE_CARD"));
+        binding.cardPayNimbus.setOnClickListener(v -> selectPaymentMethod("NIMBUS_ACCOUNT"));
+        binding.btnChangeNimbusAccount.setOnClickListener(v -> {
+            if (!commitPending && !completed && eligiblePaymentAccounts.size() > 1) {
+                showPaymentAccountPicker();
+            }
+        });
         binding.btnFaceStepUp.setOnClickListener(v -> {
             if (busy) return;
             setBusy(true);
@@ -204,6 +227,7 @@ public final class TransactionExecutionFragment extends Fragment {
             renderSuccessStep();
         } else {
             renderConfirmationStep();
+            if (isBillOrOrderPayment()) loadPaymentAccounts();
             if (commitPending && intentId != null) {
                 showPendingCard("Giao dịch đang chờ hoàn tất thanh toán hoặc đối soát.");
                 inspectIntent(false);
@@ -216,8 +240,22 @@ public final class TransactionExecutionFragment extends Fragment {
         binding.stepConfirmContainer.setVisibility(View.VISIBLE);
         binding.stepSuccessContainer.setVisibility(View.GONE);
 
+        refreshConfirmationDetails();
+
+        boolean billPayment = isBillOrOrderPayment();
+        binding.paymentMethodSection.setVisibility(billPayment ? View.VISIBLE : View.GONE);
+        if (billPayment) renderPaymentMethodChoice();
+
+        boolean showFace = faceRequired && !faceVerified && !commitPending && !completed;
+        binding.faceStepUpCard.setVisibility(showFace ? View.VISIBLE : View.GONE);
+        binding.pendingStatusCard.setVisibility(commitPending && !completed ? View.VISIBLE : View.GONE);
+        updateConfirmButtonState();
+    }
+
+    private void refreshConfirmationDetails() {
+        if (binding == null || request == null) return;
         TransactionPresentation.ConfirmationModel model =
-                TransactionPresentation.buildConfirmation(request, authoritativeFee);
+                TransactionPresentation.buildConfirmation(request, authoritativeFee, selectedPaymentMethod, selectedPaymentAccountId);
 
         binding.confirmHeaderTitle.setText(model.headerTitle);
         binding.confirmHeroLabel.setText(model.heroLabel);
@@ -234,11 +272,150 @@ public final class TransactionExecutionFragment extends Fragment {
         }
 
         populateDetailRows(binding.confirmDetailsCard, model.rows, false);
+    }
 
-        boolean showFace = faceRequired && !faceVerified && !commitPending && !completed;
-        binding.faceStepUpCard.setVisibility(showFace ? View.VISIBLE : View.GONE);
-        binding.pendingStatusCard.setVisibility(commitPending && !completed ? View.VISIBLE : View.GONE);
+    private boolean isBillOrOrderPayment() {
+        return request != null && (request.kind == TransactionFlowRequest.Kind.BILL_PAYMENT
+                || request.kind == TransactionFlowRequest.Kind.ORDER_PAYMENT);
+    }
+
+    private void loadPaymentAccounts() {
+        if (accountsLoading || !isBillOrOrderPayment() || api == null) return;
+        accountsLoading = true;
+        renderPaymentMethodChoice();
+        api.get("/accounts?limit=100").addOnCompleteListener(task -> {
+            accountsLoading = false;
+            if (binding == null || !isAdded() || !task.isSuccessful() || task.getResult() == null || !ok(task.getResult())) {
+                renderPaymentMethodChoice();
+                return;
+            }
+            try {
+                JSONObject response = new JSONObject(task.getResult().body);
+                JSONArray items = response.optJSONArray("items");
+                eligiblePaymentAccounts.clear();
+                if (items != null) for (int i = 0; i < items.length(); i++) {
+                    JSONObject account = items.optJSONObject(i);
+                    if (account != null && "CHECKING".equalsIgnoreCase(account.optString("type"))
+                            && "ACTIVE".equalsIgnoreCase(account.optString("status"))
+                            && "VND".equalsIgnoreCase(account.optString("currency"))) eligiblePaymentAccounts.add(account);
+                }
+                String preferredId = selectedPaymentAccountId != null ? selectedPaymentAccountId
+                        : (request != null ? request.sourceAccountId : null);
+                if (preferredId != null) {
+                    for (JSONObject account : eligiblePaymentAccounts) {
+                        if (preferredId.equals(account.optString("id"))) {
+                            rememberPaymentAccount(account);
+                            break;
+                        }
+                    }
+                }
+                if (eligiblePaymentAccounts.size() == 1 && selectedPaymentAccountId == null) {
+                    rememberPaymentAccount(eligiblePaymentAccounts.get(0));
+                }
+                renderPaymentMethodChoice();
+                refreshConfirmationDetails();
+                updateConfirmButtonState();
+            } catch (JSONException ignored) {
+                renderPaymentMethodChoice();
+            }
+        });
+    }
+
+    private void showPaymentAccountPicker() {
+        String[] labels = new String[eligiblePaymentAccounts.size()];
+        for (int i = 0; i < eligiblePaymentAccounts.size(); i++) {
+            JSONObject account = eligiblePaymentAccounts.get(i);
+            long available = account.optLong("availableMinor", account.optLong("balanceMinor"));
+            labels[i] = account.optString("name", "Tài khoản") + " · " + account.optString("id")
+                    + " · khả dụng " + ReadSummaryFormatter.formatCurrency(available, "VND");
+        }
+        new AlertDialog.Builder(requireContext()).setTitle("Chọn tài khoản Nimbus")
+                .setItems(labels, (dialog, which) -> setPaymentAccount(eligiblePaymentAccounts.get(which))).show();
+    }
+
+    private void setPaymentAccount(JSONObject account) {
+        String previous = selectedPaymentAccountId;
+        rememberPaymentAccount(account);
+        if (previous != null && !previous.equals(selectedPaymentAccountId)) invalidatePaymentIntent();
+        selectPaymentMethod("NIMBUS_ACCOUNT");
+    }
+
+    private void rememberPaymentAccount(JSONObject account) {
+        selectedPaymentAccountId = account.optString("id", null);
+        selectedPaymentAccountName = account.optString("name", "Tài khoản Nimbus");
+        selectedPaymentAvailableMinor = account.optLong("availableMinor", account.optLong("balanceMinor"));
+    }
+
+    private void invalidatePaymentIntent() {
+        if (intentId != null && api != null) api.post("/intents/" + intentId + "/cancel", "{}");
+        intentId = null;
+        requestId = null;
+        challengeId = null;
+        faceVerified = false;
+        faceRequired = false;
+        dismissOtpDialog();
+    }
+
+    private void selectPaymentMethod(String method) {
+        if (commitPending || completed) return;
+        if ("NIMBUS_ACCOUNT".equals(method) && selectedPaymentAccountId == null) {
+            if (eligiblePaymentAccounts.size() > 1) showPaymentAccountPicker();
+            else if (eligiblePaymentAccounts.size() == 1) setPaymentAccount(eligiblePaymentAccounts.get(0));
+            else loadPaymentAccounts();
+            return;
+        }
+        if (!method.equals(selectedPaymentMethod) && intentId != null) invalidatePaymentIntent();
+        selectedPaymentMethod = method;
+        renderPaymentMethodChoice();
+        refreshConfirmationDetails();
         updateConfirmButtonState();
+    }
+
+    private void renderPaymentMethodChoice() {
+        if (binding == null || !isBillOrOrderPayment()) return;
+        boolean nimbusSelected = "NIMBUS_ACCOUNT".equals(selectedPaymentMethod);
+        boolean stripeSelected = "STRIPE_CARD".equals(selectedPaymentMethod);
+
+        binding.cardPayNimbus.setBackgroundResource(
+                nimbusSelected ? R.drawable.bg_payment_option_selected : R.drawable.bg_payment_option_normal);
+        binding.cardPayStripe.setBackgroundResource(
+                stripeSelected ? R.drawable.bg_payment_option_selected : R.drawable.bg_payment_option_normal);
+
+        binding.radioPayNimbus.setBackgroundResource(
+                nimbusSelected ? R.drawable.bg_payment_radio_selected : R.drawable.bg_payment_radio_unselected);
+        binding.checkPayNimbus.setVisibility(nimbusSelected ? View.VISIBLE : View.GONE);
+
+        binding.radioPayStripe.setBackgroundResource(
+                stripeSelected ? R.drawable.bg_payment_radio_selected : R.drawable.bg_payment_radio_unselected);
+        binding.checkPayStripe.setVisibility(stripeSelected ? View.VISIBLE : View.GONE);
+
+        if (selectedPaymentAccountId == null) {
+            if (accountsLoading) {
+                binding.txtPayNimbusSubtitle.setText("Đang tải tài khoản khả dụng...");
+            } else if (eligiblePaymentAccounts.isEmpty()) {
+                binding.txtPayNimbusSubtitle.setText("Chạm để tải hoặc chọn tài khoản");
+            } else {
+                binding.txtPayNimbusSubtitle.setText("Chạm để chọn tài khoản thanh toán");
+            }
+            binding.paymentAccountBalance.setVisibility(View.GONE);
+        } else {
+            String accountName = (selectedPaymentAccountName == null || selectedPaymentAccountName.trim().isEmpty())
+                    ? "Tài khoản thanh toán" : selectedPaymentAccountName.trim();
+            binding.txtPayNimbusSubtitle.setText(
+                    accountName + " · " + TransactionPresentation.maskAccountLabel(selectedPaymentAccountId, "TK"));
+            binding.paymentAccountBalance.setVisibility(View.VISIBLE);
+            long remaining = selectedPaymentAvailableMinor - request.amountMinor;
+            binding.paymentAccountBalance.setText("Số dư khả dụng: "
+                    + ReadSummaryFormatter.formatCurrency(selectedPaymentAvailableMinor, "VND")
+                    + (remaining < 0 ? " · Không đủ số dư" : ""));
+            int balanceColor = remaining < 0
+                    ? R.color.danger
+                    : (nimbusSelected ? R.color.navy : R.color.ink_muted);
+            binding.paymentAccountBalance.setTextColor(ContextCompat.getColor(requireContext(), balanceColor));
+        }
+
+        boolean canChangeAccount = eligiblePaymentAccounts.size() > 1 && !commitPending && !completed;
+        binding.btnChangeNimbusAccount.setVisibility(canChangeAccount ? View.VISIBLE : View.GONE);
     }
 
     private void renderSuccessStep() {
@@ -251,7 +428,8 @@ public final class TransactionExecutionFragment extends Fragment {
             completedAtMillis = System.currentTimeMillis();
         }
         TransactionPresentation.ReceiptModel receipt = TransactionPresentation.buildReceipt(
-                request, intentId, providerReference, authoritativeFee, completedAtMillis);
+                request, intentId, providerReference, authoritativeFee, completedAtMillis,
+                isBillOrOrderPayment() ? selectedPaymentMethod : null, selectedPaymentAccountId);
 
         binding.successMiniTitle.setText(receipt.miniHeaderTitle);
         binding.successHeadline.setText(receipt.headline);
@@ -556,9 +734,9 @@ public final class TransactionExecutionFragment extends Fragment {
             case ORDER_PAYMENT:
             default:
                 body.put("billId", resolvedBillId);
-                if (req.sourceAccountId != null) {
-                    body.put("sourceAccountId", req.sourceAccountId);
-                }
+                body.put("paymentMethod", selectedPaymentMethod);
+                if ("NIMBUS_ACCOUNT".equals(selectedPaymentMethod) && selectedPaymentAccountId != null)
+                    body.put("sourceAccountId", selectedPaymentAccountId);
                 break;
         }
         return body;
@@ -576,6 +754,16 @@ public final class TransactionExecutionFragment extends Fragment {
             }
             try {
                 JSONObject result = new JSONObject(task.getResult().body);
+                if (isBillOrOrderPayment()) {
+                    String recoveredRequestId = result.optString("requestId", "");
+                    if (!recoveredRequestId.isEmpty()) requestId = recoveredRequestId;
+                    String recoveredMethod = result.optString("paymentMethod", "");
+                    if (!recoveredMethod.isEmpty()) selectedPaymentMethod = recoveredMethod;
+                    if ("NIMBUS_ACCOUNT".equals(selectedPaymentMethod)) {
+                        String recoveredAccountId = result.optString("sourceAccountId", result.optString("sourceId", ""));
+                        if (!recoveredAccountId.isEmpty()) selectedPaymentAccountId = recoveredAccountId;
+                    }
+                }
                 authoritativeFee = result.optLong("feeMinor", authoritativeFee);
                 providerReference = result.optString("providerReference", providerReference);
                 faceRequired = result.optBoolean("faceRequired", faceRequired);
@@ -975,10 +1163,12 @@ public final class TransactionExecutionFragment extends Fragment {
             return;
         }
         try {
-            String body = new JSONObject()
+            JSONObject paymentBody = new JSONObject()
                     .put("billId", resolvedBillId)
                     .put("requestId", requestId)
-                    .toString();
+                    .put("paymentMethod", selectedPaymentMethod);
+            if ("NIMBUS_ACCOUNT".equals(selectedPaymentMethod)) paymentBody.put("sourceAccountId", selectedPaymentAccountId);
+            String body = paymentBody.toString();
             api.post("/payments", body).continueWithTask(task -> {
                 BackendApiClient.Response response = task.isSuccessful() ? task.getResult() : null;
                 if (response != null && (response.statusCode < 500 || "SETUP_REQUIRED".equals(errorCode(response)))) {
@@ -1277,6 +1467,8 @@ public final class TransactionExecutionFragment extends Fragment {
     private void updateConfirmButtonState() {
         if (binding == null) return;
         boolean enabled = !busy && !completed;
+        if (isBillOrOrderPayment() && "NIMBUS_ACCOUNT".equals(selectedPaymentMethod))
+            enabled = enabled && selectedPaymentAccountId != null && selectedPaymentAvailableMinor >= request.amountMinor;
         binding.btnConfirmSubmit.setEnabled(enabled);
         binding.btnFaceStepUp.setEnabled(enabled);
         binding.btnPendingAction.setEnabled(enabled);

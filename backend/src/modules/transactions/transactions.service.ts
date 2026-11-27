@@ -28,6 +28,8 @@ export class TransactionService {
           _cursor: x._cursor,
           requestId: x.requestId,
           accountId: x.sourceAccountId,
+          sourceAccountId: x.sourceAccountId,
+          paymentMethod: x.paymentMethod,
           type: x.type,
           amountMinor: x.amountMinor,
           currency: x.currency,

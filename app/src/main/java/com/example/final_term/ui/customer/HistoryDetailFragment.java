@@ -60,6 +60,8 @@ public final class HistoryDetailFragment extends Fragment {
             addDetailRow("Loại giao dịch", a.getString("type", "Giao dịch"));
             addDetailRow("Ngày giờ", a.getString("time", "Chưa có thông tin"));
             addDetailRow("Tài khoản thực hiện", a.getString("account", "Tài khoản ngân hàng"));
+            addDetailRow("Phương thức thanh toán", a.getString("paymentMethod", ""));
+            addDetailRow("Tài khoản nguồn", a.getString("sourceAccount", ""));
             addDetailRow("Ngân hàng nhận", a.getString("bank", ""));
             addDetailRow("Số dư sau giao dịch", a.getString("balance", ""));
             addDetailRow("Thông tin", a.getString("note", ""));
