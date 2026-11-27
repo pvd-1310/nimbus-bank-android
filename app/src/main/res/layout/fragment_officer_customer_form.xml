@@ -497,6 +497,7 @@
 
                 <!-- Card 3: Preferences -->
                 <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/preferences_card"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"

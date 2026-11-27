@@ -61,7 +61,7 @@ export async function provisionCustomer(
   });
   if (completedStatus) {
     await auth.ensureClaims(uid);
-    return { uid, accountId, status: completedStatus };
+    return { uid, accountId, accountNumber: generateAccountNumber(accountId), customerNo: input.customerNo ?? null, status: completedStatus };
   }
   if (!(await auth.exists(uid))) {
     try {
@@ -132,14 +132,15 @@ export async function provisionCustomer(
       status: "ONBOARDING",
       createdBy: a.uid,
     });
+    const accountNumber = generateAccountNumber(accountId);
     t.set("accounts/" + accountId, {
       accountId,
-      accountNumber: generateAccountNumber(accountId),
+      accountNumber,
       ownerUid: uid,
       type: "CHECKING",
       ownerNameSearch: normalizeSearchText(String(input.fullName)),
       currency: "VND",
-      status: "ACTIVE",
+      status: "INACTIVE",
       availableMinor: 0,
       bookedMinor: 0,
       balanceMinor: 0,
@@ -151,5 +152,5 @@ export async function provisionCustomer(
     t.set(path, { ...old, status: "COMPLETE", completedAt: bank.now() });
     bank.audit(t, a, "CUSTOMER_PROVISION", uid, input.requestId);
   });
-  return { uid, accountId, status: "ONBOARDING" };
+  return { uid, accountId, accountNumber: generateAccountNumber(accountId), customerNo: input.customerNo ?? null, status: "ONBOARDING" };
 }

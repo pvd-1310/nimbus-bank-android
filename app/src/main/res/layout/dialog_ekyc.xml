@@ -571,7 +571,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="52dp"
                         android:layout_marginTop="20dp"
-                        android:text="Nộp và kiểm tra ảnh (3/3)"
+                        android:text="Xem lại ảnh (3/3)"
                         android:textColor="@color/white"
                         android:textSize="15sp"
                         android:textStyle="bold"

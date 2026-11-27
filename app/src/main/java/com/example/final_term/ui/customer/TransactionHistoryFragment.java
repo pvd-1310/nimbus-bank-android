@@ -359,6 +359,10 @@ public final class TransactionHistoryFragment extends Fragment {
             case "UTILITY_ORDER": return "Thanh toán dịch vụ";
             case "CREDIT": return "Tiền vào";
             case "DEBIT": return "Tiền ra";
+            case "LOAN_DISBURSEMENT": return "Giải ngân khoản vay";
+            case "LOAN_REPAYMENT": return "Trả góp khoản vay";
+            case "SAVINGS_OPEN": return "Mở sổ tiết kiệm";
+            case "SAVINGS_CLOSE": return "Tất toán tiết kiệm";
             default: return "Giao dịch ngân hàng";
         }
     }

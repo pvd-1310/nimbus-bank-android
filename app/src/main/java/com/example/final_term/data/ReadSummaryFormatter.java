@@ -16,6 +16,12 @@ public final class ReadSummaryFormatter {
 
     public static String transactionTitle(ReadModels.TransactionSummary transaction) {
         if (transaction.counterpartyName != null && !transaction.counterpartyName.trim().isEmpty()) {
+            if ("LOAN_DISBURSEMENT".equals(transaction.type)
+                    || "SAVINGS_OPEN".equals(transaction.type)
+                    || "SAVINGS_CLOSE".equals(transaction.type)
+                    || "LOAN_REPAYMENT".equals(transaction.type)) {
+                return transaction.counterpartyName.trim();
+            }
             String prefix = transaction.isIncoming() ? "Nhận từ " : transaction.isBillPayment() ? "" : "Chuyển đến ";
             return prefix + transaction.counterpartyName.trim();
         }

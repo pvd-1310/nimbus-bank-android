@@ -133,20 +133,36 @@ public class AccountDetailFragment extends Fragment {
 
     private void renderAccount(ReadModelResult<List<ReadModels.AccountSummary>> result, String accountId) {
         List<ReadModels.AccountSummary> accounts = result.getData();
+        String activeCheckingId = null;
+        if (accounts != null) {
+            for (ReadModels.AccountSummary acc : accounts) {
+                if ("CHECKING".equalsIgnoreCase(acc.type) && "ACTIVE".equalsIgnoreCase(acc.status)) {
+                    activeCheckingId = acc.id;
+                    break;
+                }
+            }
+        }
+        final String checkingIdForAction = activeCheckingId;
         if (accounts != null) for (ReadModels.AccountSummary account : accounts) {
             if (!accountId.equals(account.id)) continue;
             currentCurrency = account.currency;
             binding.titleText.setText(Phase2Presentation.accountTitle(account.type));
             binding.subtitleText.setText(Phase2Presentation.accountSubtitle(account.type));
-            binding.statusText.setText("ACTIVE".equals(account.status) ? "ĐANG HOẠT ĐỘNG" : "INACTIVE".equals(account.status) ? "TẠM KHÓA" : "ĐANG CẬP NHẬT");
+            binding.statusText.setText("ACTIVE".equals(account.status) ? "ĐANG HOẠT ĐỘNG" : "INACTIVE".equals(account.status) ? "TẠM KHÓA" : "CLOSED".equals(account.status) ? "ĐÃ ĐÓNG" : "ĐANG CẬP NHẬT");
             binding.heroMeta.setVisibility(View.GONE);
 
             if ("MORTGAGE".equals(account.type)) {
                 binding.heroLabel.setText("Dư nợ còn lại");
+                attachProductActionButton(binding.mortgageContent, "mortgage_repay_btn",
+                        "Thanh toán kỳ này", "ACTIVE".equalsIgnoreCase(account.status) && checkingIdForAction != null,
+                        () -> confirmLoanRepay(account.id, checkingIdForAction));
             } else if ("SAVINGS".equals(account.type)) {
                 binding.heroLabel.setText("Tổng tiền gửi tiết kiệm");
                 currentBalance = account.availableMinor != null ? account.availableMinor : account.balanceMinor;
                 binding.balanceText.setText(ReadSummaryFormatter.formatCurrency(currentBalance, currentCurrency));
+                attachProductActionButton(binding.savingsContent, "savings_close_btn",
+                        "Tất toán sổ tiết kiệm", "ACTIVE".equalsIgnoreCase(account.status) && checkingIdForAction != null,
+                        () -> confirmCloseSavings(account.id, checkingIdForAction));
             } else {
                 binding.heroLabel.setText("Số dư khả dụng");
                 currentBalance = account.availableMinor != null ? account.availableMinor : account.balanceMinor;
@@ -214,6 +230,96 @@ public class AccountDetailFragment extends Fragment {
                 Toast.makeText(requireContext(), "Đã sao chép số tài khoản", Toast.LENGTH_SHORT).show();
             }
         });
+    }
+
+    private void attachProductActionButton(android.widget.LinearLayout parent, String tag,
+                                           String label, boolean visible, Runnable onClick) {
+        View existing = parent.findViewWithTag(tag);
+        if (!visible) {
+            if (existing != null) existing.setVisibility(View.GONE);
+            return;
+        }
+        com.google.android.material.button.MaterialButton btn;
+        if (existing instanceof com.google.android.material.button.MaterialButton) {
+            btn = (com.google.android.material.button.MaterialButton) existing;
+            btn.setVisibility(View.VISIBLE);
+        } else {
+            btn = new com.google.android.material.button.MaterialButton(requireContext());
+            btn.setTag(tag);
+            btn.setText(label);
+            btn.setTextColor(androidx.core.content.ContextCompat.getColor(requireContext(), R.color.white));
+            btn.setBackgroundTintList(androidx.core.content.ContextCompat.getColorStateList(requireContext(), R.color.navy));
+            float d = getResources().getDisplayMetrics().density;
+            btn.setCornerRadius((int) (24 * d));
+            android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT, (int) (50 * d));
+            lp.topMargin = (int) (16 * d);
+            parent.addView(btn, lp);
+        }
+        btn.setOnClickListener(v -> onClick.run());
+    }
+
+    private void confirmCloseSavings(String savingsId, String destinationCheckingId) {
+        new com.example.final_term.ui.common.ThemedDialogBuilder(requireContext())
+                .setTitle("Tất toán sổ tiết kiệm")
+                .setMessage("Tiền gốc và lãi phát sinh đến hiện tại sẽ được chuyển về tài khoản thanh toán của bạn.")
+                .setNegativeButton("Hủy", null)
+                .setPositiveButton("Tất toán ngay", (d, w) -> {
+                    try {
+                        JSONObject body = new JSONObject()
+                                .put("destinationAccountId", destinationCheckingId)
+                                .put("requestId", java.util.UUID.randomUUID().toString());
+                        ((FinalTermApplication) requireActivity().getApplication()).getAppContainer()
+                                .getBackendApiClient()
+                                .post("/savings/" + android.net.Uri.encode(savingsId) + "/close", body.toString())
+                                .addOnCompleteListener(task -> {
+                                    if (binding == null) return;
+                                    if (task.isSuccessful() && task.getResult() != null
+                                            && task.getResult().statusCode >= 200 && task.getResult().statusCode < 300) {
+                                        Toast.makeText(requireContext(), "Đã tất toán sổ tiết kiệm.", Toast.LENGTH_SHORT).show();
+                                        Navigation.findNavController(binding.getRoot()).navigateUp();
+                                    } else {
+                                        Toast.makeText(requireContext(), "Không thể tất toán sổ tiết kiệm.", Toast.LENGTH_SHORT).show();
+                                    }
+                                });
+                    } catch (Exception ignored) { }
+                })
+                .show();
+    }
+
+    private void confirmLoanRepay(String mortgageId, String sourceCheckingId) {
+        new com.example.final_term.ui.common.ThemedDialogBuilder(requireContext())
+                .setTitle("Thanh toán kỳ vay")
+                .setMessage("Hệ thống sẽ trích tiền kỳ trả góp tiếp theo từ tài khoản thanh toán của bạn.")
+                .setNegativeButton("Hủy", null)
+                .setPositiveButton("Thanh toán", (d, w) -> {
+                    try {
+                        JSONObject body = new JSONObject()
+                                .put("sourceAccountId", sourceCheckingId)
+                                .put("requestId", java.util.UUID.randomUUID().toString());
+                        ((FinalTermApplication) requireActivity().getApplication()).getAppContainer()
+                                .getBackendApiClient()
+                                .post("/loans/" + android.net.Uri.encode(mortgageId) + "/repay", body.toString())
+                                .addOnCompleteListener(task -> {
+                                    if (binding == null) return;
+                                    if (task.isSuccessful() && task.getResult() != null
+                                            && task.getResult().statusCode >= 200 && task.getResult().statusCode < 300) {
+                                        Toast.makeText(requireContext(), "Thanh toán kỳ vay thành công.", Toast.LENGTH_SHORT).show();
+                                        loadTerms(mortgageId, "MORTGAGE");
+                                    } else {
+                                        String msg = "Không thể thanh toán kỳ vay.";
+                                        try {
+                                            if (task.isSuccessful() && task.getResult() != null
+                                                    && "INSUFFICIENT_FUNDS".equals(new JSONObject(task.getResult().body).optString("error"))) {
+                                                msg = "Số dư tài khoản thanh toán không đủ.";
+                                            }
+                                        } catch (Exception ignored) { }
+                                        Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show();
+                                    }
+                                });
+                    } catch (Exception ignored) { }
+                })
+                .show();
     }
 
     private void loadTerms(String accountId, String type) {
@@ -467,7 +573,10 @@ public class AccountDetailFragment extends Fragment {
             case "INTERNAL_TRANSFER": return "Chuyển khoản";
             case "UTILITY_PAYMENT": return "Thanh toán tiện ích";
             case "SAVINGS_INTEREST": return "Lãi tiết kiệm";
-            case "MORTGAGE_PAYMENT": return "Thanh toán khoản vay";
+            case "MORTGAGE_PAYMENT": case "LOAN_REPAYMENT": return "Thanh toán khoản vay";
+            case "LOAN_DISBURSEMENT": return "Giải ngân khoản vay";
+            case "SAVINGS_OPEN": return "Mở sổ tiết kiệm";
+            case "SAVINGS_CLOSE": return "Tất toán tiết kiệm";
             case "DEMO_DEPOSIT": case "TOP_UP": case "STRIPE_CREDIT": return "Nạp tiền";
             case "DEMO_WITHDRAWAL": case "STRIPE_DEBIT": return "Rút tiền";
             case "TRANSFER_SENT": case "DEMO_EXTERNAL_TRANSFER": return "Chuyển tiền";

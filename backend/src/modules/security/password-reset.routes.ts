@@ -84,7 +84,7 @@ export function registerPasswordResetRoutes(app: Express, d: AppDependencies) {
       const phoneMasked = await d.bank.store.run(async (t) => {
         const user = await t.get("users/" + authUser.uid);
         check(
-          user && (user.status === "ACTIVE" || user.active === true),
+          user && (user.status === "ACTIVE" || user.status === "ONBOARDING" || user.active === true),
           "EMAIL_NOT_FOUND",
           404,
         );

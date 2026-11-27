@@ -63,16 +63,18 @@ public final class OfficerCustomerFormFragment extends Fragment {
 
         binding.backButton.setOnClickListener(v -> Navigation.findNavController(v).navigateUp());
         binding.cancelButton.setOnClickListener(v -> Navigation.findNavController(v).navigateUp());
-        binding.formTitle.setText(editing ? "Điều chỉnh thông tin" : "Cấp mới tài khoản");
+        binding.formTitle.setText(editing ? "Điều chỉnh thông tin" : "Mở hồ sơ khách hàng mới");
         binding.formIntro.setText(editing
                 ? "Thông tin chủ tài khoản thanh toán"
-                : "Nhập đầy đủ thông tin để tạo hồ sơ và tài khoản thanh toán.");
+                : "Nhập thông tin cơ bản để cấp tài khoản mới. Khách hàng sẽ tự xác thực eKYC sau khi đăng nhập.");
 
         binding.genderInput.setSimpleItems(GENDER_OPTIONS);
         binding.languageInput.setSimpleItems(LANGUAGE_OPTIONS);
         binding.languageInput.setText("Tiếng Việt", false);
         if (!editing) {
             binding.nationalityInput.setText("Việt Nam");
+            int randomNum = 100000 + new java.util.Random().nextInt(900000);
+            binding.customerNoInput.setText("KH-" + randomNum);
         }
 
         binding.dobInput.setOnClickListener(v -> openDatePicker("Chọn ngày sinh", binding.dobInput));
@@ -89,6 +91,9 @@ public final class OfficerCustomerFormFragment extends Fragment {
 
         binding.nationalIdLayout.setVisibility(editing ? View.GONE : View.VISIBLE);
         binding.customerNoLayout.setVisibility(editing ? View.GONE : View.VISIBLE);
+        binding.nationalityLayout.setVisibility(editing ? View.VISIBLE : View.GONE);
+        binding.idExpiryLayout.setVisibility(editing ? View.VISIBLE : View.GONE);
+        binding.preferencesCard.setVisibility(editing ? View.VISIBLE : View.GONE);
         binding.reasonCard.setVisibility(editing ? View.VISIBLE : View.GONE);
 
         if (!accountNumber.isEmpty()) {
@@ -378,20 +383,34 @@ public final class OfficerCustomerFormFragment extends Fragment {
     }
 
     private void sendPasswordSetup(String email, String responseBody) {
+        String accountNumber = "";
         String accountId = "";
-        try { accountId = new JSONObject(responseBody).optString("accountId", ""); } catch (Exception ignored) { }
-        String account = accountId;
+        String customerNo = "";
+        try {
+            JSONObject res = new JSONObject(responseBody);
+            accountNumber = res.optString("accountNumber", "");
+            accountId = res.optString("accountId", "");
+            customerNo = res.optString("customerNo", "");
+        } catch (Exception ignored) { }
+        final String displayAccount = (!accountNumber.isEmpty()
+                ? accountNumber.replaceAll("(.{4})(?=.)", "$1 ") : accountId);
+        final String displayCustomerNo = customerNo.isEmpty() ? "—" : customerNo;
         app.getAppContainer().getAuthRepository().sendPasswordResetEmail(email).addOnCompleteListener(reset -> {
             if (binding == null) return;
-            String message = "Đã tạo hồ sơ ONBOARDING và tài khoản thanh toán " + account
-                    + ". Khách hàng cần đặt mật khẩu qua email trước khi đăng nhập.";
+            String message = "Mã khách hàng: " + displayCustomerNo
+                    + "\nSố tài khoản: " + displayAccount
+                    + "\nTrạng thái: Chờ khách hàng eKYC & Officer duyệt"
+                    + "\n\nĐã gửi email thiết lập mật khẩu tới " + email + ".";
             if (!reset.isSuccessful()) {
-                message += "\n\nEmail chưa gửi được; khách hàng có thể dùng mục Đặt/quên mật khẩu ở màn đăng nhập.";
+                message = "Mã khách hàng: " + displayCustomerNo
+                        + "\nSố tài khoản: " + displayAccount
+                        + "\nTrạng thái: Chờ khách hàng eKYC & Officer duyệt"
+                        + "\n\nEmail chưa gửi được; khách hàng có thể dùng mục Đặt/quên mật khẩu ở màn đăng nhập.";
             }
             new ThemedDialogBuilder(requireContext())
-                    .setTitle("Đã tiếp nhận khách hàng")
+                    .setTitle("Phiếu cấp hồ sơ mới")
                     .setMessage(message)
-                    .setPositiveButton("Đóng", (dialog, which) -> Navigation.findNavController(binding.getRoot()).navigateUp())
+                    .setPositiveButton("Hoàn tất", (dialog, which) -> Navigation.findNavController(binding.getRoot()).navigateUp())
                     .show();
         });
     }

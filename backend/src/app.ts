@@ -18,6 +18,7 @@ import { recognizeIdCard } from "./modules/ekyc/id-recognition.js";
 import { check } from "./shared/errors.js";
 import { registerNotificationsRoutes } from "./modules/notifications/notifications.routes.js";
 import { registerOfficerRoutes } from "./modules/officer/officer.routes.js";
+import { registerProductsRoutes } from "./modules/accounts/products.routes.js";
 import { registerOrdersRoutes } from "./modules/orders/orders.routes.js";
 import { registerStripeWebhook } from "./modules/payments/payment.webhook.js";
 import { registerPaymentsRoutes } from "./modules/payments/payments.routes.js";
@@ -64,6 +65,7 @@ export function createApp(d: AppDependencies) {
     registerBranchesRoutes,
     registerRatesRoutes,
     registerOfficerRoutes,
+    registerProductsRoutes,
   ])
     register(route, d);
   app.use(errorHandler);

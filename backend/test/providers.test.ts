@@ -93,11 +93,16 @@ it("updates a customer profile only after successful eKYC processing", async () 
     const ticket = await evidence.ticket(a, draft.id, "image/jpeg", 1000, i);
     await evidence.confirm(a, ticket.id);
   }
-  const identity = { fullName: "New Name", nationalIdNumber: "123456789012", dateOfBirth: "1990-01-01", address: "Example", gender: "" };
   expect((await s.run((t) => t.get("users/alice")))?.fullName).toBe("Old Name");
-  expect((await evidence.submit(a, draft.id, identity)).reviewStatus).toBe("VERIFIED");
-  expect((await s.run((t) => t.get("users/alice")))?.fullName).toBe("New Name");
-  expect(await s.run((t) => t.get("customers/profile"))).toMatchObject({ nationalIdNumber: "123456789012", dateOfBirth: "1990-01-01", address: "Example", gender: "existing", kycStatus: "VERIFIED" });
+  expect((await evidence.submit(a, draft.id)).reviewStatus).toBe("REVIEWING");
+  const officer: Actor = { uid: "officer-1", role: "OFFICER", permissions: ["EKYC_REVIEW"] };
+  await s.run(async (t) => {
+    t.set("users/officer-1", { active: true, role: "OFFICER" });
+    t.set("officers/officer-1", { active: true, permissions: ["EKYC_REVIEW"] });
+  });
+  expect((await evidence.review(officer, draft.id, "VERIFIED")).reviewStatus).toBe("VERIFIED");
+  expect((await s.run((t) => t.get("users/alice")))?.fullName).toBe("Old Name");
+  expect(await s.run((t) => t.get("customers/profile"))).toMatchObject({ gender: "existing", status: "ACTIVE", kycStatus: "VERIFIED" });
 });
 
 it("locks each evidence slot to its current ticket and freezes the submitted versions", async () => {
@@ -123,8 +128,7 @@ it("locks each evidence slot to its current ticket and freezes the submitted ver
   await expect(e.submit(a, draft.id)).rejects.toMatchObject({ code: "EVIDENCE_REQUIRED" });
   const back = await e.ticket(a, draft.id, "image/jpeg", 1000);
   await e.confirm(a, back.id);
-  await expect(e.submit(a, draft.id)).rejects.toMatchObject({ code: "IDENTITY_CONFIRMATION_REQUIRED" });
-  await expect(e.submit(a, draft.id, { fullName: "Test User", nationalIdNumber: "123456789012", dateOfBirth: "1990-01-01", address: "Test" })).rejects.toMatchObject({ code: "FACE_SETUP_REQUIRED" });
+  await expect(e.submit(a, draft.id)).rejects.toMatchObject({ code: "FACE_SETUP_REQUIRED" });
   expect((await s.run((t) => t.get("customers/profile")))?.kycStatus).toBe("REVIEWING");
   await expect(e.ticket(a, draft.id, "image/jpeg", 1000, 0)).rejects.toMatchObject({ code: "INVALID_EKYC_STATE" });
   await expect(e.evidence(a, draft.id, 0)).rejects.toMatchObject({ code: "FORBIDDEN" });

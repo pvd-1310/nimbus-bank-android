@@ -88,6 +88,8 @@ public final class OfficerFeatureFragment extends Fragment {
 
         if (title.contains("eKYC")) {
             renderEkycQueue(api);
+        } else if (title.contains("Hồ sơ vay")) {
+            renderLoanApplications(api);
         } else if (title.contains("Lịch sử giao dịch")) {
             renderSystemTransactions();
         } else if (title.contains("Kiểm tra") || title.contains("audit") || title.contains("Audit")) {
@@ -97,6 +99,134 @@ public final class OfficerFeatureFragment extends Fragment {
         } else {
             renderGenericFeature();
         }
+    }
+
+    private void renderLoanApplications(BackendApiClient api) {
+        binding.actionButton.setVisibility(View.GONE);
+        binding.filterScroll.setVisibility(View.GONE);
+        binding.statusText.setVisibility(View.VISIBLE);
+        binding.statusText.setText("Đang tải hồ sơ vay…");
+        api.get("/officer/loans").addOnCompleteListener(task -> {
+            if (!isAdded() || binding == null) return;
+            requireActivity().runOnUiThread(() -> {
+                binding.itemsContainer.removeAllViews();
+                if (!task.isSuccessful() || task.getResult() == null || task.getResult().statusCode != 200) {
+                    binding.statusText.setText("Không tải được danh sách hồ sơ vay.");
+                    return;
+                }
+                try {
+                    JSONArray items = new JSONObject(task.getResult().body).optJSONArray("items");
+                    if (items == null || items.length() == 0) {
+                        binding.statusText.setText("Chưa có hồ sơ vay nào.");
+                        return;
+                    }
+                    binding.statusText.setVisibility(View.GONE);
+                    for (int i = 0; i < items.length(); i++) {
+                        JSONObject item = items.getJSONObject(i);
+                        String id = item.optString("id", "");
+                        String name = item.optString("customerName", "Khách hàng");
+                        long amount = item.optLong("amountMinor", 0L);
+                        int months = item.optInt("termMonths", 12);
+                        String status = item.optString("status", "PENDING");
+                        String purpose = item.optString("purpose", "");
+
+                        View row = LayoutInflater.from(requireContext())
+                                .inflate(R.layout.item_transaction_row, binding.itemsContainer, false);
+                        TextView titleTv = row.findViewById(R.id.title_text);
+                        TextView subTv = row.findViewById(R.id.subtitle_text);
+                        TextView amtTv = row.findViewById(R.id.amount_text);
+                        ImageView icon = row.findViewById(R.id.transaction_icon);
+                        icon.setImageResource(R.drawable.ic_receipt);
+
+                        titleTv.setText(name + " · " + months + " tháng");
+                        subTv.setText((purpose.isEmpty() ? "Khoản vay" : purpose)
+                                + " · " + ("PENDING".equals(status) ? "Chờ duyệt" : "APPROVED".equals(status) ? "Đã giải ngân" : "Từ chối"));
+                        amtTv.setText(com.example.final_term.data.ReadSummaryFormatter.formatCurrency(amount, "VND"));
+                        int statusColor = "APPROVED".equals(status) ? R.color.success
+                                : ("REJECTED".equals(status) ? R.color.danger : R.color.warning);
+                        amtTv.setTextColor(ContextCompat.getColor(requireContext(), statusColor));
+
+                        row.setOnClickListener(v -> {
+                            if (!"PENDING".equals(status)) {
+                                android.widget.Toast.makeText(requireContext(),
+                                        "APPROVED".equals(status) ? "Hồ sơ đã được giải ngân." : "Hồ sơ đã bị từ chối.",
+                                        android.widget.Toast.LENGTH_SHORT).show();
+                                return;
+                            }
+                            LinearLayout card = new LinearLayout(requireContext());
+                            card.setOrientation(LinearLayout.VERTICAL);
+                            card.setBackgroundResource(R.drawable.glass_panel_soft);
+                            card.setPadding(dp(14), dp(12), dp(14), dp(12));
+                            String[][] rows = {
+                                    {"Khách hàng", name},
+                                    {"Số tiền vay", com.example.final_term.data.ReadSummaryFormatter.formatCurrency(amount, "VND")},
+                                    {"Kỳ hạn", months + " tháng"},
+                                    {"Lãi suất", String.format(java.util.Locale.US, "%.2f%%/năm", item.optInt("annualRateBasisPoints", 850) / 100.0)},
+                                    {"Mục đích", purpose.isEmpty() ? "Vay tiêu dùng" : purpose},
+                            };
+                            for (String[] pair : rows) {
+                                LinearLayout r = new LinearLayout(requireContext());
+                                r.setOrientation(LinearLayout.HORIZONTAL);
+                                r.setPadding(0, dp(4), 0, dp(4));
+                                TextView k = new TextView(requireContext());
+                                k.setText(pair[0]);
+                                k.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
+                                k.setTextSize(12.5f);
+                                r.addView(k, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+                                TextView val = new TextView(requireContext());
+                                val.setText(pair[1]);
+                                val.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
+                                val.setTextSize(13f);
+                                val.setTypeface(null, android.graphics.Typeface.BOLD);
+                                r.addView(val);
+                                card.addView(r);
+                            }
+                            LinearLayout wrapper = new LinearLayout(requireContext());
+                            wrapper.setOrientation(LinearLayout.VERTICAL);
+                            wrapper.setPadding(dp(16), dp(6), dp(16), 0);
+                            wrapper.addView(card);
+                            TextView note = new TextView(requireContext());
+                            note.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
+                            note.setTextSize(12f);
+                            note.setPadding(0, dp(10), 0, 0);
+                            wrapper.addView(note);
+
+                            new com.example.final_term.ui.common.ThemedDialogBuilder(requireContext())
+                                    .setTitle("Thẩm định hồ sơ vay")
+                                    .setView(wrapper)
+                                    .setNegativeButton("Từ chối", (d, w) -> reviewLoanApplication(api, id, "REJECTED"))
+                                    .setPositiveButton("Duyệt", (d, w) -> reviewLoanApplication(api, id, "APPROVED"))
+                                    .show();
+                        });
+                        binding.itemsContainer.addView(row);
+                    }
+                } catch (Exception e) {
+                    binding.statusText.setText("Dữ liệu hồ sơ vay không hợp lệ.");
+                }
+            });
+        });
+    }
+
+    private void reviewLoanApplication(BackendApiClient api, String id, String decision) {
+        try {
+            JSONObject body = new JSONObject().put("decision", decision);
+            api.post("/officer/loans/" + android.net.Uri.encode(id) + "/review", body.toString())
+                    .addOnCompleteListener(task -> {
+                        if (!isAdded() || binding == null) return;
+                        requireActivity().runOnUiThread(() -> {
+                            if (task.isSuccessful() && task.getResult() != null
+                                    && task.getResult().statusCode >= 200 && task.getResult().statusCode < 300) {
+                                android.widget.Toast.makeText(requireContext(),
+                                        "APPROVED".equals(decision) ? "Đã duyệt & giải ngân khoản vay." : "Đã từ chối hồ sơ vay.",
+                                        android.widget.Toast.LENGTH_SHORT).show();
+                                renderLoanApplications(api);
+                            } else {
+                                android.widget.Toast.makeText(requireContext(),
+                                        "Không thể xử lý hồ sơ vay.", android.widget.Toast.LENGTH_SHORT).show();
+                            }
+                        });
+                    });
+        } catch (Exception ignored) { }
     }
 
     private void renderSystemTransactions() {
@@ -537,11 +667,30 @@ public final class OfficerFeatureFragment extends Fragment {
             }
         }
 
-        androidx.appcompat.app.AlertDialog detailDialog = new com.example.final_term.ui.common.ThemedDialogBuilder(requireContext())
-                .setTitle("Chi tiết hồ sơ eKYC")
-                .setView(dialogView)
-                .setPositiveButton("Đóng", null)
-                .create();
+        com.example.final_term.ui.common.ThemedDialogBuilder builder =
+                new com.example.final_term.ui.common.ThemedDialogBuilder(requireContext())
+                        .setTitle("Chi tiết hồ sơ eKYC")
+                        .setView(dialogView)
+                        .setPositiveButton("Đóng", null);
+        androidx.appcompat.app.AlertDialog detailDialog = builder.create();
+        View reviewActions = dialogView.findViewById(R.id.ekyc_review_actions);
+        View approveBtn = dialogView.findViewById(R.id.btn_ekyc_approve);
+        View rejectBtn = dialogView.findViewById(R.id.btn_ekyc_reject);
+        if ("REVIEWING".equals(status) && reviewActions != null) {
+            reviewActions.setVisibility(View.VISIBLE);
+            if (approveBtn != null) {
+                approveBtn.setOnClickListener(v -> {
+                    detailDialog.dismiss();
+                    submitEkycReview(api, id, "VERIFIED", null);
+                });
+            }
+            if (rejectBtn != null) {
+                rejectBtn.setOnClickListener(v -> {
+                    detailDialog.dismiss();
+                    promptRejectEkyc(api, id);
+                });
+            }
+        }
         detailDialog.setOnDismissListener(d -> {
             dialogDismissed[0] = true;
             for (Bitmap bm : previewBitmaps) {
@@ -551,6 +700,50 @@ public final class OfficerFeatureFragment extends Fragment {
             cachedBytes.clear();
         });
         detailDialog.show();
+    }
+
+    private void promptRejectEkyc(BackendApiClient api, String requestId) {
+        if (!isAdded()) return;
+        android.widget.EditText reasonInput = new android.widget.EditText(requireContext());
+        reasonInput.setHint("Nhập lý do (VD: Ảnh CCCD bị mờ/chói sáng)");
+        int pad = dp(16);
+        android.widget.FrameLayout container = new android.widget.FrameLayout(requireContext());
+        container.setPadding(pad, dp(8), pad, 0);
+        container.addView(reasonInput);
+        new com.example.final_term.ui.common.ThemedDialogBuilder(requireContext())
+                .setTitle("Xử lý hồ sơ chưa đạt")
+                .setView(container)
+                .setPositiveButton("Yêu cầu chụp lại", (d, w) ->
+                        submitEkycReview(api, requestId, "RESUBMIT_REQUIRED", reasonInput.getText().toString().trim()))
+                .setNegativeButton("Từ chối", (d, w) ->
+                        submitEkycReview(api, requestId, "REJECTED", reasonInput.getText().toString().trim()))
+                .setNeutralButton("Hủy", null)
+                .show();
+    }
+
+    private void submitEkycReview(BackendApiClient api, String requestId, String decision, String reason) {
+        if (!isAdded()) return;
+        try {
+            JSONObject body = new JSONObject().put("decision", decision);
+            if (reason != null && !reason.isEmpty()) body.put("reason", reason);
+            api.post("/officer/ekyc/" + android.net.Uri.encode(requestId) + "/review", body.toString())
+                    .addOnCompleteListener(task -> {
+                        if (!isAdded() || binding == null) return;
+                        requireActivity().runOnUiThread(() -> {
+                            if (task.isSuccessful() && task.getResult() != null
+                                    && task.getResult().statusCode >= 200 && task.getResult().statusCode < 300) {
+                                String msg = "VERIFIED".equals(decision) ? "Đã duyệt hồ sơ eKYC và kích hoạt tài khoản."
+                                        : ("RESUBMIT_REQUIRED".equals(decision) ? "Đã yêu cầu khách hàng chụp lại." : "Đã từ chối hồ sơ eKYC.");
+                                android.widget.Toast.makeText(requireContext(), msg, android.widget.Toast.LENGTH_SHORT).show();
+                                loadEkycData(api);
+                            } else {
+                                android.widget.Toast.makeText(requireContext(),
+                                        "Không thể cập nhật trạng thái eKYC. Vui lòng thử lại.",
+                                        android.widget.Toast.LENGTH_SHORT).show();
+                            }
+                        });
+                    });
+        } catch (Exception ignored) { }
     }
 
     private interface EvidenceBytesCallback {

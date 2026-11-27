@@ -132,7 +132,10 @@ public final class EkycDialogFragment extends DialogFragment {
         binding.chipFront.setOnClickListener(v -> state.select(0));
         binding.chipBack.setOnClickListener(v -> state.select(1));
         binding.chipSelfie.setOnClickListener(v -> state.select(SELFIE));
-        binding.btnSubmitEkyc.setOnClickListener(v -> state.submit());
+        binding.btnSubmitEkyc.setOnClickListener(v -> {
+            if (state.isDemo()) state.submit();
+            else showThreePhotoPreviewDialog();
+        });
         cameraDialogOpen = getChildFragmentManager().findFragmentByTag(CAMERA_TAG) != null;
         binding.statusHeadline.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         binding.shutterHint.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
@@ -223,8 +226,62 @@ public final class EkycDialogFragment extends DialogFragment {
 
         // Auto-open must run from render(), since the capture layout is deliberately
         // hidden while the camera handoff is pending.
-        if (state.needsIdentity() && !cameraDialogOpen && !state.photoBusy() && state.progress == null) showIdentityPreview();
-        else maybeOpenCameraForCurrentStep();
+        if (state.needsThreePhotoPreview() && !cameraDialogOpen && !state.photoBusy() && state.progress == null) {
+            state.threePhotoPreviewPrompted = true;
+            showThreePhotoPreviewDialog();
+        } else {
+            maybeOpenCameraForCurrentStep();
+        }
+    }
+
+    private void showThreePhotoPreviewDialog() {
+        if (identityDialogOpen || !isAdded() || !state.allPhotosReady()) return;
+        identityDialogOpen = true;
+        state.autoCameraPending = false;
+        android.widget.ScrollView scroll = new android.widget.ScrollView(requireContext());
+        LinearLayout container = new LinearLayout(requireContext());
+        container.setOrientation(LinearLayout.VERTICAL);
+        float d = getResources().getDisplayMetrics().density;
+        int pad = (int) (16 * d);
+        container.setPadding(pad, (int) (8 * d), pad, (int) (8 * d));
+
+        TextView hint = new TextView(requireContext());
+        hint.setText("Kiểm tra lại cả 3 ảnh đã chụp trước khi gửi cho nhân viên ngân hàng xét duyệt.");
+        hint.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
+        hint.setTextSize(13f);
+        hint.setPadding(0, 0, 0, (int) (12 * d));
+        container.addView(hint);
+
+        for (int i = 0; i < 3; i++) {
+            TextView label = new TextView(requireContext());
+            label.setText(PHOTO_LABELS[i]);
+            label.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
+            label.setTextSize(13f);
+            label.setTypeface(null, Typeface.BOLD);
+            label.setPadding(0, i == 0 ? 0 : (int) (10 * d), 0, (int) (6 * d));
+            container.addView(label);
+
+            android.widget.ImageView img = new android.widget.ImageView(requireContext());
+            img.setImageBitmap(state.previews[i]);
+            img.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+            img.setBackgroundResource(R.drawable.glass_panel_soft);
+            img.setClipToOutline(true);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, (int) (150 * d));
+            container.addView(img, lp);
+        }
+        scroll.addView(container);
+
+        new ThemedDialogBuilder(requireContext())
+                .setTitle("Xác nhận 3 ảnh eKYC")
+                .setView(scroll)
+                .setCancelable(false)
+                .setNegativeButton("Chụp lại", (dialog, which) -> identityDialogOpen = false)
+                .setPositiveButton("Gửi duyệt", (dialog, which) -> {
+                    identityDialogOpen = false;
+                    state.submit();
+                })
+                .show();
     }
 
     private void showIdentityPreview() {
@@ -396,7 +453,7 @@ public final class EkycDialogFragment extends DialogFragment {
         binding.chipBack.setEnabled(canEdit && state.canSelect(1));
         binding.chipSelfie.setEnabled(canEdit && state.canSelect(SELFIE));
         visible(binding.btnSubmitEkyc, state.allPhotosReady());
-        binding.btnSubmitEkyc.setText(demo ? "Đăng ký khuôn mặt" : "Nộp và kiểm tra ảnh (3/3)");
+        binding.btnSubmitEkyc.setText(demo ? "Đăng ký khuôn mặt" : "Xem lại ảnh (3/3)");
         binding.btnSubmitEkyc.setEnabled(canEdit);
     }
 
@@ -529,6 +586,7 @@ public final class EkycDialogFragment extends DialogFragment {
         private boolean closed;
         private boolean restoredPhotos;
         private boolean autoCameraPending;
+        private boolean threePhotoPreviewPrompted;
         private boolean consent;
         private boolean processingPhoto;
         private boolean submitting;
@@ -918,7 +976,6 @@ public final class EkycDialogFragment extends DialogFragment {
 
         private boolean allPhotosReady() {
             if (isDemo()) return previews[SELFIE] != null;
-            if (confirmedIdentity == null) return false;
             for (Bitmap preview : previews) if (preview == null) return false;
             return true;
         }
@@ -1008,8 +1065,12 @@ public final class EkycDialogFragment extends DialogFragment {
             });
         }
 
+        private boolean needsThreePhotoPreview() {
+            return isDraft() && !isDemo() && allPhotosReady() && !threePhotoPreviewPrompted;
+        }
+
         private boolean needsIdentity() {
-            return isDraft() && !isDemo() && previews[0] != null && previews[1] != null && confirmedIdentity == null;
+            return false;
         }
 
         private boolean applySubmitted(@Nullable JSONObject record, String draftId) {
@@ -1090,6 +1151,7 @@ public final class EkycDialogFragment extends DialogFragment {
 
         private void clearPhotos() {
             confirmedIdentity = null;
+            threePhotoPreviewPrompted = false;
             saved.remove(PENDING_SLOT);
             saved.remove(RAW_READY);
             slot = 0;

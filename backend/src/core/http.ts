@@ -72,7 +72,7 @@ export function authenticateRequests(d: AppDependencies) {
     const onboardingPath = res.locals.actor.role === "CUSTOMER" && (
       req.path === "/me" || req.path === "/me/avatar" || req.path === "/ekyc" ||
       /^\/me\/avatar\/[^/]+\/confirm$/.test(req.path) ||
-      /^\/ekyc\/[^/]+\/(uploads|submit|evidence\/[012])$/.test(req.path) ||
+      /^\/ekyc\/[^/]+\/(uploads|recognize|submit|evidence\/[012])$/.test(req.path) ||
       /^\/uploads\/[^/]+\/confirm$/.test(req.path)
     );
     await d.bank.read((t) => d.bank.authorize(t, res.locals.actor, undefined, onboardingPath));

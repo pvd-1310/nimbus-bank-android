@@ -38,4 +38,11 @@ export function registerEkycRoutes(route: Route, { evidence }: AppDependencies) 
     const index = z.enum(["0", "1", "2"]).parse(r.params.index);
     return evidence.evidence(a, String(r.params.id), Number(index));
   });
+  route("post", "/officer/ekyc/:id/review", (a, r) => {
+    const body = z.object({
+      decision: z.enum(["VERIFIED", "RESUBMIT_REQUIRED", "REJECTED"]),
+      reason: z.string().trim().max(500).optional(),
+    }).strict().parse(r.body);
+    return evidence.review(a, String(r.params.id), body.decision, body.reason);
+  });
 }

@@ -110,6 +110,9 @@ public final class AccountListFragment extends Fragment {
     private boolean stripeConfigured = true;
     private boolean stripeSetupInFlight;
     private final List<JSONObject> stripeCards = new ArrayList<>();
+    private final List<JSONObject> loanApplications = new ArrayList<>();
+    private boolean loanApplicationsLoaded;
+    private boolean loanApplicationsLoading;
     private float cardSwipeStartX;
 
     @Nullable
@@ -227,6 +230,9 @@ public final class AccountListFragment extends Fragment {
                             stripeCardsLoaded = false;
                             stripeCardsFailed = false;
                             stripeSetupInFlight = false;
+                            loanApplications.clear();
+                            loanApplicationsLoaded = false;
+                            loanApplicationsLoading = false;
                         }
                         uid = signedInUid;
                         role = authState.getUser().getRole();
@@ -464,12 +470,456 @@ public final class AccountListFragment extends Fragment {
             });
         }
 
-        if (!otherAccounts.isEmpty()) {
-            TextView title = walletText("Tài khoản khác", 16, R.color.ink, true);
+        if (!cardAccounts.isEmpty() || !otherAccounts.isEmpty()) {
+            if (!loanApplicationsLoaded && !loanApplicationsLoading) {
+                loadLoanApplications(false);
+            }
+            TextView title = walletText("Tiết kiệm & Khoản vay", 16, R.color.ink, true);
             title.setPadding(dp(2), dp(8), dp(2), dp(10));
             binding.content.addView(title);
             for (ReadModels.AccountSummary account : otherAccounts) binding.content.addView(createOtherAccountRow(account));
+            for (JSONObject loanApp : loanApplications) {
+                if ("PENDING".equalsIgnoreCase(loanApp.optString("status"))) {
+                    binding.content.addView(createPendingLoanRow(loanApp));
+                }
+            }
+            if (!cardAccounts.isEmpty()) {
+                binding.content.addView(createProductActionsRow(cardAccounts.get(0)));
+            }
         }
+    }
+
+    private View createProductActionsRow(ReadModels.AccountSummary checking) {
+        LinearLayout row = new LinearLayout(requireContext());
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rowLp.topMargin = dp(4);
+        rowLp.bottomMargin = dp(12);
+        row.setLayoutParams(rowLp);
+
+        LinearLayout savingsCard = createProductActionCard(
+                R.drawable.ic_trending_up, "Mở tiết kiệm", "Từ 1 triệu · Sinh lời",
+                () -> showOpenSavingsDialog(checking));
+        LinearLayout.LayoutParams leftLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        leftLp.setMarginEnd(dp(6));
+        row.addView(savingsCard, leftLp);
+
+        LinearLayout loanCard = createProductActionCard(
+                R.drawable.ic_account_balance, "Đăng ký vay", "Duyệt & giải ngân",
+                this::showApplyLoanDialog);
+        LinearLayout.LayoutParams rightLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        rightLp.setMarginStart(dp(6));
+        row.addView(loanCard, rightLp);
+
+        return row;
+    }
+
+    private LinearLayout createProductActionCard(int iconRes, String heading, String sub, Runnable onClick) {
+        LinearLayout card = new LinearLayout(requireContext());
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackgroundResource(R.drawable.glass_panel_card);
+        card.setPadding(dp(14), dp(14), dp(14), dp(14));
+        card.setClickable(true);
+        card.setFocusable(true);
+        card.setOnClickListener(v -> onClick.run());
+
+        ImageView icon = new ImageView(requireContext());
+        icon.setImageResource(iconRes);
+        icon.setImageTintList(ContextCompat.getColorStateList(requireContext(), R.color.navy));
+        icon.setBackgroundResource(R.drawable.circle_action_button);
+        icon.setPadding(dp(10), dp(10), dp(10), dp(10));
+        card.addView(icon, new LinearLayout.LayoutParams(dp(40), dp(40)));
+
+        TextView titleTv = walletText(heading, 14, R.color.ink, true);
+        titleTv.setPadding(0, dp(10), 0, dp(2));
+        card.addView(titleTv);
+
+        TextView subTv = walletText(sub, 11, R.color.ink_muted, false);
+        card.addView(subTv);
+        return card;
+    }
+
+    private View createPendingLoanRow(JSONObject loanApp) {
+        LinearLayout row = new LinearLayout(requireContext());
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(16), dp(14), dp(16), dp(14));
+        row.setBackgroundResource(R.drawable.glass_panel_card);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.bottomMargin = dp(10);
+        row.setLayoutParams(params);
+        LinearLayout text = new LinearLayout(requireContext());
+        text.setOrientation(LinearLayout.VERTICAL);
+        long amount = loanApp.optLong("amountMinor", 0L);
+        int months = loanApp.optInt("termMonths", 12);
+        text.addView(walletText("Hồ sơ vay · " + ReadSummaryFormatter.formatCurrency(amount, "VND"), 14, R.color.ink, true));
+        TextView state = walletText("Kỳ hạn " + months + " tháng · Đang chờ Officer duyệt", 12, R.color.warning, false);
+        state.setPadding(0, dp(4), 0, 0);
+        text.addView(state);
+        row.addView(text, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        return row;
+    }
+
+    private void loadLoanApplications(boolean force) {
+        if (loanApplicationsLoading || (loanApplicationsLoaded && !force)) return;
+        loanApplicationsLoading = true;
+        var current = binding;
+        String requestedUid = uid;
+        application.getAppContainer().getBackendApiClient().get("/loans/applications").addOnCompleteListener(task -> {
+            if (binding != current || !java.util.Objects.equals(uid, requestedUid)) return;
+            loanApplicationsLoading = false;
+            loanApplicationsLoaded = true;
+            loanApplications.clear();
+            try {
+                if (task.isSuccessful() && task.getResult() != null && task.getResult().statusCode == 200) {
+                    JSONArray items = new JSONObject(task.getResult().body).optJSONArray("items");
+                    if (items != null) {
+                        for (int i = 0; i < items.length(); i++) loanApplications.add(items.getJSONObject(i));
+                    }
+                }
+            } catch (Exception ignored) { }
+            renderAll();
+        });
+    }
+
+    private com.google.android.material.textfield.TextInputLayout createDialogInputLayout(String hint) {
+        com.google.android.material.textfield.TextInputLayout layout =
+                new com.google.android.material.textfield.TextInputLayout(
+                        requireContext(), null, com.google.android.material.R.attr.textInputOutlinedStyle);
+        layout.setHint(hint);
+        layout.setBoxBackgroundMode(com.google.android.material.textfield.TextInputLayout.BOX_BACKGROUND_OUTLINE);
+        layout.setBoxBackgroundColor(ContextCompat.getColor(requireContext(), R.color.glass_card));
+        layout.setBoxCornerRadii(dp(16), dp(16), dp(16), dp(16));
+        layout.setBoxStrokeColor(ContextCompat.getColor(requireContext(), R.color.navy));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(10);
+        layout.setLayoutParams(lp);
+        return layout;
+    }
+
+    private LinearLayout createPillRow(String[] labels, int selectedIndex, java.util.function.IntConsumer onSelect) {
+        LinearLayout row = new LinearLayout(requireContext());
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(8);
+        row.setLayoutParams(lp);
+        final int[] active = {selectedIndex};
+        TextView[] pills = new TextView[labels.length];
+        Runnable refresh = () -> {
+            for (int i = 0; i < pills.length; i++) {
+                boolean sel = i == active[0];
+                pills[i].setBackgroundResource(sel ? R.drawable.navy_button_pill : R.drawable.glass_panel_soft);
+                pills[i].setTextColor(ContextCompat.getColor(requireContext(), sel ? R.color.white : R.color.ink));
+                pills[i].setTypeface(null, sel ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+            }
+        };
+        for (int i = 0; i < labels.length; i++) {
+            final int idx = i;
+            TextView pill = new TextView(requireContext());
+            pill.setText(labels[i]);
+            pill.setTextSize(12);
+            pill.setGravity(Gravity.CENTER);
+            pill.setPadding(dp(8), dp(10), dp(8), dp(10));
+            pill.setClickable(true);
+            pill.setFocusable(true);
+            pill.setOnClickListener(v -> {
+                active[0] = idx;
+                refresh.run();
+                onSelect.accept(idx);
+            });
+            LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+            if (i < labels.length - 1) pLp.setMarginEnd(dp(6));
+            pills[i] = pill;
+            row.addView(pill, pLp);
+        }
+        refresh.run();
+        return row;
+    }
+
+    private void showOpenSavingsDialog(ReadModels.AccountSummary checking) {
+        application.getAppContainer().getBackendApiClient().get("/products/rates").addOnCompleteListener(rateTask -> {
+            if (binding == null) return;
+            int bps = 480;
+            try {
+                if (rateTask.isSuccessful() && rateTask.getResult() != null && rateTask.getResult().statusCode == 200) {
+                    bps = new JSONObject(rateTask.getResult().body).optInt("savingsRateBasisPoints", 480);
+                }
+            } catch (Exception ignored) { }
+            final int rateBps = bps;
+            long avail = checking.availableMinor != null ? checking.availableMinor : checking.balanceMinor;
+
+            android.widget.ScrollView scroll = new android.widget.ScrollView(requireContext());
+            LinearLayout box = new LinearLayout(requireContext());
+            box.setOrientation(LinearLayout.VERTICAL);
+            box.setPadding(dp(18), dp(6), dp(18), dp(6));
+
+            LinearLayout banner = new LinearLayout(requireContext());
+            banner.setOrientation(LinearLayout.VERTICAL);
+            banner.setBackgroundResource(R.drawable.glass_panel_soft);
+            banner.setPadding(dp(14), dp(12), dp(14), dp(12));
+            banner.addView(walletText(String.format(Locale.US, "Lãi suất niêm yết: %.2f%%/năm", rateBps / 100.0), 13, R.color.navy, true));
+            TextView balTv = walletText("Số dư thanh toán: " + ReadSummaryFormatter.formatCurrency(avail, checking.currency), 12, R.color.ink_muted, false);
+            balTv.setPadding(0, dp(3), 0, 0);
+            banner.addView(balTv);
+            box.addView(banner);
+
+            com.google.android.material.textfield.TextInputLayout amountLayout = createDialogInputLayout("Số tiền gửi (tối thiểu 1.000.000 ₫)");
+            com.google.android.material.textfield.TextInputEditText amountInput =
+                    new com.google.android.material.textfield.TextInputEditText(amountLayout.getContext());
+            amountInput.setInputType(InputType.TYPE_CLASS_NUMBER);
+            amountInput.setText("5000000");
+            amountInput.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
+            amountLayout.addView(amountInput);
+            box.addView(amountLayout);
+
+            long[] quickAmounts = {1_000_000L, 5_000_000L, 10_000_000L, 50_000_000L};
+            String[] quickLabels = {"1 triệu", "5 triệu", "10 triệu", "50 triệu"};
+            box.addView(createPillRow(quickLabels, 1, idx -> amountInput.setText(String.valueOf(quickAmounts[idx]))));
+
+            TextView termLabel = walletText("Kỳ hạn gửi", 12, R.color.ink_muted, true);
+            termLabel.setPadding(0, dp(12), 0, 0);
+            box.addView(termLabel);
+
+            int[] termValues = {3, 6, 12, 24};
+            String[] termLabels = {"3 tháng", "6 tháng", "12 tháng", "24 tháng"};
+            final int[] selectedTermIdx = {2};
+
+            LinearLayout estimateCard = new LinearLayout(requireContext());
+            estimateCard.setOrientation(LinearLayout.VERTICAL);
+            estimateCard.setBackgroundResource(R.drawable.glass_panel_soft);
+            estimateCard.setPadding(dp(14), dp(10), dp(14), dp(10));
+            LinearLayout.LayoutParams estLp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            estLp.topMargin = dp(12);
+            estimateCard.setLayoutParams(estLp);
+            TextView estLabel = walletText("Lãi dự kiến cuối kỳ", 11, R.color.ink_muted, false);
+            TextView estValue = walletText("—", 15, R.color.success, true);
+            estimateCard.addView(estLabel);
+            estimateCard.addView(estValue);
+
+            Runnable updateEstimate = () -> {
+                long amt = 0L;
+                try {
+                    amt = Long.parseLong(String.valueOf(amountInput.getText()).trim().replaceAll("[^0-9]", ""));
+                } catch (Exception ignored) { }
+                int months = termValues[selectedTermIdx[0]];
+                long profit = Math.round(amt * (rateBps / 10000.0) * (months / 12.0));
+                estValue.setText("+" + ReadSummaryFormatter.formatCurrency(profit, "VND")
+                        + " (" + months + " tháng)");
+            };
+
+            box.addView(createPillRow(termLabels, 2, idx -> {
+                selectedTermIdx[0] = idx;
+                updateEstimate.run();
+            }));
+            box.addView(estimateCard);
+            amountInput.addTextChangedListener(new android.text.TextWatcher() {
+                @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
+                @Override public void onTextChanged(CharSequence s, int start, int before, int count) { updateEstimate.run(); }
+                @Override public void afterTextChanged(android.text.Editable s) { }
+            });
+            updateEstimate.run();
+            scroll.addView(box);
+
+            new ThemedDialogBuilder(requireContext())
+                    .setTitle("Mở sổ tiết kiệm")
+                    .setView(scroll)
+                    .setNegativeButton("Hủy", null)
+                    .setPositiveButton("Mở sổ ngay", (d, w) -> {
+                        long amount;
+                        try {
+                            amount = Long.parseLong(String.valueOf(amountInput.getText()).trim().replaceAll("[^0-9]", ""));
+                        } catch (Exception e) {
+                            Toast.makeText(requireContext(), "Số tiền không hợp lệ.", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        if (amount < 1_000_000L) {
+                            Toast.makeText(requireContext(), "Số tiền tối thiểu là 1.000.000 ₫.", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        int termMonths = termValues[selectedTermIdx[0]];
+                        try {
+                            JSONObject body = new JSONObject()
+                                    .put("sourceAccountId", checking.id)
+                                    .put("amountMinor", amount)
+                                    .put("termMonths", termMonths)
+                                    .put("requestId", UUID.randomUUID().toString());
+                            application.getAppContainer().getBackendApiClient().post("/savings", body.toString())
+                                    .addOnCompleteListener(res -> {
+                                        if (binding == null) return;
+                                        if (res.isSuccessful() && res.getResult() != null
+                                                && res.getResult().statusCode >= 200 && res.getResult().statusCode < 300) {
+                                            Toast.makeText(requireContext(), "Đã mở sổ tiết kiệm thành công.", Toast.LENGTH_SHORT).show();
+                                            load();
+                                        } else {
+                                            String err = "Không thể mở sổ tiết kiệm.";
+                                            try {
+                                                if (res.isSuccessful() && res.getResult() != null
+                                                        && "INSUFFICIENT_FUNDS".equals(new JSONObject(res.getResult().body).optString("error"))) {
+                                                    err = "Số dư tài khoản thanh toán không đủ.";
+                                                }
+                                            } catch (Exception ignored) { }
+                                            Toast.makeText(requireContext(), err, Toast.LENGTH_SHORT).show();
+                                        }
+                                    });
+                        } catch (Exception ignored) { }
+                    })
+                    .show();
+        });
+    }
+
+    private void showApplyLoanDialog() {
+        application.getAppContainer().getBackendApiClient().get("/products/rates").addOnCompleteListener(rateTask -> {
+            if (binding == null) return;
+            int bps = 850;
+            try {
+                if (rateTask.isSuccessful() && rateTask.getResult() != null && rateTask.getResult().statusCode == 200) {
+                    bps = new JSONObject(rateTask.getResult().body).optInt("loanRateBasisPoints", 850);
+                }
+            } catch (Exception ignored) { }
+            final int rateBps = bps;
+
+            android.widget.ScrollView scroll = new android.widget.ScrollView(requireContext());
+            LinearLayout box = new LinearLayout(requireContext());
+            box.setOrientation(LinearLayout.VERTICAL);
+            box.setPadding(dp(18), dp(6), dp(18), dp(6));
+
+            LinearLayout banner = new LinearLayout(requireContext());
+            banner.setOrientation(LinearLayout.VERTICAL);
+            banner.setBackgroundResource(R.drawable.glass_panel_soft);
+            banner.setPadding(dp(14), dp(12), dp(14), dp(12));
+            banner.addView(walletText(String.format(Locale.US, "Lãi suất vay: %.2f%%/năm", rateBps / 100.0), 13, R.color.navy, true));
+            TextView sub = walletText("Hồ sơ sẽ được Officer thẩm định và giải ngân vào tài khoản thanh toán.", 12, R.color.ink_muted, false);
+            sub.setPadding(0, dp(3), 0, 0);
+            banner.addView(sub);
+            box.addView(banner);
+
+            com.google.android.material.textfield.TextInputLayout amountLayout = createDialogInputLayout("Số tiền vay (tối thiểu 10.000.000 ₫)");
+            com.google.android.material.textfield.TextInputEditText amountInput =
+                    new com.google.android.material.textfield.TextInputEditText(amountLayout.getContext());
+            amountInput.setInputType(InputType.TYPE_CLASS_NUMBER);
+            amountInput.setText("50000000");
+            amountInput.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
+            amountLayout.addView(amountInput);
+            box.addView(amountLayout);
+
+            long[] quickLoans = {20_000_000L, 50_000_000L, 100_000_000L, 200_000_000L};
+            String[] quickLabels = {"20 triệu", "50 triệu", "100 triệu", "200 triệu"};
+            box.addView(createPillRow(quickLabels, 1, idx -> amountInput.setText(String.valueOf(quickLoans[idx]))));
+
+            TextView termLabel = walletText("Kỳ hạn vay", 12, R.color.ink_muted, true);
+            termLabel.setPadding(0, dp(12), 0, 0);
+            box.addView(termLabel);
+
+            int[] termValues = {12, 24, 36, 60};
+            String[] termLabels = {"12 tháng", "24 tháng", "36 tháng", "60 tháng"};
+            final int[] selectedTermIdx = {1};
+
+            TextView freqLabel = walletText("Chu kỳ trả góp", 12, R.color.ink_muted, true);
+            freqLabel.setPadding(0, dp(12), 0, 0);
+            String[] freqLabels = {"Hàng tháng", "2 tuần/lần"};
+            String[] freqValues = {"MONTHLY", "BIWEEKLY"};
+            final int[] selectedFreqIdx = {0};
+
+            LinearLayout estCard = new LinearLayout(requireContext());
+            estCard.setOrientation(LinearLayout.VERTICAL);
+            estCard.setBackgroundResource(R.drawable.glass_panel_soft);
+            estCard.setPadding(dp(14), dp(10), dp(14), dp(10));
+            LinearLayout.LayoutParams estLp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            estLp.topMargin = dp(12);
+            estCard.setLayoutParams(estLp);
+            TextView estLabel = walletText("Trả góp dự kiến mỗi kỳ", 11, R.color.ink_muted, false);
+            TextView estValue = walletText("—", 15, R.color.navy, true);
+            estCard.addView(estLabel);
+            estCard.addView(estValue);
+
+            Runnable updateLoanEstimate = () -> {
+                long amt = 0L;
+                try {
+                    amt = Long.parseLong(String.valueOf(amountInput.getText()).trim().replaceAll("[^0-9]", ""));
+                } catch (Exception ignored) { }
+                int months = termValues[selectedTermIdx[0]];
+                boolean biweekly = selectedFreqIdx[0] == 1;
+                int periods = biweekly ? Math.max(1, Math.round(months * 26f / 12f)) : months;
+                double periodicRate = (rateBps / 10000.0) / (biweekly ? 26.0 : 12.0);
+                long perPeriod = amt <= 0 ? 0L : Math.round(
+                        periodicRate == 0 ? (double) amt / periods
+                                : amt * (periodicRate * Math.pow(1 + periodicRate, periods)) / (Math.pow(1 + periodicRate, periods) - 1));
+                estValue.setText(ReadSummaryFormatter.formatCurrency(perPeriod, "VND")
+                        + (biweekly ? " / 2 tuần" : " / tháng"));
+            };
+
+            box.addView(createPillRow(termLabels, 1, idx -> {
+                selectedTermIdx[0] = idx;
+                updateLoanEstimate.run();
+            }));
+            box.addView(freqLabel);
+            box.addView(createPillRow(freqLabels, 0, idx -> {
+                selectedFreqIdx[0] = idx;
+                updateLoanEstimate.run();
+            }));
+
+            com.google.android.material.textfield.TextInputLayout purposeLayout = createDialogInputLayout("Mục đích vay");
+            com.google.android.material.textfield.TextInputEditText purposeInput =
+                    new com.google.android.material.textfield.TextInputEditText(purposeLayout.getContext());
+            purposeInput.setText("Vay tiêu dùng / Mua nhà");
+            purposeInput.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink));
+            purposeLayout.addView(purposeInput);
+            box.addView(purposeLayout);
+            box.addView(estCard);
+
+            amountInput.addTextChangedListener(new android.text.TextWatcher() {
+                @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
+                @Override public void onTextChanged(CharSequence s, int start, int before, int count) { updateLoanEstimate.run(); }
+                @Override public void afterTextChanged(android.text.Editable s) { }
+            });
+            updateLoanEstimate.run();
+            scroll.addView(box);
+
+            new ThemedDialogBuilder(requireContext())
+                    .setTitle("Đăng ký khoản vay")
+                    .setView(scroll)
+                    .setNegativeButton("Hủy", null)
+                    .setPositiveButton("Gửi hồ sơ vay", (d, w) -> {
+                        long amount;
+                        try {
+                            amount = Long.parseLong(String.valueOf(amountInput.getText()).trim().replaceAll("[^0-9]", ""));
+                        } catch (Exception e) {
+                            Toast.makeText(requireContext(), "Số tiền vay không hợp lệ.", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        if (amount < 10_000_000L) {
+                            Toast.makeText(requireContext(), "Số tiền vay tối thiểu là 10.000.000 ₫.", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        String purpose = String.valueOf(purposeInput.getText()).trim();
+                        if (purpose.length() < 2) purpose = "Vay tiêu dùng";
+                        try {
+                            JSONObject body = new JSONObject()
+                                    .put("amountMinor", amount)
+                                    .put("termMonths", termValues[selectedTermIdx[0]])
+                                    .put("paymentFrequency", freqValues[selectedFreqIdx[0]])
+                                    .put("purpose", purpose)
+                                    .put("requestId", UUID.randomUUID().toString());
+                            application.getAppContainer().getBackendApiClient().post("/loans/applications", body.toString())
+                                    .addOnCompleteListener(res -> {
+                                        if (binding == null) return;
+                                        if (res.isSuccessful() && res.getResult() != null
+                                                && res.getResult().statusCode >= 200 && res.getResult().statusCode < 300) {
+                                            Toast.makeText(requireContext(), "Đã gửi hồ sơ vay. Chờ Officer duyệt & giải ngân.", Toast.LENGTH_SHORT).show();
+                                            loadLoanApplications(true);
+                                        } else {
+                                            Toast.makeText(requireContext(), "Không thể gửi hồ sơ vay. Vui lòng thử lại.", Toast.LENGTH_SHORT).show();
+                                        }
+                                    });
+                        } catch (Exception ignored) { }
+                    })
+                    .show();
+        });
     }
 
     private void loadStripeCard(ReadModels.AccountSummary account) {
@@ -1153,22 +1603,46 @@ public final class AccountListFragment extends Fragment {
     private View createOtherAccountRow(ReadModels.AccountSummary account) {
         LinearLayout row = new LinearLayout(requireContext());
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(16), dp(14), dp(16), dp(14));
+        row.setPadding(dp(14), dp(14), dp(14), dp(14));
         row.setBackgroundResource(R.drawable.glass_panel_card);
         row.setClickable(true);
         row.setFocusable(true);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.bottomMargin = dp(10);
         row.setLayoutParams(params);
+
+        boolean savings = "SAVINGS".equalsIgnoreCase(account.type);
+        ImageView icon = new ImageView(requireContext());
+        icon.setImageResource(savings ? R.drawable.ic_trending_up : R.drawable.ic_account_balance);
+        icon.setImageTintList(ContextCompat.getColorStateList(requireContext(), R.color.navy));
+        icon.setBackgroundResource(R.drawable.circle_action_button);
+        icon.setPadding(dp(10), dp(10), dp(10), dp(10));
+        LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(dp(42), dp(42));
+        iconLp.setMarginEnd(dp(12));
+        row.addView(icon, iconLp);
+
         LinearLayout text = new LinearLayout(requireContext());
         text.setOrientation(LinearLayout.VERTICAL);
         text.addView(walletText(Phase2Presentation.accountTitle(account.type), 14, R.color.ink, true));
-        TextView state = walletText(accountStatusLabel(account.status), 12, R.color.ink_muted, false);
-        state.setPadding(0, dp(4), 0, 0); text.addView(state);
+        String last4 = account.displayLast4();
+        String sub = (last4.isEmpty() ? "" : "•••• " + last4 + " · ") + accountStatusLabel(account.status);
+        TextView state = walletText(sub, 12, R.color.ink_muted, false);
+        state.setPadding(0, dp(3), 0, 0);
+        text.addView(state);
         row.addView(text, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        long amountMinor = account.availableMinor != null ? account.availableMinor : account.balanceMinor;
+        TextView amountTv = walletText(
+                ReadSummaryFormatter.formatCurrency(amountMinor, account.currency),
+                13,
+                savings ? R.color.success : R.color.ink,
+                true);
+        amountTv.setPadding(dp(8), 0, dp(6), 0);
+        row.addView(amountTv);
+
         ImageView arrow = new ImageView(requireContext());
         arrow.setImageResource(R.drawable.ic_chevron_right);
-        row.addView(arrow, new LinearLayout.LayoutParams(dp(20), dp(20)));
+        row.addView(arrow, new LinearLayout.LayoutParams(dp(18), dp(18)));
         row.setOnClickListener(v -> openDetails(v, account));
         return row;
     }
@@ -1328,7 +1802,7 @@ public final class AccountListFragment extends Fragment {
             binding.content.addView(horizontal);
         }
         MaterialButton bills = new MaterialButton(requireContext());
-        bills.setText("Xem hóa đơn và tiện ích");
+        bills.setText("Xem hóa đơn");
         bills.setOnClickListener(v -> androidx.navigation.Navigation.findNavController(v).navigate(R.id.utilitiesHub));
         LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         buttonParams.topMargin = dp(10);

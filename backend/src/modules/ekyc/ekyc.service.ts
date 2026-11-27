@@ -5,7 +5,6 @@ import { check, Fault, key } from "../../shared/errors.js";
 import { page, queryOptions } from "../../shared/pagination.js";
 import { faceTemplatePath, type FaceService } from "../security/face.js";
 import type { Actor } from "../auth/auth.types.js";
-import { normalizeSearchText } from "../../shared/search.js";
 
 type ImageMime = "image/jpeg" | "image/png";
 type CaptureMode = "FULL_ID" | "DEMO_SELFIE_ONLY";
@@ -317,7 +316,7 @@ export class Evidence {
     });
   }
 
-  async submit(a: Actor, id: string, identity?: Doc) {
+  async submit(a: Actor, id: string, _identity?: Doc) {
     const snapshot = await this.bank.store.run(async (t) => {
       await this.customer(t, a);
       const record = await this.owned(t, a, id);
@@ -333,8 +332,7 @@ export class Evidence {
       const selfie = record.slots[2]?.image;
       const mode = record.mode ?? "FULL_ID";
       check(selfie && (mode === "DEMO_SELFIE_ONLY" || (front && back)), "EVIDENCE_REQUIRED", 409);
-      check(mode === "DEMO_SELFIE_ONLY" || identity, "IDENTITY_CONFIRMATION_REQUIRED", 409);
-      const next: EvidenceRecord = { ...record, mode, ...(identity ? { confirmedIdentity: identity } : {}), reviewStatus: "REVIEWING", submittedAt: this.bank.now(),
+      const next: EvidenceRecord = { ...record, mode, reviewStatus: "REVIEWING", submittedAt: this.bank.now(),
         storageRefs: mode === "DEMO_SELFIE_ONLY" ? [selfie] : [front!, back!, selfie] };
       await this.writeStatus(t, next);
       return next;
@@ -388,30 +386,98 @@ export class Evidence {
       check(user?.role === "CUSTOMER" && ["ONBOARDING", "ACTIVE"].includes(user.status), "INVALID_CUSTOMER_STATE", 409);
       const customer = await this.bank.linkedProfile(t, "customers", a.uid);
       check(customer, "CUSTOMER_NOT_FOUND", 404);
-      const identity = record.confirmedIdentity;
-      const checkingAccounts = identity ? await t.list("accounts", { ownerUid: a.uid, type: "CHECKING" }, { limit: 100 }) : [];
-      t.set(`users/${a.uid}`, { ...user, ...(identity ? { fullName: identity.fullName } : {}), active: true, status: "ACTIVE" });
-      const { id: customerId, _cursor, ...data } = customer;
-      const { fullName: _fullName, ...rawIdentityFields } = identity ?? {};
-      const identityFields = Object.fromEntries(Object.entries(rawIdentityFields).filter(([, value]) => value !== ""));
-      t.set(`customers/${customerId}`, { ...data, ...identityFields, status: "ACTIVE", kycStatus: "VERIFIED" });
-      for (const account of checkingAccounts) {
-        const { id: accountId, _cursor: accountCursor, ...accountData } = account;
-        void accountCursor;
-        t.set(`accounts/${accountId}`, { ...accountData, ownerNameSearch: normalizeSearchText(String(identity!.fullName)) });
-      }
-      t.set(faceTemplatePath(a.uid), enrollment!);
-      const next: EvidenceRecord = { ...record, reviewStatus: "VERIFIED", reviewedBy: "SYSTEM", reviewedAt: this.bank.now() };
-      t.set(requestPath(id), next);
-      this.bank.audit(t, a, "EKYC_AUTO_REVIEW", id, "", {
-        before: { reviewStatus: "REVIEWING" }, after: { reviewStatus: "VERIFIED", mode: record.mode, templateEnrolled: true },
+      const next: EvidenceRecord & { enrolledTemplate?: unknown } = {
+        ...record,
+        reviewStatus: "REVIEWING",
+        enrolledTemplate: enrollment!,
+      };
+      await this.writeStatus(t, next);
+      this.bank.audit(t, a, "EKYC_SUBMITTED", id, "", {
+        before: { reviewStatus: "DRAFT" }, after: { reviewStatus: "REVIEWING", mode: record.mode, templateEnrolled: true },
       });
       this.bank.notifications.emit(t, {
-        id: `ekyc_${id}_verified`,
+        id: `ekyc_${id}_reviewing`,
         ownerUid: a.uid,
         type: "EKYC",
-        title: "Xác thực eKYC thành công",
-        body: "Hồ sơ định danh và khuôn mặt của bạn đã được kích hoạt.",
+        title: "Hồ sơ eKYC đang chờ duyệt",
+        body: "Hồ sơ xác thực của bạn đã được gửi và đang chờ nhân viên ngân hàng phê duyệt.",
+        refId: id,
+      });
+      return response(next);
+    });
+  }
+
+  async review(a: Actor, id: string, decision: "VERIFIED" | "RESUBMIT_REQUIRED" | "REJECTED", reason?: string) {
+    return this.bank.store.run(async (t) => {
+      await this.bank.authorize(t, a, "EKYC_REVIEW");
+      const rawRecord = await this.get(t, id) as EvidenceRecord & { enrolledTemplate?: Doc };
+      if (rawRecord.reviewStatus === decision) return response(rawRecord);
+      check(rawRecord.reviewStatus === "REVIEWING", "INVALID_EKYC_STATE", 409);
+      const customerUid = rawRecord.customerUid;
+      const customer = await this.bank.linkedProfile(t, "customers", customerUid);
+      check(customer, "CUSTOMER_NOT_FOUND", 404);
+      const { enrolledTemplate, ...record } = rawRecord;
+      const { id: customerId, _cursor, ...customerData } = customer;
+      void _cursor;
+
+      if (decision === "VERIFIED") {
+        const user = await t.get(`users/${customerUid}`);
+        check(user?.role === "CUSTOMER" && ["ONBOARDING", "ACTIVE"].includes(user.status), "INVALID_CUSTOMER_STATE", 409);
+        const checkingAccounts = await t.list("accounts", { ownerUid: customerUid, type: "CHECKING" }, { limit: 100 });
+        t.set(`users/${customerUid}`, {
+          ...user,
+          active: true,
+          status: "ACTIVE",
+        });
+        t.set(`customers/${customerId}`, { ...customerData, status: "ACTIVE", kycStatus: "VERIFIED" });
+        for (const account of checkingAccounts) {
+          const { id: accountId, _cursor: accountCursor, ...accountData } = account;
+          void accountCursor;
+          t.set(`accounts/${accountId}`, {
+            ...accountData,
+            status: accountData.status === "CLOSED" ? "CLOSED" : "ACTIVE",
+          });
+        }
+        if (enrolledTemplate) {
+          t.set(faceTemplatePath(customerUid), enrolledTemplate);
+        }
+        const next: EvidenceRecord = { ...record, reviewStatus: "VERIFIED", reviewedBy: a.uid, reviewedAt: this.bank.now() };
+        t.set(requestPath(id), next);
+        this.bank.audit(t, a, "EKYC_OFFICER_REVIEW", id, "", {
+          before: { reviewStatus: "REVIEWING" }, after: { reviewStatus: "VERIFIED", reviewedBy: a.uid },
+        });
+        this.bank.notifications.emit(t, {
+          id: `ekyc_${id}_verified`,
+          ownerUid: customerUid,
+          type: "EKYC",
+          title: "Xác thực eKYC thành công",
+          body: "Hồ sơ định danh và tài khoản thanh toán của bạn đã được kích hoạt.",
+          refId: id,
+        });
+        return response(next);
+      }
+
+      const cleanReason = (reason ?? "").trim() || (decision === "RESUBMIT_REQUIRED"
+        ? "Ảnh chụp chưa rõ nét, vui lòng thực hiện lại eKYC."
+        : "Hồ sơ eKYC không đạt yêu cầu xác thực.");
+      const next: EvidenceRecord = {
+        ...record,
+        reviewStatus: decision,
+        reason: cleanReason,
+        reviewedBy: a.uid,
+        reviewedAt: this.bank.now(),
+      };
+      t.set(`customers/${customerId}`, { ...customerData, kycStatus: decision });
+      t.set(requestPath(id), next);
+      this.bank.audit(t, a, "EKYC_OFFICER_REVIEW", id, cleanReason, {
+        before: { reviewStatus: "REVIEWING" }, after: { reviewStatus: decision, reason: cleanReason, reviewedBy: a.uid },
+      });
+      this.bank.notifications.emit(t, {
+        id: `ekyc_${id}_${decision.toLowerCase()}`,
+        ownerUid: customerUid,
+        type: "EKYC",
+        title: decision === "RESUBMIT_REQUIRED" ? "Hồ sơ eKYC cần chụp lại" : "Hồ sơ eKYC bị từ chối",
+        body: cleanReason,
         refId: id,
       });
       return response(next);

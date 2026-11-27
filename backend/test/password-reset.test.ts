@@ -17,6 +17,13 @@ async function passwordResetFixture() {
       contactEmail: "alice@example.com",
       phoneMasked: "***4125",
     });
+    t.set("users/onboarding", {
+      role: "CUSTOMER",
+      active: false,
+      status: "ONBOARDING",
+      contactEmail: "onboarding@example.com",
+      phoneMasked: "•••• 9999",
+    });
     t.set("users/disabled", {
       role: "CUSTOMER",
       active: false,
@@ -35,6 +42,7 @@ async function passwordResetFixture() {
     },
     lookupUserByEmail: async (email) => {
       if (email === "alice@example.com") return { uid: "alice", disabled: false };
+      if (email === "onboarding@example.com") return { uid: "onboarding", disabled: false };
       if (email === "disabled@example.com") return { uid: "disabled", disabled: true };
       return null;
     },
@@ -60,6 +68,12 @@ it("rejects unknown or disabled emails on password reset request", async () => {
     .send({ email: "disabled@example.com" })
     .expect(404)
     .expect(({ body }) => expect(body.error).toBe("EMAIL_NOT_FOUND"));
+
+  await request(app)
+    .post("/auth/password-reset/request")
+    .send({ email: "onboarding@example.com" })
+    .expect(200)
+    .expect(({ body }) => expect(typeof body.challengeId).toBe("string"));
 });
 
 it("completes the full OTP password reset flow and prevents token replay", async () => {
