@@ -63,6 +63,7 @@
             android:orientation="vertical">
 
             <TextView
+                android:id="@+id/provider_section_label"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="NHÀ CUNG CẤP"
@@ -71,6 +72,7 @@
                 android:textStyle="bold" />
 
             <LinearLayout
+                android:id="@+id/provider_card"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="7dp"
@@ -118,6 +120,7 @@
             </LinearLayout>
 
             <LinearLayout
+                android:id="@+id/lookup_card"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
@@ -203,13 +206,30 @@
                 android:padding="18dp"
                 android:visibility="gone">
 
-                <TextView
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="CHI TIẾT HÓA ĐƠN"
-                    android:textColor="@color/ink_muted"
-                    android:textSize="11sp"
-                    android:textStyle="bold" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="CHI TIẾT HÓA ĐƠN"
+                        android:textColor="@color/ink_muted"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/change_bill_button"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Đổi hóa đơn"
+                        android:textColor="@color/navy"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
 
                 <TextView
                     android:id="@+id/bill_reference"
@@ -285,59 +305,10 @@
                     android:textColor="@color/ink"
                     android:textSize="30sp"
                     android:textStyle="bold" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:background="@drawable/input_glass_field"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
-                    android:padding="12dp">
-
-                    <ImageView
-                        android:layout_width="36dp"
-                        android:layout_height="36dp"
-                        android:background="@drawable/circle_action_button"
-                        android:contentDescription=""
-                        android:padding="9dp"
-                        android:src="@drawable/ic_nav_wallet"
-                        app:tint="@color/navy" />
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="10dp"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Nguồn thanh toán"
-                            android:textColor="@color/ink"
-                            android:textSize="13sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
-                            android:text="Chọn tài khoản Nimbus hoặc thẻ ở bước xác nhận"
-                            android:textColor="@color/ink_muted"
-                            android:textSize="11sp" />
-                    </LinearLayout>
-
-                    <ImageView
-                        android:layout_width="18dp"
-                        android:layout_height="18dp"
-                        android:contentDescription=""
-                        android:src="@drawable/ic_chevron_right"
-                        app:tint="@color/ink_muted" />
-                </LinearLayout>
             </LinearLayout>
 
             <TextView
+                android:id="@+id/unpaid_bills_label"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="18dp"
@@ -378,5 +349,6 @@
         android:enabled="false"
         android:text="Xác nhận thanh toán"
         android:textColor="@color/white"
+        android:visibility="gone"
         app:cornerRadius="18dp" />
 </LinearLayout>

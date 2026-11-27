@@ -60,7 +60,14 @@ public final class BillPaymentFragment extends Fragment {
         binding.providerSubtitle.setText(water ? "Tổng công ty Cấp nước Sài Gòn" : other ? "Thanh toán hóa đơn tiện lợi" : "EVNHCMC · Điện lực TP. Hồ Chí Minh");
         binding.providerIcon.setImageResource(water ? R.drawable.ic_utility_water
                 : other ? R.drawable.ic_receipt : R.drawable.ic_utility_electricity);
-        binding.backButton.setOnClickListener(v -> Navigation.findNavController(v).popBackStack());
+        binding.backButton.setOnClickListener(v -> {
+            if (selectedBill != null) {
+                clearSelectedBill();
+            } else {
+                Navigation.findNavController(v).popBackStack();
+            }
+        });
+        binding.changeBillButton.setOnClickListener(v -> clearSelectedBill());
         binding.helpButton.setOnClickListener(v ->
                 com.google.android.material.snackbar.Snackbar.make(binding.getRoot(),
                         "Nhập mã khách hàng hoặc mã hóa đơn in trên thông báo cước.",
@@ -178,7 +185,11 @@ public final class BillPaymentFragment extends Fragment {
                     return;
                 }
                 selectedBill = bill;
+                binding.lookupCard.setVisibility(View.GONE);
+                binding.unpaidBillsLabel.setVisibility(View.GONE);
+                binding.billsList.setVisibility(View.GONE);
                 binding.billDetailsCard.setVisibility(View.VISIBLE);
+                binding.payButton.setVisibility(View.VISIBLE);
                 binding.billReference.setText(bill.optString("invoiceRef", bill.optString("id")));
                 binding.billAmount.setText(ReadSummaryFormatter.formatCurrency(
                         bill.optLong("amountMinor"), bill.optString("currency", "VND")));
@@ -192,6 +203,7 @@ public final class BillPaymentFragment extends Fragment {
                         ? "Thanh toán · " + ReadSummaryFormatter.formatCurrency(bill.optLong("amountMinor"), bill.optString("currency", "VND"))
                         : statusLabel(bill.optString("status")));
                 binding.statusText.setVisibility(View.GONE);
+                binding.scrollContent.post(() -> binding.scrollContent.smoothScrollTo(0, 0));
             } catch (Exception error) {
                 showStatus("Dữ liệu hóa đơn không hợp lệ. Vui lòng thử lại.");
             }
@@ -246,6 +258,17 @@ public final class BillPaymentFragment extends Fragment {
                 selectedBill.optString("currency", "VND"),
                 sourceAccountId);
         Navigation.findNavController(requireView()).navigate(R.id.transactionFlow, flowRequest.toBundle());
+    }
+
+    private void clearSelectedBill() {
+        selectedBill = null;
+        binding.billDetailsCard.setVisibility(View.GONE);
+        binding.payButton.setVisibility(View.GONE);
+        binding.payButton.setEnabled(false);
+        binding.lookupCard.setVisibility(View.VISIBLE);
+        binding.unpaidBillsLabel.setVisibility(View.VISIBLE);
+        binding.billsList.setVisibility(View.VISIBLE);
+        binding.statusText.setVisibility(View.GONE);
     }
 
     private void showStatus(String message) {
