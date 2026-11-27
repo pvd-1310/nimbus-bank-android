@@ -59,6 +59,8 @@ export class TransactionService {
         if (tx.status !== "SETTLED" && tx.status !== "DEMO_SETTLED" && tx.status !== "SUCCEEDED") continue;
         if (typeof tx.committedAt !== "number" || typeof tx.amountMinor !== "number") continue;
         if (tx.committedAt < monthStart || tx.committedAt >= monthEnd) continue;
+        // Card payments settled externally via Stripe do not debit a Nimbus checking balance.
+        if (tx.type === "BILL_PAYMENT" && (tx.paymentMethod === "STRIPE_CARD" || !tx.sourceAccountId)) continue;
         const isIn = tx.type === "TRANSFER_RECEIVED" || tx.type === "TOP_UP" || tx.type === "STRIPE_CREDIT" || tx.type === "DEMO_DEPOSIT";
         if (isIn) totalInMinor += tx.amountMinor;
         else totalOutMinor += tx.amountMinor;

@@ -15,7 +15,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.app.AlertDialog;
 import android.widget.Toast;
 
 import androidx.activity.OnBackPressedCallback;
@@ -46,8 +45,10 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.text.NumberFormat;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -95,11 +96,12 @@ public final class TransactionExecutionFragment extends Fragment {
     private String providerReference;
     private long completedAtMillis;
     private String selectedPaymentMethod = "STRIPE_CARD";
+    private boolean paymentMethodManuallySelected;
     private String selectedPaymentAccountId;
     private String selectedPaymentAccountName;
     private long selectedPaymentAvailableMinor;
     private boolean accountsLoading;
-    private final java.util.ArrayList<JSONObject> eligiblePaymentAccounts = new java.util.ArrayList<>();
+    private final ArrayList<JSONObject> eligiblePaymentAccounts = new ArrayList<>();
 
     private String customerUid;
     private boolean storedPendingCommit;
@@ -128,12 +130,16 @@ public final class TransactionExecutionFragment extends Fragment {
             providerReference = savedInstanceState.getString(STATE_PROVIDER_REFERENCE);
             completedAtMillis = savedInstanceState.getLong(STATE_COMPLETED_AT_MILLIS);
             selectedPaymentMethod = savedInstanceState.getString("payment_method", "STRIPE_CARD");
+            paymentMethodManuallySelected = savedInstanceState.getBoolean("payment_method_manual");
             selectedPaymentAccountId = savedInstanceState.getString("payment_account_id");
             selectedPaymentAccountName = savedInstanceState.getString("payment_account_name");
             selectedPaymentAvailableMinor = savedInstanceState.getLong("payment_account_available");
         }
         if (request == null) {
             request = TransactionFlowRequest.fromBundle(getArguments());
+        }
+        if (savedInstanceState == null && isBillOrOrderPayment() && request.sourceAccountId != null) {
+            selectedPaymentMethod = "NIMBUS_ACCOUNT";
         }
         if (resolvedBillId == null && request != null) {
             resolvedBillId = request.billId;
@@ -160,6 +166,7 @@ public final class TransactionExecutionFragment extends Fragment {
         outState.putString(STATE_PROVIDER_REFERENCE, providerReference);
         outState.putLong(STATE_COMPLETED_AT_MILLIS, completedAtMillis);
         outState.putString("payment_method", selectedPaymentMethod);
+        outState.putBoolean("payment_method_manual", paymentMethodManuallySelected);
         outState.putString("payment_account_id", selectedPaymentAccountId);
         outState.putString("payment_account_name", selectedPaymentAccountName);
         outState.putLong("payment_account_available", selectedPaymentAvailableMinor);
@@ -271,7 +278,17 @@ public final class TransactionExecutionFragment extends Fragment {
             binding.confirmFeeText.setTextColor(ContextCompat.getColor(requireContext(), R.color.ink_muted));
         }
 
-        populateDetailRows(binding.confirmDetailsCard, model.rows, false);
+        List<TransactionPresentation.DetailRow> displayRows = model.rows;
+        if (isBillOrOrderPayment()) {
+            displayRows = new ArrayList<>();
+            for (TransactionPresentation.DetailRow row : model.rows) {
+                if (!"Nguồn thanh toán".equals(row.label) && !"Phương thức".equals(row.label)) {
+                    displayRows.add(row);
+                }
+            }
+        }
+        binding.confirmDetailsCard.setVisibility(displayRows.isEmpty() ? View.GONE : View.VISIBLE);
+        populateDetailRows(binding.confirmDetailsCard, displayRows, false);
     }
 
     private boolean isBillOrOrderPayment() {
@@ -283,10 +300,16 @@ public final class TransactionExecutionFragment extends Fragment {
         if (accountsLoading || !isBillOrOrderPayment() || api == null) return;
         accountsLoading = true;
         renderPaymentMethodChoice();
+        updateConfirmButtonState();
         api.get("/accounts?limit=100").addOnCompleteListener(task -> {
             accountsLoading = false;
             if (binding == null || !isAdded() || !task.isSuccessful() || task.getResult() == null || !ok(task.getResult())) {
+                if (!paymentMethodManuallySelected && intentId == null && selectedPaymentAccountId == null) {
+                    selectedPaymentMethod = "STRIPE_CARD";
+                }
                 renderPaymentMethodChoice();
+                refreshConfirmationDetails();
+                updateConfirmButtonState();
                 return;
             }
             try {
@@ -301,22 +324,36 @@ public final class TransactionExecutionFragment extends Fragment {
                 }
                 String preferredId = selectedPaymentAccountId != null ? selectedPaymentAccountId
                         : (request != null ? request.sourceAccountId : null);
+                boolean matchedPreferred = false;
                 if (preferredId != null) {
                     for (JSONObject account : eligiblePaymentAccounts) {
                         if (preferredId.equals(account.optString("id"))) {
                             rememberPaymentAccount(account);
+                            matchedPreferred = true;
                             break;
                         }
                     }
                 }
-                if (eligiblePaymentAccounts.size() == 1 && selectedPaymentAccountId == null) {
-                    rememberPaymentAccount(eligiblePaymentAccounts.get(0));
+                if ((!matchedPreferred || selectedPaymentAccountId == null) && !eligiblePaymentAccounts.isEmpty()) {
+                    JSONObject fallbackAccount = eligiblePaymentAccounts.get(0);
+                    for (JSONObject account : eligiblePaymentAccounts) {
+                        long available = account.optLong("availableMinor", account.optLong("balanceMinor"));
+                        if (available >= request.amountMinor) {
+                            fallbackAccount = account;
+                            break;
+                        }
+                    }
+                    rememberPaymentAccount(fallbackAccount);
+                }
+                if (!paymentMethodManuallySelected && intentId == null && !commitPending && !completed) {
+                    selectedPaymentMethod = selectedPaymentAccountId != null ? "NIMBUS_ACCOUNT" : "STRIPE_CARD";
                 }
                 renderPaymentMethodChoice();
                 refreshConfirmationDetails();
                 updateConfirmButtonState();
             } catch (JSONException ignored) {
                 renderPaymentMethodChoice();
+                updateConfirmButtonState();
             }
         });
     }
@@ -326,23 +363,30 @@ public final class TransactionExecutionFragment extends Fragment {
         for (int i = 0; i < eligiblePaymentAccounts.size(); i++) {
             JSONObject account = eligiblePaymentAccounts.get(i);
             long available = account.optLong("availableMinor", account.optLong("balanceMinor"));
-            labels[i] = account.optString("name", "Tài khoản") + " · " + account.optString("id")
+            labels[i] = TransactionPresentation.maskAccountLabel(account.optString("id"), "Tài khoản Nimbus")
                     + " · khả dụng " + ReadSummaryFormatter.formatCurrency(available, "VND");
         }
-        new AlertDialog.Builder(requireContext()).setTitle("Chọn tài khoản Nimbus")
+        new ThemedDialogBuilder(requireContext()).setTitle("Chọn tài khoản Nimbus")
                 .setItems(labels, (dialog, which) -> setPaymentAccount(eligiblePaymentAccounts.get(which))).show();
     }
 
     private void setPaymentAccount(JSONObject account) {
         String previous = selectedPaymentAccountId;
         rememberPaymentAccount(account);
-        if (previous != null && !previous.equals(selectedPaymentAccountId)) invalidatePaymentIntent();
-        selectPaymentMethod("NIMBUS_ACCOUNT");
+        paymentMethodManuallySelected = true;
+        boolean methodChanged = !"NIMBUS_ACCOUNT".equals(selectedPaymentMethod);
+        boolean accountChanged = !Objects.equals(previous, selectedPaymentAccountId);
+        if (intentId != null && (methodChanged || accountChanged)) invalidatePaymentIntent();
+        selectedPaymentMethod = "NIMBUS_ACCOUNT";
+        renderPaymentMethodChoice();
+        refreshConfirmationDetails();
+        updateConfirmButtonState();
     }
 
     private void rememberPaymentAccount(JSONObject account) {
         selectedPaymentAccountId = account.optString("id", null);
-        selectedPaymentAccountName = account.optString("name", "Tài khoản Nimbus");
+        String name = account.optString("displayName", account.optString("name", "")).trim();
+        selectedPaymentAccountName = name.isEmpty() ? "Tài khoản thanh toán" : name;
         selectedPaymentAvailableMinor = account.optLong("availableMinor", account.optLong("balanceMinor"));
     }
 
@@ -358,6 +402,7 @@ public final class TransactionExecutionFragment extends Fragment {
 
     private void selectPaymentMethod(String method) {
         if (commitPending || completed) return;
+        paymentMethodManuallySelected = true;
         if ("NIMBUS_ACCOUNT".equals(method) && selectedPaymentAccountId == null) {
             if (eligiblePaymentAccounts.size() > 1) showPaymentAccountPicker();
             else if (eligiblePaymentAccounts.size() == 1) setPaymentAccount(eligiblePaymentAccounts.get(0));
@@ -653,6 +698,14 @@ public final class TransactionExecutionFragment extends Fragment {
                 }
                 BackendApiClient.Response res = done.getResult();
                 if (!ok(res)) {
+                    String err = errorCode(res);
+                    if (request.kind == TransactionFlowRequest.Kind.ORDER_PAYMENT
+                            && ("QUOTE_EXPIRED".equals(err) || "REQUOTE_REQUIRED".equals(err))) {
+                        resolvedBillId = null;
+                        orderRequestId = null;
+                        requestId = null;
+                        intentId = null;
+                    }
                     showToast(errorMessage(res, "Không thể khởi tạo giao dịch"));
                     return;
                 }
@@ -1109,7 +1162,9 @@ public final class TransactionExecutionFragment extends Fragment {
             commitPending = false;
             forgetPending();
             renderConfirmationStep();
-            showToast("Thanh toán không thành công.");
+            showToast(paymentSheet == null
+                    ? "Cổng thanh toán thẻ Stripe chưa được cấu hình."
+                    : "Thanh toán không thành công.");
             return;
         }
         try {
@@ -1126,7 +1181,9 @@ public final class TransactionExecutionFragment extends Fragment {
                     forgetPending();
                     dismissOtpDialog();
                     renderConfirmationStep();
-                    showToast("Thanh toán không thành công.");
+                    showToast(task.isSuccessful() && task.getResult() != null
+                            ? errorMessage(task.getResult(), "Thanh toán không thành công")
+                            : "Thanh toán không thành công.");
                     return;
                 }
                 try {
@@ -1211,7 +1268,7 @@ public final class TransactionExecutionFragment extends Fragment {
                                 commitPending = false;
                                 forgetPending();
                                 renderConfirmationStep();
-                                showToast("Thanh toán không thành công.");
+                                showToast("Cổng thanh toán thẻ Stripe chưa được cấu hình.");
                                 return;
                             }
                             dismissOtpDialog();
@@ -1357,9 +1414,7 @@ public final class TransactionExecutionFragment extends Fragment {
         }
         dismissOtpDialog();
         renderConfirmationStep();
-        boolean cardPayment = request != null && (request.kind == TransactionFlowRequest.Kind.BILL_PAYMENT
-                || request.kind == TransactionFlowRequest.Kind.ORDER_PAYMENT);
-        showToast(cardPayment ? "Thanh toán không thành công." : errorMessage(response, fallback));
+        showToast(errorMessage(response, fallback));
     }
 
     private void finishTransaction() {
@@ -1467,11 +1522,20 @@ public final class TransactionExecutionFragment extends Fragment {
     private void updateConfirmButtonState() {
         if (binding == null) return;
         boolean enabled = !busy && !completed;
-        if (isBillOrOrderPayment() && "NIMBUS_ACCOUNT".equals(selectedPaymentMethod))
-            enabled = enabled && selectedPaymentAccountId != null && selectedPaymentAvailableMinor >= request.amountMinor;
+        String buttonText = "Xác nhận & nhập OTP";
+        if (isBillOrOrderPayment() && "NIMBUS_ACCOUNT".equals(selectedPaymentMethod)) {
+            if (selectedPaymentAccountId == null) {
+                enabled = false;
+                buttonText = accountsLoading ? "Đang tải tài khoản..." : "Chọn tài khoản để tiếp tục";
+            } else if (selectedPaymentAvailableMinor < request.amountMinor) {
+                enabled = false;
+                buttonText = "Số dư tài khoản không đủ";
+            }
+        }
+        binding.btnConfirmSubmit.setText(buttonText);
         binding.btnConfirmSubmit.setEnabled(enabled);
-        binding.btnFaceStepUp.setEnabled(enabled);
-        binding.btnPendingAction.setEnabled(enabled);
+        binding.btnFaceStepUp.setEnabled(!busy && !completed);
+        binding.btnPendingAction.setEnabled(!busy && !completed);
     }
 
     private void cancelOtpTimer() {
@@ -1521,7 +1585,14 @@ public final class TransactionExecutionFragment extends Fragment {
             case "STRIPE_SANDBOX_ACCOUNT_REQUIRED": return "Tài khoản chưa sẵn sàng cho giao dịch này.";
             case "TOP_UP_REQUIRES_CARD": return "Vui lòng thanh toán bằng thẻ để nạp tiền.";
             case "CURRENCY_NOT_SUPPORTED": return "Luồng này chỉ hỗ trợ tài khoản VND.";
-            case "SETUP_REQUIRED": return "Thanh toán không thành công.";
+            case "SETUP_REQUIRED": return "Cổng thanh toán thẻ Stripe chưa được cấu hình.";
+            case "INSUFFICIENT_FUNDS": return "Số dư khả dụng trong tài khoản không đủ.";
+            case "DAILY_LIMIT_EXCEEDED": return "Giao dịch vượt hạn mức chi tiêu trong ngày.";
+            case "INVALID_ACCOUNT": return "Tài khoản thanh toán không hợp lệ hoặc chưa hoạt động.";
+            case "INVALID_PAYMENT_METHOD": return "Phương thức thanh toán không hợp lệ.";
+            case "INVALID_STATE": return "Hóa đơn đã được thanh toán hoặc không còn hiệu lực.";
+            case "QUOTE_EXPIRED": return "Báo giá đơn hàng đã hết hạn. Vui lòng quay lại tạo đơn mới.";
+            case "REQUOTE_REQUIRED": return "Giá hóa đơn hoặc đơn hàng đã thay đổi. Vui lòng kiểm tra lại.";
             case "INVALID_OTP": return "Mã xác nhận không đúng. Vui lòng kiểm tra lại.";
             case "OTP_EXPIRED": return "Mã xác nhận đã hết hạn. Tạo mã mới để tiếp tục.";
             case "OTP_LOCKED": return "Đã nhập sai quá 5 lần, giao dịch bị khóa. Quay lại và tạo yêu cầu mới.";

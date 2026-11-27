@@ -300,11 +300,24 @@ export class Payments {
         check(account.type === "CHECKING" && account.status === "ACTIVE" && account.currency === "VND" && bill.currency === "VND", "INVALID_ACCOUNT", 409);
         check(Number.isSafeInteger(account.availableMinor) && account.availableMinor >= i.amountMinor, "INSUFFICIENT_FUNDS", 409);
         const settledAt = this.bank.now();
+        const dayUtc = new Date(settledAt).toISOString().slice(0, 10);
+        const usageId = digest([sourceAccountId!, dayUtc]);
+        const [policy, usage, notifEnabled] = await Promise.all([
+          t.get("checkingDetails/" + sourceAccountId!),
+          t.get("dailyUsage/" + usageId),
+          this.bank.notifications.isTransactionEnabled(t, a.uid),
+        ]);
+        const dailyAmount = (usage?.amountMinor ?? 0) + i.amountMinor;
+        check(Number.isSafeInteger(dailyAmount), "AMOUNT_OVERFLOW");
+        if (policy?.dailyLimitMinor !== undefined) {
+          check(dailyAmount <= policy.dailyLimitMinor, "DAILY_LIMIT_EXCEEDED", 409);
+        }
         const availableMinor = account.availableMinor - i.amountMinor;
         const bookedMinor = account.bookedMinor - i.amountMinor;
         check(bookedMinor >= 0 && Number.isSafeInteger(bookedMinor), "INSUFFICIENT_FUNDS", 409);
         const p = { id, ownerUid: a.uid, purpose: "BILL_PAYMENT", billId, amountMinor: i.amountMinor, currency: i.currency,
           paymentMethod, sourceAccountId, status: "SUCCEEDED", gateway: "NIMBUS", authorizationDigest: i.digest, createdAt: settledAt, updatedAt: settledAt };
+        t.set("dailyUsage/" + usageId, { accountId: sourceAccountId, amountMinor: dailyAmount, dayUtc });
         t.set("accounts/" + sourceAccountId, { ...account, availableMinor, bookedMinor, balanceMinor: bookedMinor, version: (account.version ?? 0) + 1 });
         t.set("payments/" + id, p);
         t.set("transactions/stripe_" + id, { ownerUid: a.uid, actorUid: a.uid, requestId, type: "BILL_PAYMENT", paymentId: id, billId, sourceAccountId, paymentMethod, amountMinor: i.amountMinor, currency: i.currency, status: "SETTLED", balanceAfterMinor: bookedMinor, committedAt: settledAt });
@@ -315,6 +328,14 @@ export class Payments {
         t.set("billPaymentLocks/" + billId, { paymentId: id });
         t.set("outbox/" + id, { paymentId: id, billId, ownerUid: a.uid, status: "PENDING", attempts: 0, createdAt: settledAt });
         this.bank.audit(t, a, "NIMBUS_PAYMENT_SETTLED", id, requestId);
+        this.bank.notifications.emit(t, {
+          id: `pay_${id}`,
+          ownerUid: a.uid,
+          type: "TRANSACTION",
+          title: "Thanh toán hóa đơn thành công",
+          body: `-${i.amountMinor.toLocaleString("vi-VN")} ₫ cho hóa đơn ${bill?.provider ?? billId}. Số dư mới: ${bookedMinor.toLocaleString("vi-VN")} ₫`,
+          refId: id,
+        }, notifEnabled);
         return { ...p, _nimbusSettled: true };
       }
       const p = {

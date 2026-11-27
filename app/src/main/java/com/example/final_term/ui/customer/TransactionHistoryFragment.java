@@ -293,10 +293,13 @@ public final class TransactionHistoryFragment extends Fragment {
                         java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM,
                                 java.text.DateFormat.SHORT, java.util.Locale.forLanguageTag("vi-VN"))
                                 .format(tx.createdAt.toDate()));
-                args.putString("account", "Tài khoản ngân hàng");
+                String sourceAccount = !tx.sourceAccountId.isEmpty() ? tx.sourceAccountId
+                        : ("STRIPE_CARD".equals(tx.paymentMethod) ? "" : tx.accountId);
+                args.putString("account", sourceAccount.isEmpty() && "STRIPE_CARD".equals(tx.paymentMethod)
+                        ? "Thẻ quốc tế (Stripe)" : "");
                 if (!tx.paymentMethod.isEmpty()) args.putString("paymentMethod", "NIMBUS_ACCOUNT".equals(tx.paymentMethod)
                         ? "Tài khoản Nimbus" : "Thẻ Stripe");
-                if (!tx.sourceAccountId.isEmpty()) args.putString("sourceAccount", tx.sourceAccountId);
+                if (!sourceAccount.isEmpty()) args.putString("sourceAccount", sourceAccount);
                 args.putString("bank", "DEMO_EXTERNAL_TRANSFER".equals(tx.type)
                         ? com.example.final_term.data.ExternalBankCatalog.nameForCode(tx.destinationBankCode) : "");
                 args.putString("balance", tx.balanceAfterMinor == null ? "" :

@@ -247,3 +247,78 @@ it("settles a VND card top-up from a signed webhook without an undefined bill fi
     type: "TOP_UP", amountMinor: 20000, status: "SETTLED",
   });
 });
+
+it("settles a bill or utility order via NIMBUS_ACCOUNT without Stripe, enforces daily limit, emits notification, and counts in summary", async () => {
+  const { api, bank, store, actor } = await fixture(undefined);
+  const auth = { Authorization: "Bearer valid" };
+  await store.run(async (t) => {
+    t.set("accounts/checking", {
+      ownerUid: actor.uid, type: "CHECKING", currency: "VND", status: "ACTIVE",
+      availableMinor: 120000, bookedMinor: 120000, version: 1,
+    });
+    t.set("checkingDetails/checking", { accountId: "checking", dailyLimitMinor: 60000 });
+  });
+
+  const body = { billId: "demo", requestId: "nimbus-pay-1", paymentMethod: "NIMBUS_ACCOUNT", sourceAccountId: "checking" };
+  const prepared = await api.post("/payments/intents").set(auth).send(body).expect(200);
+  const otp = await bank.security.challenge(actor, prepared.body.intentId);
+  await bank.security.verify(actor, prepared.body.intentId, otp.challengeId, otp.code);
+
+  const committed = await api.post("/payments").set(auth).send(body).expect(200);
+  expect(committed.body).toMatchObject({
+    paymentId: prepared.body.intentId,
+    gateway: "NIMBUS",
+    paymentMethod: "NIMBUS_ACCOUNT",
+    sourceAccountId: "checking",
+    status: "SUCCEEDED",
+  });
+  const retry = await api.post("/payments").set(auth).send(body).expect(200);
+  expect(retry.body).toMatchObject({ paymentId: prepared.body.intentId, gateway: "NIMBUS", status: "SUCCEEDED" });
+
+  expect(await store.run((t) => t.get("accounts/checking"))).toMatchObject({
+    availableMinor: 70000, bookedMinor: 70000, balanceMinor: 70000, version: 2,
+  });
+  expect(await store.run((t) => t.get("bills/demo"))).toMatchObject({ status: "PAID", paymentId: prepared.body.intentId });
+  expect(await store.run((t) => t.get("orders/demo"))).toMatchObject({ fulfillmentStatus: "DEMO_FULFILLED" });
+  expect(await store.run((t) => t.get("notifications/pay_" + prepared.body.intentId))).toMatchObject({
+    ownerUid: actor.uid, type: "TRANSACTION", title: "Thanh toán hóa đơn thành công",
+  });
+
+  const summary = await api.get("/transactions/summary").set(auth).expect(200);
+  expect(summary.body.totalOutMinor).toBe(50000);
+
+  // Second bill (20000) pushes daily usage to 70000 > dailyLimitMinor 60000
+  const nextBody = { billId: "next", requestId: "nimbus-pay-2", paymentMethod: "NIMBUS_ACCOUNT", sourceAccountId: "checking" };
+  const nextPrep = await api.post("/payments/intents").set(auth).send(nextBody).expect(200);
+  const nextOtp = await bank.security.challenge(actor, nextPrep.body.intentId);
+  await bank.security.verify(actor, nextPrep.body.intentId, nextOtp.challengeId, nextOtp.code);
+  const overLimit = await api.post("/payments").set(auth).send(nextBody).expect(409);
+  expect(overLimit.body.error).toBe("DAILY_LIMIT_EXCEEDED");
+  expect(await store.run((t) => t.get("accounts/checking"))).toMatchObject({ availableMinor: 70000 });
+  expect(await store.run((t) => t.get("bills/next"))).toMatchObject({ status: "UNPAID" });
+});
+
+it("excludes external STRIPE_CARD bill payments from checking account summary totalOutMinor", async () => {
+  const stripe = new Stripe("sk_test_dummy");
+  const signingSecret = "whsec_summary_test";
+  mockStripeCustomers(stripe);
+  const intent = { id: "pi_card_only", client_secret: "pi_card_only_secret", customer: "cus_demo1", livemode: false } as Stripe.PaymentIntent;
+  vi.spyOn(stripe.paymentIntents, "create").mockResolvedValue(intent);
+  const { api, bank, actor } = await fixture(new StripeGateway(stripe, signingSecret));
+  const auth = { Authorization: "Bearer valid" };
+  const body = { billId: "demo", requestId: "card-summary-1", paymentMethod: "STRIPE_CARD" };
+  const prepared = await api.post("/payments/intents").set(auth).send(body).expect(200);
+  const otp = await bank.security.challenge(actor, prepared.body.intentId);
+  await bank.security.verify(actor, prepared.body.intentId, otp.challengeId, otp.code);
+  await api.post("/payments").set(auth).send(body).expect(200);
+
+  const payload = JSON.stringify({
+    id: "evt_card_summary", type: "payment_intent.succeeded", livemode: false,
+    data: { object: { id: intent.id, amount: 50000, currency: "vnd", livemode: false, metadata: { paymentId: prepared.body.intentId, purpose: "BILL_PAYMENT" } } },
+  });
+  const signature = stripe.webhooks.generateTestHeaderString({ payload, secret: signingSecret });
+  await api.post("/webhooks/stripe").set("Stripe-Signature", signature).type("json").send(payload).expect(200);
+
+  const summary = await api.get("/transactions/summary").set(auth).expect(200);
+  expect(summary.body.totalOutMinor).toBe(0);
+});
