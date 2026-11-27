@@ -1289,7 +1289,6 @@ public final class AccountListFragment extends Fragment {
                 }
         );
         addInfoRow(panel, "Hết hạn", stripeCardVisible ? expiry : "••/••••");
-        addInfoRow(panel, "Phạm vi", "Nạp tiền & Thanh toán tiện ích");
         return panel;
     }
 
