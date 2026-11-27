@@ -111,7 +111,8 @@ public final class FirestoreReadRepository {
                     document.getString("type"), document.getString("currency"),
                     longValue(document, "balanceMinor"), document.getString("status"),
                     document.getString("ownerUid"), document.getLong("availableMinor"),
-                    Boolean.TRUE.equals(document.getBoolean("demo"))));
+                    Boolean.TRUE.equals(document.getBoolean("demo")),
+                    document.getString("accountNumber")));
         }
         return result;
     }

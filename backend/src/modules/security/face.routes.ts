@@ -46,6 +46,16 @@ export function registerFaceStepUp(app: Express, d: AppDependencies) {
   app.post("/me/face/revoke", async (_req, res) => {
     res.json(await d.evidence.revokeFaceTemplate(res.locals.actor));
   });
+  app.post("/me/face/verify", limitUploads, rawPhoto, async (req, res) => {
+    const face = d.bank.options.face;
+    check(face, "FACE_SETUP_REQUIRED", 503);
+    const template = await d.bank.store.run((t) =>
+      face.activeTemplate(t, res.locals.actor.uid, d.bank.now()),
+    );
+    check(template, "FACE_NOT_ENROLLED", 409);
+    await face.matchOwner(template, ...photo(req));
+    res.json({ verified: true });
+  });
   app.post("/intents/:id/face", limitUploads, rawPhoto, async (req, res) => {
     res.json(
       await d.bank.security.stepUp(

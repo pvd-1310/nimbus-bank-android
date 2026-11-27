@@ -1,4 +1,5 @@
 import { runtime } from "../infrastructure/runtime.js";
+import { generateAccountNumber } from "../shared/crypto.js";
 import { check } from "../shared/errors.js";
 import { normalizeSearchText } from "../shared/search.js";
 import { preserveExisting, preserveSeedAccount, seedClaims } from "./seed-preserve.js";
@@ -210,6 +211,7 @@ try {
           : undefined;
         const account = preserveSeedAccount(old, {
           ...data,
+          accountNumber: old?.accountNumber ?? generateAccountNumber(id),
           status: "ACTIVE",
           version: 0,
           demo: true,

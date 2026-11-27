@@ -157,7 +157,7 @@ public class AccountDetailFragment extends Fragment {
                 binding.checkingLimitBox.setVisibility(View.VISIBLE);
                 binding.checkingLimitBar.setProgress(0.64f);
                 binding.genericDetails.setVisibility(View.VISIBLE);
-                bindCheckingDetails("Tài khoản thanh toán Platinum", account.id, currentCurrency,
+                bindCheckingDetails("Tài khoản thanh toán Platinum", account.displayAccountNumber(), currentCurrency,
                         "Hội sở chính", account.status);
                 var current = binding;
                 ((FinalTermApplication) requireActivity().getApplication()).getAppContainer().getBackendApiClient()
@@ -179,7 +179,7 @@ public class AccountDetailFragment extends Fragment {
                                 String displayName = lim.optString("displayName", "Tài khoản thanh toán");
                                 String branchName = lim.optString("branchName", "Hội sở chính");
                                 binding.heroMeta.setText(displayName);
-                                bindCheckingDetails(displayName, account.id, currentCurrency, branchName, account.status);
+                                bindCheckingDetails(displayName, account.displayAccountNumber(), currentCurrency, branchName, account.status);
                             } catch (Exception ignored) { }
                         });
             }

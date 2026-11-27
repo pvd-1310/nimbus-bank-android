@@ -42,6 +42,7 @@ import com.example.final_term.databinding.FragmentAccountListBinding;
 import com.example.final_term.ui.common.SignatureBarChartView;
 import com.google.android.material.button.MaterialButton;
 import com.example.final_term.ui.common.ThemedDialogBuilder;
+import com.example.final_term.ui.ekyc.FaceScanDialogFragment;
 import com.stripe.android.PaymentConfiguration;
 import com.stripe.android.paymentsheet.PaymentSheet;
 import com.stripe.android.paymentsheet.PaymentSheetResult;
@@ -49,7 +50,11 @@ import com.stripe.android.paymentsheet.PaymentSheetResult;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.nio.file.Files;
 import java.text.NumberFormat;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -92,6 +97,12 @@ public final class AccountListFragment extends Fragment {
     private String selectedCardAccountId;
     private int selectedCardSlot = 0;
     private boolean balanceVisible = false;
+    private boolean accountNumberVisible = false;
+    private boolean stripeCardVisible = false;
+    private boolean accountNumberFaceBusy = false;
+    private enum FaceRevealTarget { NONE, NAPAS_ACCOUNT, STRIPE_CARD }
+    private FaceRevealTarget pendingFaceReveal = FaceRevealTarget.NONE;
+    private static final ExecutorService FACE_IO = Executors.newSingleThreadExecutor();
     private PaymentSheet stripeSetupSheet;
     private boolean stripeCardsLoading;
     private boolean stripeCardsLoaded;
@@ -117,6 +128,36 @@ public final class AccountListFragment extends Fragment {
             PaymentConfiguration.init(requireContext(), BuildConfig.STRIPE_PUBLISHABLE_KEY);
             stripeSetupSheet = new PaymentSheet.Builder(this::onStripeSetupResult).build(this);
         }
+        getParentFragmentManager().setFragmentResultListener(FaceScanDialogFragment.RESULT_KEY,
+                getViewLifecycleOwner(), (requestKey, result) -> {
+                    String path = result.getString(FaceScanDialogFragment.RESULT_PATH);
+                    String error = result.getString(FaceScanDialogFragment.RESULT_ERROR);
+                    if (path != null) {
+                        accountNumberFaceBusy = true;
+                        FACE_IO.execute(() -> {
+                            File file = new File(path);
+                            try {
+                                byte[] bytes = Files.readAllBytes(file.toPath());
+                                if (getActivity() != null) {
+                                    getActivity().runOnUiThread(() -> verifyFaceForAccountNumber(bytes));
+                                }
+                            } catch (Exception e) {
+                                if (getActivity() != null) {
+                                    getActivity().runOnUiThread(() -> {
+                                        accountNumberFaceBusy = false;
+                                        if (binding != null) {
+                                            Toast.makeText(requireContext(), "Không đọc được ảnh khuôn mặt.", Toast.LENGTH_SHORT).show();
+                                        }
+                                    });
+                                }
+                            } finally {
+                                file.delete();
+                            }
+                        });
+                    } else if (error != null && !error.trim().isEmpty()) {
+                        Toast.makeText(requireContext(), error, Toast.LENGTH_SHORT).show();
+                    }
+                });
 
         Bundle args = getArguments();
         if (args != null && args.containsKey("activeNavItem")) {
@@ -177,6 +218,10 @@ public final class AccountListFragment extends Fragment {
                             cardRequestsFailed.clear();
                             selectedCardAccountId = null;
                             selectedCardSlot = 0;
+                            accountNumberVisible = false;
+                            stripeCardVisible = false;
+                            accountNumberFaceBusy = false;
+                            pendingFaceReveal = FaceRevealTarget.NONE;
                             stripeCards.clear();
                             stripeCardsLoading = false;
                             stripeCardsLoaded = false;
@@ -469,8 +514,7 @@ public final class AccountListFragment extends Fragment {
     }
 
     private View createNapasCard(ReadModels.AccountSummary account) {
-        String rawId = account.id == null ? "" : account.id;
-        String last4 = rawId.length() >= 4 ? rawId.substring(rawId.length() - 4) : rawId;
+        String last4 = account.displayLast4();
         return buildPaymentCardFrame(
                 "NAPAS",
                 last4,
@@ -689,8 +733,82 @@ public final class AccountListFragment extends Fragment {
         panel.addView(amountText);
 
         addInfoRow(panel, "Tài khoản liên kết", "Thanh toán · " + account.currency);
-        addInfoRow(panel, "Số tài khoản", maskAccountId(account.id));
+        String acctText = accountNumberVisible
+                ? maskAccountId(account.displayAccountNumber())
+                : ("••••  ••••  " + account.displayLast4());
+        addRevealableInfoRow(
+                panel,
+                "Số tài khoản",
+                acctText,
+                accountNumberVisible,
+                accountNumberVisible ? "Ẩn số tài khoản" : "Xác thực khuôn mặt để xem số tài khoản",
+                () -> {
+                    if (accountNumberVisible) {
+                        accountNumberVisible = false;
+                        renderAll();
+                    } else if (!accountNumberFaceBusy) {
+                        pendingFaceReveal = FaceRevealTarget.NAPAS_ACCOUNT;
+                        FaceScanDialogFragment.open(this);
+                    }
+                }
+        );
         return panel;
+    }
+
+    private void addRevealableInfoRow(LinearLayout parent, String label, String value,
+                                      boolean visible, String contentDesc, Runnable onToggle) {
+        LinearLayout row = new LinearLayout(requireContext());
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(4), 0, dp(4));
+        row.addView(walletText(label, 12, R.color.ink_muted, false),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        row.addView(walletText(value, 13, R.color.ink, true));
+
+        ImageButton eye = new ImageButton(requireContext());
+        eye.setImageResource(visible ? R.drawable.ic_eye : R.drawable.ic_eye_slash);
+        eye.setImageTintList(ContextCompat.getColorStateList(requireContext(), R.color.navy));
+        eye.setBackground(null);
+        eye.setContentDescription(contentDesc);
+        eye.setPadding(dp(6), dp(4), 0, dp(4));
+        eye.setOnClickListener(v -> onToggle.run());
+        row.addView(eye, new LinearLayout.LayoutParams(dp(28), dp(26)));
+        parent.addView(row);
+    }
+
+    private void verifyFaceForAccountNumber(byte[] jpeg) {
+        if (binding == null) {
+            accountNumberFaceBusy = false;
+            return;
+        }
+        var current = binding;
+        String requestedUid = uid;
+        Toast.makeText(requireContext(), "Đang xác thực khuôn mặt…", Toast.LENGTH_SHORT).show();
+        application.getAppContainer().getBackendApiClient().verifyMyFace(jpeg).addOnCompleteListener(task -> {
+            accountNumberFaceBusy = false;
+            if (binding != current || !java.util.Objects.equals(uid, requestedUid)) return;
+            if (task.isSuccessful() && task.getResult() != null && task.getResult().statusCode == 200) {
+                if (pendingFaceReveal == FaceRevealTarget.STRIPE_CARD) {
+                    stripeCardVisible = true;
+                } else {
+                    accountNumberVisible = true;
+                }
+                pendingFaceReveal = FaceRevealTarget.NONE;
+                Toast.makeText(requireContext(), "Xác thực khuôn mặt thành công.", Toast.LENGTH_SHORT).show();
+                renderAll();
+                return;
+            }
+            pendingFaceReveal = FaceRevealTarget.NONE;
+            String msg = "Không thể xác thực khuôn mặt.";
+            try {
+                if (task.isSuccessful() && task.getResult() != null) {
+                    String code = new JSONObject(task.getResult().body).optString("error", "");
+                    if ("FACE_NOT_ENROLLED".equals(code)) msg = "Bạn chưa đăng ký khuôn mặt eKYC.";
+                    else if ("FACE_MISMATCH".equals(code)) msg = "Khuôn mặt không khớp. Vui lòng thử lại.";
+                }
+            } catch (Exception ignored) { }
+            Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show();
+        });
     }
 
     private View createStripeInfoPanel(JSONObject cardData) {
@@ -702,10 +820,35 @@ public final class AccountListFragment extends Fragment {
         String expiry = (expMonth > 0 && expYear > 0)
                 ? String.format(Locale.US, "%02d/%d", expMonth, expYear) : "—";
         addInfoRow(panel, "Cổng thanh toán", "Stripe · " + brand);
-        addInfoRow(panel, "Số thẻ", last4.isEmpty() ? "—" : "••••  ••••  ••••  " + last4);
-        addInfoRow(panel, "Hết hạn", expiry);
+        String cardNumberText = last4.isEmpty() ? "—"
+                : (stripeCardVisible ? formatSandboxPan(brand, last4) : "••••  ••••  ••••  " + last4);
+        addRevealableInfoRow(
+                panel,
+                "Số thẻ",
+                cardNumberText,
+                stripeCardVisible,
+                stripeCardVisible ? "Ẩn số thẻ" : "Xác thực khuôn mặt để xem số thẻ",
+                () -> {
+                    if (stripeCardVisible) {
+                        stripeCardVisible = false;
+                        renderAll();
+                    } else if (!accountNumberFaceBusy) {
+                        pendingFaceReveal = FaceRevealTarget.STRIPE_CARD;
+                        FaceScanDialogFragment.open(this);
+                    }
+                }
+        );
+        addInfoRow(panel, "Hết hạn", stripeCardVisible ? expiry : "••/••••");
         addInfoRow(panel, "Phạm vi", "Nạp tiền & Thanh toán tiện ích");
         return panel;
+    }
+
+    private String formatSandboxPan(String brand, String last4) {
+        String prefix = "4242  4242  4242  ";
+        if ("MASTERCARD".equalsIgnoreCase(brand)) prefix = "5555  5555  5555  ";
+        else if ("AMEX".equalsIgnoreCase(brand)) prefix = "3782  8224  6310  ";
+        else if (!"VISA".equalsIgnoreCase(brand)) prefix = "4000  0000  0000  ";
+        return prefix + last4;
     }
 
     private View createStripeUnlinkedInfoPanel() {
@@ -732,8 +875,12 @@ public final class AccountListFragment extends Fragment {
 
     private String maskAccountId(String id) {
         if (id == null || id.isEmpty()) return "—";
-        if (id.length() <= 4) return id;
-        return "••••  " + id.substring(id.length() - 4);
+        String digits = id.replaceAll("\\s+", "");
+        if (digits.matches("\\d{10,16}")) {
+            return digits.replaceAll("(.{4})(?=.)", "$1 ");
+        }
+        if (digits.length() <= 4) return digits;
+        return "••••  " + digits.substring(digits.length() - 4);
     }
 
     private View createStripeCardActions(ReadModels.AccountSummary checkingAccount, JSONObject cardData) {

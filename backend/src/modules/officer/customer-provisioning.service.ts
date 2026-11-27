@@ -1,6 +1,6 @@
 import { Banking } from "../../core/banking.js";
 import type { Doc } from "../../core/store.js";
-import { digest } from "../../shared/crypto.js";
+import { digest, generateAccountNumber } from "../../shared/crypto.js";
 import { check, Fault, key } from "../../shared/errors.js";
 import { releaseContactPhone, reserveContactPhone } from "../profile/contact-phone-reservations.js";
 import { normalizeSearchText, phoneSearchTokens } from "../../shared/search.js";
@@ -134,6 +134,7 @@ export async function provisionCustomer(
     });
     t.set("accounts/" + accountId, {
       accountId,
+      accountNumber: generateAccountNumber(accountId),
       ownerUid: uid,
       type: "CHECKING",
       ownerNameSearch: normalizeSearchText(String(input.fullName)),

@@ -16,6 +16,7 @@ public final class ReadModels {
         public final String ownerUid;
         public final Long availableMinor;
         public final boolean demo;
+        public final String accountNumber;
 
         public AccountSummary(@NonNull String id, String type, String currency, long balanceMinor, String status) {
             this(id, type, currency, balanceMinor, status, "");
@@ -33,6 +34,12 @@ public final class ReadModels {
 
         public AccountSummary(@NonNull String id, String type, String currency, long balanceMinor,
                               String status, String ownerUid, Long availableMinor, boolean demo) {
+            this(id, type, currency, balanceMinor, status, ownerUid, availableMinor, demo, "");
+        }
+
+        public AccountSummary(@NonNull String id, String type, String currency, long balanceMinor,
+                              String status, String ownerUid, Long availableMinor, boolean demo,
+                              String accountNumber) {
             this.id = id;
             this.type = type == null ? "UNKNOWN" : type;
             this.currency = currency == null ? "" : currency;
@@ -41,6 +48,17 @@ public final class ReadModels {
             this.ownerUid = ownerUid == null ? "" : ownerUid;
             this.availableMinor = availableMinor;
             this.demo = demo;
+            this.accountNumber = accountNumber == null ? "" : accountNumber.trim();
+        }
+
+        public String displayAccountNumber() {
+            return !accountNumber.isEmpty() ? accountNumber : id;
+        }
+
+        public String displayLast4() {
+            String value = displayAccountNumber();
+            if (value == null || value.isEmpty()) return "";
+            return value.length() >= 4 ? value.substring(value.length() - 4) : value;
         }
     }
 
