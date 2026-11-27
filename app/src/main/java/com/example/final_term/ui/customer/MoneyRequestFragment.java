@@ -23,15 +23,15 @@ import com.example.final_term.data.ReadModels.AccountSummary;
 import com.example.final_term.databinding.FragmentMoneyRequestBinding;
 import com.example.final_term.ui.transaction.TransactionFlowRequest;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
 public final class MoneyRequestFragment extends Fragment {
     private static final String DEPOSIT = "DEPOSIT";
     private static final String WITHDRAWAL = "WITHDRAWAL";
-    private final List<String> accountIds = new ArrayList<>();
     private FragmentMoneyRequestBinding binding;
+    private TransactionAccountPicker accountPicker;
+    private String selectedAccountId;
     private LiveData<ReadModelResult<List<AccountSummary>>> accounts;
     private String uid;
 
@@ -44,13 +44,18 @@ public final class MoneyRequestFragment extends Fragment {
     @Override public void onViewCreated(@NonNull View view, @Nullable Bundle state) {
         super.onViewCreated(view, state);
         AppContainer app = ((FinalTermApplication) requireActivity().getApplication()).getAppContainer();
+        if (state != null) selectedAccountId = state.getString("selectedAccountId");
+        accountPicker = new TransactionAccountPicker(binding.transactionAccount, binding.amountInput,
+                binding.amountWarning, selectedAccountId, this::updateControls);
         String operation = getArguments() == null ? DEPOSIT : getArguments().getString("operation", DEPOSIT);
         binding.operationInput.setAdapter(adapter(List.of("Nạp tiền", "Rút tiền")));
         binding.operationInput.setSelection(WITHDRAWAL.equals(operation) ? 1 : 0);
 
         binding.backButton.setOnClickListener(v -> androidx.navigation.Navigation.findNavController(v).navigateUp());
         binding.helpButton.setOnClickListener(v -> {
-            binding.statusText.setText("Số dư thay đổi sau khi giao dịch hoàn tất.");
+            binding.statusText.setText(withdrawalSelected()
+                    ? "Số dư giảm khi giao dịch rút mô phỏng hoàn tất."
+                    : "Tiền được ghi có sau khi thanh toán thẻ hoàn tất.");
         });
 
         binding.tabDeposit.setOnClickListener(v -> {
@@ -73,73 +78,45 @@ public final class MoneyRequestFragment extends Fragment {
             }
             @Override public void onNothingSelected(AdapterView<?> parent) { }
         });
-        binding.statusText.setText("Đang tải tài khoản…");
         updateOperationUi();
         binding.submitButton.setOnClickListener(v -> {
-            boolean withdrawal = binding.operationInput.getSelectedItemPosition() == 1;
-            int index = binding.accountInput.getSelectedItemPosition();
-            if (index < 0 || index >= accountIds.size()) {
-                binding.statusText.setText("Chọn tài khoản thanh toán khả dụng.");
-                return;
-            }
+            AccountSummary account = accountPicker.selectedAccount();
+            if (account == null) return;
             String amount = binding.amountInput.getText().toString().trim();
             if (!Phase2Presentation.validRequestAmount(amount)) {
                 binding.amountInput.setError("Nhập số tiền VND nguyên hợp lệ, lớn hơn 0.");
                 return;
             }
             long amountMinor = Long.parseLong(amount);
-            String accountId = accountIds.get(index);
-            TransactionFlowRequest flowRequest = withdrawal
-                    ? TransactionFlowRequest.withdrawal(accountId, amountMinor, "VND")
-                    : TransactionFlowRequest.deposit(accountId, amountMinor, "VND");
-            Navigation.findNavController(v).navigate(R.id.transactionFlow, flowRequest.toBundle());
+            if (accountPicker.exceedsAvailable(amountMinor)) return;
+            TransactionFlowRequest flowRequest = withdrawalSelected()
+                    ? TransactionFlowRequest.withdrawal(account.id, amountMinor, "VND")
+                    : TransactionFlowRequest.deposit(account.id, amountMinor, "VND");
+            Navigation.findNavController(v).navigate(R.id.transactionFlow,
+                    flowRequest.withSourceLabel(accountPicker.label(account)).toBundle());
         });
         updateControls();
         app.getAuthRepository().observeAuthState().observe(getViewLifecycleOwner(), auth -> {
             String currentUid = auth != null && auth.getStatus() == AuthState.Status.SIGNED_IN
                     && auth.getUser() != null && auth.getUser().getRole() == UserRole.CUSTOMER
                     ? auth.getUser().getUid() : null;
-            if (uid != null && Objects.equals(uid, currentUid)) return;
+            if (uid != null && Objects.equals(uid, currentUid)) {
+                accountPicker.setOwnerName(auth.getUser().getFullName());
+                return;
+            }
             if (accounts != null) accounts.removeObservers(getViewLifecycleOwner());
+            if (uid != null) accountPicker.clear();
             uid = currentUid;
-            accountIds.clear();
-            binding.accountInput.setAdapter(null);
             updateControls();
             if (uid == null) {
                 binding.statusText.setText("Vui lòng đăng nhập bằng tài khoản khách hàng.");
                 return;
             }
-            binding.statusText.setText("Đang tải tài khoản…");
+            accountPicker.setOwnerName(auth.getUser().getFullName());
+            updateOperationStatus();
             accounts = app.getReadRepository().observeAccounts(uid);
-            accounts.observe(getViewLifecycleOwner(), this::renderAccounts);
+            accounts.observe(getViewLifecycleOwner(), accountPicker::setAccounts);
         });
-    }
-
-    private void renderAccounts(ReadModelResult<List<AccountSummary>> result) {
-        int previousIndex = binding.accountInput.getSelectedItemPosition();
-        String previousId = previousIndex >= 0 && previousIndex < accountIds.size()
-                ? accountIds.get(previousIndex) : null;
-        accountIds.clear();
-        List<String> labels = new ArrayList<>();
-        if (result.getStatus() == ReadModelResult.Status.SUCCESS && result.getData() != null) {
-            for (AccountSummary account : result.getData()) {
-                if ("CHECKING".equalsIgnoreCase(account.type) && "ACTIVE".equalsIgnoreCase(account.status)
-                        && "VND".equalsIgnoreCase(account.currency)) {
-                    accountIds.add(account.id);
-                    labels.add(account.displayAccountNumber() + " · VND");
-                }
-            }
-        }
-        binding.accountInput.setAdapter(adapter(labels.isEmpty()
-                ? List.of("Không có tài khoản thanh toán khả dụng") : labels));
-        int newIndex = accountIds.indexOf(previousId);
-        if (newIndex >= 0) binding.accountInput.setSelection(newIndex);
-        if ("Đang tải tài khoản…".contentEquals(binding.statusText.getText())) {
-            binding.statusText.setText(accountIds.isEmpty()
-                    ? "Chưa có tài khoản thanh toán khả dụng."
-                    : "Nạp tiền được ghi có sau khi thanh toán hoàn tất.");
-        }
-        updateControls();
     }
 
     private ArrayAdapter<String> adapter(List<String> labels) {
@@ -149,12 +126,8 @@ public final class MoneyRequestFragment extends Fragment {
     }
 
     private void updateControls() {
-        binding.operationInput.setEnabled(true);
-        binding.accountInput.setEnabled(true);
-        binding.amountInput.setEnabled(true);
-        binding.submitButton.setEnabled(uid != null && (binding.operationInput.getSelectedItemPosition() == 0 || !accountIds.isEmpty()));
-        boolean withdrawal = binding.operationInput.getSelectedItemPosition() == 1;
-        binding.submitButton.setText(withdrawal ? "Rút tiền" : "Nạp tiền");
+        binding.submitButton.setEnabled(uid != null && accountPicker.selectedAccount() != null);
+        binding.submitButton.setText(withdrawalSelected() ? "Rút tiền" : "Nạp tiền");
     }
 
     private void selectOperation(int position) {
@@ -164,12 +137,21 @@ public final class MoneyRequestFragment extends Fragment {
 
     private void updateOperationUi() {
         int position = binding.operationInput.getSelectedItemPosition() == 1 ? 1 : 0;
-        boolean withdrawal = Phase2Presentation.usesRequestForm(position == 1 ? WITHDRAWAL : DEPOSIT);
+        boolean withdrawal = position == 1;
         binding.titleText.setText(operationLabel(withdrawal ? WITHDRAWAL : DEPOSIT));
         updateTabStyles(position);
-        ((View) binding.accountInput.getParent()).setVisibility(View.VISIBLE);
-        ((View) binding.amountInput.getParent()).setVisibility(View.VISIBLE);
-        updateControls();
+        accountPicker.setRole(!withdrawal);
+        updateOperationStatus();
+    }
+
+    private boolean withdrawalSelected() {
+        return binding.operationInput.getSelectedItemPosition() == 1;
+    }
+
+    private void updateOperationStatus() {
+        if (uid != null) {
+            binding.statusText.setText(withdrawalSelected() ? "Giao dịch rút tiền mô phỏng." : "");
+        }
     }
 
     private static String operationLabel(String type) {
@@ -199,11 +181,18 @@ public final class MoneyRequestFragment extends Fragment {
     }
 
 
+    @Override public void onSaveInstanceState(@NonNull Bundle state) {
+        super.onSaveInstanceState(state);
+        state.putString("selectedAccountId", accountPicker == null ? selectedAccountId : accountPicker.selectedId());
+    }
+
     @Override public void onDestroyView() {
+        selectedAccountId = accountPicker.selectedId();
+        accountPicker.dismiss();
+        accountPicker = null;
         binding = null;
         accounts = null;
         uid = null;
-        accountIds.clear();
         super.onDestroyView();
     }
 }

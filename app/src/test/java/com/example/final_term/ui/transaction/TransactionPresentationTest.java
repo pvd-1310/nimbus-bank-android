@@ -44,7 +44,23 @@ public class TransactionPresentationTest {
         TransactionPresentation.ConfirmationModel wdrModel = TransactionPresentation.buildConfirmation(wdr, 0L);
         assertEquals("Xác nhận rút tiền", wdrModel.headerTitle);
         assertEquals("Tổng tiền rút", wdrModel.heroLabel);
-        assertEquals(3, wdrModel.rows.size()); // source account, destination(cash), method
+        assertEquals(3, wdrModel.rows.size());
+        assertEquals("Rút tiền mô phỏng", wdrModel.rows.get(1).value);
+    }
+
+    @Test
+    public void accountLabelInConfirmationMatchesPickerWhileRequestKeepsTheInternalId() {
+        String depositLabel = "Tài khoản thanh toán · 123456789012";
+        String withdrawalLabel = "123456789012 · Nguyễn Văn An";
+        var deposit = TransactionFlowRequest.deposit("internal_id", 500_000L, "VND").withSourceLabel(depositLabel);
+        var withdrawal = TransactionFlowRequest.withdrawal("internal_id", 500_000L, "VND").withSourceLabel(withdrawalLabel);
+
+        assertEquals("internal_id", deposit.sourceAccountId);
+        assertEquals("internal_id", withdrawal.sourceAccountId);
+        assertEquals("Tài khoản nhận", TransactionPresentation.buildConfirmation(deposit, 0L).rows.get(1).label);
+        assertEquals(depositLabel, TransactionPresentation.buildConfirmation(deposit, 0L).rows.get(1).value);
+        assertEquals("Tài khoản nguồn", TransactionPresentation.buildConfirmation(withdrawal, 0L).rows.get(0).label);
+        assertEquals(withdrawalLabel, TransactionPresentation.buildConfirmation(withdrawal, 0L).rows.get(0).value);
     }
 
     @Test

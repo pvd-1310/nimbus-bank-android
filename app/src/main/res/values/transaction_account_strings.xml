@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="transaction_account_deposit">Nạp vào tài khoản</string>
+    <string name="transaction_account_card_funding">Phương thức nạp · Thẻ qua Stripe</string>
+    <string name="transaction_account_change">Đổi</string>
+    <string name="transaction_account_change_description">Đổi tài khoản giao dịch</string>
+    <string name="transaction_account_choose">Chọn tài khoản</string>
+    <string name="transaction_account_checking">Tài khoản thanh toán</string>
+    <string name="transaction_account_name">%1$s · %2$s</string>
+    <string name="transaction_account_available">Số dư khả dụng · %1$s</string>
+    <string name="transaction_account_balance_unknown">—</string>
+    <string name="transaction_account_balance_unavailable_description">Chưa có số dư khả dụng</string>
+    <string name="transaction_account_masked_number">••• %1$s</string>
+    <string name="transaction_account_loading">Đang tải tài khoản…</string>
+    <string name="transaction_account_unavailable">Không có tài khoản thanh toán VND khả dụng</string>
+    <string name="transaction_account_load_error">Chưa tải được tài khoản</string>
+    <string name="transaction_account_cached">Dữ liệu đã lưu. Đang chờ cập nhật từ máy chủ.</string>
+    <string name="transaction_account_reselect">Tài khoản trước đó không còn khả dụng. Vui lòng chọn lại.</string>
+    <string name="transaction_account_insufficient">Số tiền vượt số dư khả dụng của tài khoản.</string>
+    <string name="payment_source_change_description">Chọn nguồn tiền thanh toán</string>
+    <string name="payment_source_stripe">Thẻ Stripe</string>
+    <string name="payment_source_retry_accounts">Tải lại tài khoản thanh toán</string>
+    <string name="payment_source_insufficient">Số dư tài khoản không đủ</string>
+</resources>

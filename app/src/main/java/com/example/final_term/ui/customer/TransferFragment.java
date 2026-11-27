@@ -12,8 +12,11 @@ import android.widget.AdapterView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.LiveData;
 import androidx.navigation.Navigation;
 
+import com.example.final_term.auth.AuthState;
+import com.example.final_term.auth.UserRole;
 import com.example.final_term.R;
 import com.example.final_term.BuildConfig;
 import com.example.final_term.core.FinalTermApplication;
@@ -25,6 +28,8 @@ import com.example.final_term.data.ExternalBankCatalog;
 import com.example.final_term.databinding.FragmentTransferBinding;
 import com.example.final_term.domain.DomainDtos.OtpVerification;
 import com.example.final_term.ui.common.ThemedDialogBuilder;
+import com.example.final_term.ui.transaction.TransactionFlowRequest;
+import com.example.final_term.ui.transaction.TransactionPresentation;
 import com.stripe.android.PaymentConfiguration;
 import com.stripe.android.paymentsheet.PaymentSheet;
 import com.stripe.android.paymentsheet.PaymentSheetResult;
@@ -35,9 +40,9 @@ import com.example.final_term.ui.ekyc.FaceCamera;
 import org.json.JSONObject;
 import org.json.JSONException;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.UUID;
 
 public final class TransferFragment extends Fragment {
@@ -65,15 +70,15 @@ public final class TransferFragment extends Fragment {
     private String cashOperation;
     private String initialCashAccount;
     private String initialCashAmount;
-    private boolean cashArgumentsApplied;
     private String providerReference = "";
-    private ReadModelResult<List<ReadModels.AccountSummary>> lastAccounts;
+    private LiveData<ReadModelResult<List<ReadModels.AccountSummary>>> accounts;
+    private TransactionAccountPicker accountPicker;
+    private String selectedAccountId;
     private String confirmedSource;
     private String customerUid;
     private boolean restoredPending;
     private boolean storedPendingCommit;
     private boolean completed;
-    private final List<String> sourceIds = new ArrayList<>();
     private CountDownTimer otpTimer;
     private com.example.final_term.ui.transaction.OtpBottomSheetDialog sharedOtp;
     private PaymentSheet paymentSheet;
@@ -89,6 +94,7 @@ public final class TransferFragment extends Fragment {
         cashOperation = getArguments() == null ? null : getArguments().getString("demoCashOperation");
         initialCashAccount = getArguments() == null ? null : getArguments().getString("accountId");
         initialCashAmount = getArguments() == null ? null : getArguments().getString("amountMinor");
+        selectedAccountId = state == null ? initialCashAccount : state.getString("selectedAccountId", initialCashAccount);
         if (state == null) return;
         intentId = state.getString("intentId");
         requestId = state.getString("requestId");
@@ -121,6 +127,7 @@ public final class TransferFragment extends Fragment {
         state.putBoolean("external", external);
         state.putString("externalBankCode", externalBankCode);
         state.putString("confirmedSource", confirmedSource);
+        state.putString("selectedAccountId", accountPicker == null ? selectedAccountId : accountPicker.selectedId());
         state.putLong("authoritativeAmount", authoritativeAmount);
         state.putLong("authoritativeFee", authoritativeFee);
         if (authoritativeBalanceAfter != null) state.putLong("authoritativeBalanceAfter", authoritativeBalanceAfter);
@@ -144,6 +151,9 @@ public final class TransferFragment extends Fragment {
         faceCamera.attach();
         FinalTermApplication app = (FinalTermApplication) requireActivity().getApplication();
         api = app.getAppContainer().getBackendApiClient();
+        accountPicker = new TransactionAccountPicker(binding.transactionAccount, binding.amountInput,
+                binding.amountWarning, selectedAccountId, this::updateSubmitButton);
+        if (initialCashAmount != null) binding.amountInput.setText(initialCashAmount);
         if (BuildConfig.STRIPE_PUBLISHABLE_KEY.startsWith("pk_test_")) {
             PaymentConfiguration.init(requireContext(), BuildConfig.STRIPE_PUBLISHABLE_KEY);
             paymentSheet = new PaymentSheet.Builder(this::onPaymentSheetResult).build(this);
@@ -206,12 +216,24 @@ public final class TransferFragment extends Fragment {
         setBusy(false);
         showStep(intentId == null ? Step.INPUT : Step.OTP);
         app.getAppContainer().getAuthRepository().observeAuthState().observe(getViewLifecycleOwner(), auth -> {
-            if (auth == null || auth.getUser() == null) return;
-            String uid = auth.getUser().getUid();
-            if (uid.equals(customerUid)) return;
+            if (auth == null || auth.getStatus() == AuthState.Status.LOADING) return;
+            String uid = auth.getUser() != null && auth.getUser().getRole() == UserRole.CUSTOMER
+                    ? auth.getUser().getUid() : null;
+            if (accounts != null && Objects.equals(uid, customerUid)) {
+                accountPicker.setOwnerName(auth.getUser().getFullName());
+                return;
+            }
+            if (accounts != null) accounts.removeObservers(getViewLifecycleOwner());
+            if (customerUid != null && !Objects.equals(uid, customerUid)) accountPicker.clear();
             customerUid = uid;
-            app.getAppContainer().getReadRepository().observeAccounts(uid)
-                    .observe(getViewLifecycleOwner(), this::renderAccounts);
+            accounts = null;
+            if (uid == null) {
+                status("Vui lòng đăng nhập bằng tài khoản khách hàng.");
+                return;
+            }
+            accountPicker.setOwnerName(auth.getUser().getFullName());
+            accounts = app.getAppContainer().getReadRepository().observeAccounts(uid);
+            accounts.observe(getViewLifecycleOwner(), accountPicker::setAccounts);
             if (!restoredPending) {
                 restoredPending = true;
                 restorePending();
@@ -291,10 +313,10 @@ public final class TransferFragment extends Fragment {
         external = useExternal;
         binding.targetInput.setText("");
         updateMode();
-        renderAccounts(lastAccounts);
     }
 
     private void updateMode() {
+        accountPicker.setRole(cardTopup());
         if (cashOperation != null) {
             ((View) binding.tabInternal.getParent()).setVisibility(View.GONE);
             ((View) binding.targetInput.getParent()).setVisibility(View.GONE);
@@ -430,11 +452,8 @@ public final class TransferFragment extends Fragment {
     }
 
     private void validateAndProceedToConfirm() {
-        int sourceIndex = binding.sourceInput.getSelectedItemPosition();
-        if (sourceIndex < 0 || sourceIndex >= sourceIds.size()) {
-            status("Vui lòng chọn tài khoản nguồn.");
-            return;
-        }
+        ReadModels.AccountSummary account = accountPicker.selectedAccount();
+        if (account == null) return;
         String target = text(binding.targetInput.getText());
         String amount = text(binding.amountInput.getText());
         if (!validTarget(target) || (!Phase2Presentation.validRequestAmount(amount) || getCurrentAmount() <= 0)) {
@@ -446,9 +465,11 @@ public final class TransferFragment extends Fragment {
             status("Vui lòng chọn ngân hàng nhận.");
             return;
         }
-        confirmedSource = sourceIds.get(sourceIndex);
+        long amountMinor = getCurrentAmount();
+        if (accountPicker.exceedsAvailable(amountMinor)) return;
+        confirmedSource = account.id;
         if (!Phase2Presentation.requiresRecipientLookup(cashOperation, external)) {
-            navigateToTransactionFlow(target, getCurrentAmount());
+            navigateToTransactionFlow(target, amountMinor, account);
             return;
         }
         var view = binding;
@@ -460,6 +481,11 @@ public final class TransferFragment extends Fragment {
             api.post("/transfers/recipient", body).addOnCompleteListener(task -> {
                 if (binding != view) return;
                 setBusy(false);
+                ReadModels.AccountSummary selected = accountPicker.selectedAccount();
+                if (selected == null || !account.id.equals(selected.id) || accountPicker.exceedsAvailable(amountMinor)) {
+                    status("");
+                    return;
+                }
                 if (!task.isSuccessful() || !ok(task.getResult())) {
                     status(task.isSuccessful()
                             ? errorMessage(task.getResult(), "Chưa tìm được người nhận")
@@ -471,7 +497,7 @@ public final class TransferFragment extends Fragment {
                     recipientAccountId = recipient.getString("accountId");
                     recipientName = recipient.optString("fullName");
                     status("");
-                    navigateToTransactionFlow(target, getCurrentAmount());
+                    navigateToTransactionFlow(target, amountMinor, selected);
                 } catch (JSONException error) {
                     status("Chưa đọc được thông tin người nhận. Vui lòng thử lại.");
                 }
@@ -527,17 +553,17 @@ public final class TransferFragment extends Fragment {
         });
     }
 
-    private void navigateToTransactionFlow(String target, long amountMinor) {
+    private void navigateToTransactionFlow(String target, long amountMinor, ReadModels.AccountSummary account) {
         if (binding == null) return;
         String note = text(binding.noteInput.getText());
-        com.example.final_term.ui.transaction.TransactionFlowRequest flowRequest;
+        TransactionFlowRequest flowRequest;
         if (cashOperation != null) {
             flowRequest = cardTopup()
-                    ? com.example.final_term.ui.transaction.TransactionFlowRequest.deposit(confirmedSource, amountMinor, "VND")
-                    : com.example.final_term.ui.transaction.TransactionFlowRequest.withdrawal(confirmedSource, amountMinor, "VND");
+                    ? TransactionFlowRequest.deposit(account.id, amountMinor, "VND")
+                    : TransactionFlowRequest.withdrawal(account.id, amountMinor, "VND");
         } else if (external) {
-            flowRequest = com.example.final_term.ui.transaction.TransactionFlowRequest.externalTransfer(
-                    confirmedSource,
+            flowRequest = TransactionFlowRequest.externalTransfer(
+                    account.id,
                     amountMinor,
                     "VND",
                     externalBankCode,
@@ -546,8 +572,8 @@ public final class TransferFragment extends Fragment {
                     target,
                     note);
         } else {
-            flowRequest = com.example.final_term.ui.transaction.TransactionFlowRequest.internalTransfer(
-                    confirmedSource,
+            flowRequest = TransactionFlowRequest.internalTransfer(
+                    account.id,
                     amountMinor,
                     "VND",
                     recipientAccountId,
@@ -555,11 +581,15 @@ public final class TransferFragment extends Fragment {
                     target,
                     note);
         }
-        Navigation.findNavController(requireView()).navigate(R.id.transactionFlow, flowRequest.toBundle());
+        Navigation.findNavController(requireView()).navigate(R.id.transactionFlow,
+                flowRequest.withSourceLabel(accountPicker.label(account)).toBundle());
     }
 
     private void bindConfirmationView() {
-        String sourceId = confirmedSource == null ? "" : confirmedSource;
+        var selectedAccount = accountPicker.selectedAccount();
+        String sourceLabel = selectedAccount != null && selectedAccount.id.equals(confirmedSource)
+                ? accountPicker.label(selectedAccount)
+                : TransactionPresentation.maskAccountLabel(confirmedSource, getString(R.string.transaction_account_checking));
         String target = text(binding.targetInput.getText());
         String note = text(binding.noteInput.getText());
         long amount = authoritativeAmount > 0 ? authoritativeAmount : getCurrentAmount();
@@ -573,7 +603,7 @@ public final class TransferFragment extends Fragment {
                 : "Tổng số tiền chuyển");
         binding.confirmFeeLabel.setText("Phí dịch vụ: " + ReadSummaryFormatter.formatCurrency(authoritativeFee, authoritativeCurrency)
                 + (authoritativeFee == 0 ? " (Miễn phí)" : ""));
-        binding.confirmSourceText.setText((cardTopup() ? "Tài khoản nhận: " : "Tài khoản nguồn: ") + sourceId);
+        binding.confirmSourceText.setText((cardTopup() ? "Tài khoản nhận: " : "Tài khoản nguồn: ") + sourceLabel);
         String recipient = cardTopup() ? "Nguồn thanh toán: thẻ"
                 : cashOperation != null ? "Tài khoản đối ứng: Nimbus Bank"
                 : external ? "Ngân hàng nhận: " + ExternalBankCatalog.nameForCode(externalBankCode)
@@ -647,40 +677,6 @@ public final class TransferFragment extends Fragment {
                 }
             }
         }.start();
-    }
-
-    private void renderAccounts(ReadModelResult<List<ReadModels.AccountSummary>> result) {
-        if (result == null || binding == null) return;
-        lastAccounts = result;
-        if (result.getData() == null) {
-            sourceIds.clear();
-            updateSubmitButton();
-            if (currentStep == Step.INPUT) status("Chưa thể tải tài khoản. Vui lòng thử lại.");
-            return;
-        }
-        if (currentStep == Step.INPUT) status(result.getStatus() == ReadModelResult.Status.EMPTY
-                ? "Chưa có tài khoản khả dụng." : result.isReadOnly()
-                ? "Đang hiển thị dữ liệu đã lưu trên thiết bị." : "");
-        sourceIds.clear();
-        List<String> labels = new ArrayList<>();
-        for (ReadModels.AccountSummary account : result.getData()) {
-            if ("ACTIVE".equalsIgnoreCase(account.status) && "CHECKING".equals(account.type)) {
-                sourceIds.add(account.id);
-                labels.add(account.displayAccountNumber() + " · " + account.currency);
-            }
-        }
-        if (labels.isEmpty()) labels.add("Không có tài khoản nguồn khả dụng");
-        ArrayAdapter<String> sourceAdapter = new ArrayAdapter<>(requireContext(),
-                R.layout.item_nimbus_spinner, labels);
-        sourceAdapter.setDropDownViewResource(R.layout.item_nimbus_dropdown);
-        binding.sourceInput.setAdapter(sourceAdapter);
-        if (!cashArgumentsApplied && cashOperation != null) {
-            int selected = sourceIds.indexOf(initialCashAccount);
-            if (selected >= 0) binding.sourceInput.setSelection(selected);
-            if (initialCashAmount != null) binding.amountInput.setText(initialCashAmount);
-            cashArgumentsApplied = true;
-        }
-        updateSubmitButton();
     }
 
     private void createIntent() {
@@ -1221,8 +1217,8 @@ public final class TransferFragment extends Fragment {
         if (binding == null) return;
         boolean editable = !busy && !completed;
         binding.submitButton.setEnabled(editable && (confirmedSource != null || requestId != null));
-        binding.btnProceedToConfirm.setEnabled(editable);
-        binding.sourceInput.setEnabled(editable);
+        binding.btnProceedToConfirm.setEnabled(editable && accountPicker.selectedAccount() != null);
+        accountPicker.setEditable(editable);
         binding.targetInput.setEnabled(editable);
         binding.amountInput.setEnabled(editable);
     }
@@ -1245,8 +1241,11 @@ public final class TransferFragment extends Fragment {
             otpTimer.cancel();
             otpTimer = null;
         }
+        selectedAccountId = accountPicker.selectedId();
+        accountPicker.dismiss();
+        accountPicker = null;
+        accounts = null;
         binding = null;
-        sourceIds.clear();
         completed = false;
         busy = false;
         super.onDestroyView();

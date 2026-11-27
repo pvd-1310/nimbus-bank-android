@@ -104,35 +104,12 @@
                 android:contentDescription="Loại yêu cầu"
                 android:visibility="gone" />
 
-            <!-- Account Selection Card -->
-            <LinearLayout
+            <include
+                android:id="@+id/transaction_account"
+                layout="@layout/view_transaction_account"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:background="@drawable/glass_panel_card"
-                android:elevation="4dp"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <TextView
-                    android:id="@+id/account_label"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Tài khoản giao dịch"
-                    android:textColor="@color/ink_muted"
-                    android:textSize="11sp"
-                    android:textStyle="bold" />
-
-                <Spinner
-                    android:id="@+id/account_input"
-                    android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:layout_marginTop="6dp"
-                    android:background="@drawable/glass_pill_button"
-                    android:contentDescription="Tài khoản"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp" />
-            </LinearLayout>
+                android:layout_marginTop="16dp" />
 
             <!-- Amount Card with Quick Chips -->
             <LinearLayout
@@ -168,6 +145,17 @@
                     android:textColor="@color/ink"
                     android:textColorHint="@color/ink_faint"
                     android:textSize="26sp" />
+
+                <TextView
+                    android:id="@+id/amount_warning"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:accessibilityLiveRegion="polite"
+                    android:text="@string/transaction_account_insufficient"
+                    android:textColor="@color/danger"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
 
                 <!-- Chips -->
                 <LinearLayout

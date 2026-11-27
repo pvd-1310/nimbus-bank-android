@@ -346,7 +346,7 @@ public final class TransactionPresentation {
 
             case WITHDRAWAL:
                 addSourceRow(rows, "Tài khoản nguồn", req);
-                rows.add(DetailRow.plain("Đích nhận", "Rút tiền mặt · Nimbus Bank"));
+                rows.add(DetailRow.plain("Hình thức", "Rút tiền mô phỏng"));
                 break;
 
             case BILL_PAYMENT:

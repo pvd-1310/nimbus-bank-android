@@ -132,6 +132,13 @@ public final class TransactionFlowRequest implements Parcelable {
         this.quantity = Math.max(1, quantity);
     }
 
+    public TransactionFlowRequest withSourceLabel(@NonNull String label) {
+        return new TransactionFlowRequest(kind, amountMinor, currency, sourceAccountId, label,
+                recipientName, recipientVerified, bankName, bankSubtitle, bankCode, targetNumber,
+                methodLabel, note, recipientAccountId, billId, orderCategory, productId,
+                orderCustomerDetails, serviceName, providerName, quantity);
+    }
+
     public static TransactionFlowRequest internalTransfer(
             @Nullable String sourceAccountId,
             long amountMinor,
