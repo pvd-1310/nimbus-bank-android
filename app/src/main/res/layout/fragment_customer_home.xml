@@ -286,7 +286,7 @@
                         android:textSize="12sp" />
                 </LinearLayout>
 
-                <!-- 4. Quét QR -->
+                <!-- 4. Tiện ích -->
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
@@ -295,21 +295,21 @@
                     android:orientation="vertical">
 
                     <ImageButton
-                        android:id="@+id/quick_qr"
+                        android:id="@+id/quick_utilities"
                         android:layout_width="56dp"
                         android:layout_height="56dp"
                         android:background="@drawable/circle_action_button"
-                        android:contentDescription="@string/action_qr"
+                        android:contentDescription="Tiện ích"
                         android:elevation="4dp"
                         android:padding="16dp"
-                        android:src="@drawable/ic_nav_qr"
+                        android:src="@drawable/ic_utility_all"
                         app:tint="@color/navy" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
-                        android:text="@string/action_qr"
+                        android:text="Tiện ích"
                         android:textColor="@color/ink"
                         android:textSize="12sp" />
                 </LinearLayout>

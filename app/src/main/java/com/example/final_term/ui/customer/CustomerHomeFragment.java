@@ -127,12 +127,12 @@ public final class CustomerHomeFragment extends Fragment {
             Navigation.findNavController(v).navigate(R.id.utilitiesHub, arguments);
         });
 
-        binding.quickQr.setOnClickListener(v -> {
-            new ThemedDialogBuilder(requireContext())
-                    .setTitle("Quét mã QR")
-                    .setMessage("Tính năng này đang được hoàn thiện.")
-                    .setPositiveButton("Đóng", null)
-                    .show();
+        binding.quickUtilities.setOnClickListener(v -> {
+            Bundle arguments = new Bundle();
+            ReadModels.AccountSummary account = getSelectedAccount();
+            if (account != null && "CHECKING".equals(account.type))
+                arguments.putString("sourceAccountId", account.id);
+            Navigation.findNavController(v).navigate(R.id.utilitiesHub, arguments);
         });
 
         binding.notificationButton.setOnClickListener(v ->
