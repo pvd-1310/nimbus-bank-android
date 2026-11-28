@@ -3,8 +3,9 @@ import type { Banking } from "../../core/banking.js";
 import type { Doc, Tx } from "../../core/store.js";
 import { digest } from "../../shared/crypto.js";
 import { check, Fault } from "../../shared/errors.js";
+import { fulfillDemoOrder } from "../orders/fulfillment.service.js";
 import type { Actor } from "../auth/auth.types.js";
-import { intentDigest, rate } from "../security/intent.js";
+import { intentDigest } from "../security/intent.js";
 import type { StripeSandboxAccounts } from "./stripe-sandbox-accounts.service.js";
 
 type Kind = "TRANSFER" | "DEMO_MOVEMENT" | "PAYMENT";
@@ -16,7 +17,7 @@ const movementPolicy = (source: Link, destination: Link | null, movement: string
   digest([linkIds(source), linkIds(destination), movement, beneficiary ?? null]);
 
 export class StripeSandboxMovements {
-  constructor(private bank: Banking, private stripe: Stripe, private demoRecipient = "demo_recipient_checking",
+  constructor(private bank: Banking, private stripe: Stripe,
     private accounts?: StripeSandboxAccounts) {}
 
   private async linked(t: Tx, account: Doc): Promise<Link> {
@@ -33,129 +34,10 @@ export class StripeSandboxMovements {
     const account = await this.stripe.treasury.financialAccounts.retrieve(link.financialAccountId, scope);
     check(account.livemode === false && account.id === link.financialAccountId && account.status === "open",
       "STRIPE_SANDBOX_RESOURCE_MISMATCH", 409);
-    return { scope, balance: account.balance.cash.usd ?? 0 };
+    return scope;
   }
 
-  private async resolvePhone(t: Tx, phone: string) {
-    const local = phone.startsWith("+84") ? "0" + phone.slice(3) : phone;
-    const [canonical, legacy] = await Promise.all([
-      t.list("users", { contactPhone: "+84" + local.slice(1) }, { limit: 2 }),
-      t.list("users", { contactPhone: local }, { limit: 2 }),
-    ]);
-    const users = [...new Map([...canonical, ...legacy].map(user => [user.id, user])).values()];
-    check(users.length === 1, "INVALID_DESTINATION", 404);
-    const user = users[0];
-    check(user.role === "CUSTOMER" && (user.status === "ACTIVE" ? user.active !== false
-      : user.status === undefined && user.active === true), "INVALID_DESTINATION", 404);
-
-    if (typeof user.primaryCheckingAccountId === "string") {
-      const account = await t.get("accounts/" + user.primaryCheckingAccountId);
-      check(account?.ownerUid === user.id, "INVALID_DESTINATION", 404);
-      return { account: { ...account, id: user.primaryCheckingAccountId }, fullName: user.fullName ?? "" };
-    }
-    const accounts = await t.list("accounts", { ownerUid: user.id, type: "CHECKING", status: "ACTIVE" }, { limit: 2 });
-    check(accounts.length === 1, "INVALID_DESTINATION", 404);
-    return { account: accounts[0], fullName: user.fullName ?? "" };
-  }
-
-  async lookupRecipient(actor: Actor, sourceAccountId: string, phone: string) {
-    check(actor.role === "CUSTOMER", "FORBIDDEN", 403);
-    await this.bank.store.run(async (t) => {
-      await this.bank.authorize(t, actor);
-      await this.linked(t, await this.bank.owned(t, actor, sourceAccountId));
-      await rate(t, "transfer-recipient", actor.uid, this.bank.now(), 15, 60_000);
-    });
-    return this.bank.store.run(async (t) => {
-      const { account, fullName } = await this.resolvePhone(t, phone);
-      const source = await this.linked(t, await this.bank.owned(t, actor, sourceAccountId));
-      const destination = await this.linked(t, account);
-      check(source.connectedAccountId !== destination.connectedAccountId, "INVALID_DESTINATION", 400);
-      return { accountId: account.id, fullName };
-    });
-  }
-
-  async prepare(actor: Actor, kind: Kind, input: Doc) {
-    check(actor.role === "CUSTOMER", "FORBIDDEN", 403);
-    const id = digest([actor.uid, kind, input.requestId]);
-    const hash = digest(input);
-    const read = await this.bank.store.run(async (t) => {
-      await this.bank.authorize(t, actor);
-      const old = await t.get("transactionIntents/" + id);
-      if (old) {
-        check(old.payloadDigest === hash && old.provider === "STRIPE_TREASURY", "IDEMPOTENCY_CONFLICT", 409);
-        return { old };
-      }
-      let bill;
-      let amountMinor = input.amountMinor;
-      let sourceAccountId = input.sourceAccountId ?? input.accountId;
-      if (kind === "PAYMENT") {
-        bill = await t.get("bills/" + input.billId);
-        check(bill?.ownerUid === actor.uid, "FORBIDDEN", 403);
-        const lock = await t.get("billPaymentLocks/" + input.billId);
-        if (lock && lock.released !== true && bill.status === "UNPAID") {
-          const pending = await t.get("transactionIntents/" + lock.paymentId);
-          check(pending?.provider === "STRIPE_TREASURY" && pending.status === "COMMIT_PENDING" &&
-            pending.actorUid === actor.uid && pending.billId === input.billId, "PAYMENT_IN_PROGRESS", 409);
-          return { old: pending };
-        }
-        check(bill.status === "UNPAID", "INVALID_STATE", 409);
-        check(bill.quoteExpiresAt == null || this.bank.now() < bill.quoteExpiresAt, "QUOTE_EXPIRED", 410);
-        check(Number.isSafeInteger(bill.amountMinor) && bill.amountMinor > 0, "INVALID_AMOUNT");
-        check(["VND", "USD"].includes(bill.currency), "INVALID_CURRENCY");
-        amountMinor = bill.currency === "VND" ? Math.round(bill.amountMinor / vndPerCent) : bill.amountMinor;
-        check(amountMinor > 0, "INVALID_AMOUNT");
-        if (!sourceAccountId) {
-          const owned = await t.list("accounts", { ownerUid: actor.uid, type: "CHECKING", status: "ACTIVE" });
-          sourceAccountId = owned.find(account => account.stripeSandboxLinkPath)?.id;
-          check(sourceAccountId, "STRIPE_SANDBOX_ACCOUNT_REQUIRED", 409);
-        }
-      }
-      const source = await this.linked(t, await this.bank.owned(t, actor, sourceAccountId));
-      const movement = kind === "DEMO_MOVEMENT" ? input.type : kind;
-      let destinationAccountId = movement === "EXTERNAL_TRANSFER" ? this.demoRecipient
-        : movement === "TRANSFER" ? input.destinationAccountId : "DEMO_CASH";
-      let destination: Link | null = null;
-      if (movement === "TRANSFER" || movement === "EXTERNAL_TRANSFER") {
-        let account: Doc | undefined;
-        if (movement === "TRANSFER" && /^(?:0[0-9]{9}|\+84[0-9]{9})$/.test(destinationAccountId)) {
-          account = (await this.resolvePhone(t, destinationAccountId)).account;
-          destinationAccountId = account.id;
-          check(!input.recipientAccountId || input.recipientAccountId === destinationAccountId, "RECIPIENT_CHANGED", 409);
-        }
-        account ??= await t.get("accounts/" + destinationAccountId);
-        check(account && destinationAccountId !== sourceAccountId, "INVALID_DESTINATION", 400);
-        destination = await this.linked(t, { ...account, id: destinationAccountId });
-        check(source.connectedAccountId !== destination.connectedAccountId, "INVALID_DESTINATION", 409);
-      }
-      const now = this.bank.now();
-      return { source, destination, intent: {
-        id, kind, movement, actorUid: actor.uid, sourceAccountId,
-        ...(bill ? { billId: input.billId, billedMinor: bill.amountMinor, billedCurrency: bill.currency } : { destinationAccountId }),
-        provider: "STRIPE_TREASURY", requestId: input.requestId, payloadDigest: hash,
-        ...(movement === "EXTERNAL_TRANSFER" ? { beneficiaryAccount: input.beneficiaryAccount } : {}),
-        policyDigest: movementPolicy(source, destination, movement, input.beneficiaryAccount),
-        amountMinor, feeMinor: 0, currency: "USD",
-        faceRequired: this.bank.security.requiresFace("VND", amountMinor * vndPerCent) ||
-          this.bank.security.requiresFace("USD", amountMinor),
-        status: "CREATED", securityVersion: 1, createdAt: now, expiresAt: Math.min(now + 300000, bill?.quoteExpiresAt ?? Infinity),
-      } };
-    });
-    if (read.old) return this.result(read.old);
-    const { intent, source, destination } = read;
-    const { balance } = await this.scope(source);
-    check(intent.movement === "DEPOSIT" || balance >= intent.amountMinor, "INSUFFICIENT_FUNDS", 409);
-    return this.bank.store.run(async (t) => {
-      await this.bank.authorize(t, actor);
-      const old = await t.get("transactionIntents/" + id);
-      if (old) {
-        check(old.payloadDigest === hash && old.provider === intent.provider, "IDEMPOTENCY_CONFLICT", 409);
-        return this.result(old);
-      }
-      t.set("transactionIntents/" + id, { ...intent, source, destination, digest: intentDigest(intent) });
-      return this.result(intent);
-    });
-  }
-
+  // Existing Treasury intents retain their original settlement provider.
   async commit(actor: Actor, id: string, kind: Kind) {
     const intent: Doc = await this.bank.store.run(async (t) => {
       await this.bank.authorize(t, actor);
@@ -258,11 +140,11 @@ export class StripeSandboxMovements {
       return;
     }
     t.set("bills/" + i.billId, { ...bill, status: "PAID", paymentId: i.id });
-    t.set("outbox/" + i.id, { paymentId: i.id, billId: i.billId, ownerUid: actor.uid, status: "PENDING", attempts: 0, createdAt: now });
+    await fulfillDemoOrder(t, bill, i.id);
   }
 
   private async execute(i: Doc) {
-    const { scope } = await this.scope(i.source as Link);
+    const scope = await this.scope(i.source as Link);
     const options = { ...scope, idempotencyKey: "nimbus-movement-" + i.id };
     if (i.movement === "DEPOSIT") {
       const credit = i.providerReference

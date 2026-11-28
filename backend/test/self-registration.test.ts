@@ -7,9 +7,9 @@ import { Payments } from "../src/modules/payments/payment.service.js";
 import type { FaceService } from "../src/modules/security/face.js";
 import { MemoryStore } from "./support/memory-store.js";
 
-function registrationFixture() {
+function registrationFixture({ failGrantOnce = false } = {}) {
   const s = new MemoryStore();
-  const authUsers = new Map<string, { uid: string; email: string; password: string; disabled: boolean }>();
+  const grants = new Set<string>();
 
   const provider: EvidenceProvider = {
     upload: async (image) => ({ url: `https://s3.local/${image.key}`, fields: {} }),
@@ -37,51 +37,46 @@ function registrationFixture() {
       const uid = token.replace("token-", "");
       return { uid, role: "CUSTOMER", permissions: [] };
     },
-    lookupUserByEmail: async (email) => {
-      const found = authUsers.get(email.toLowerCase());
-      return found ? { uid: found.uid, disabled: found.disabled } : null;
+    verifyRegistrationIdentity: async (token) => {
+      if (token === "invalid") throw new Error("invalid Firebase token");
+      return {
+        uid: token,
+        email: token + "@example.com",
+        emailVerified: token !== "unverified",
+        role: token === "officer" ? "OFFICER" : grants.has(token) ? "CUSTOMER" : undefined,
+      };
     },
-    createCustomerIdentity: async (uid, email, password) => {
-      authUsers.set(email.toLowerCase(), { uid, email: email.toLowerCase(), password, disabled: false });
+    grantCustomerRole: async (uid) => {
+      if (failGrantOnce) {
+        failGrantOnce = false;
+        throw new Error("Firebase unavailable");
+      }
+      grants.add(uid);
     },
   });
 
-  return { app, s, authUsers };
+  return { app, s, grants };
 }
 
-it("completes self-registration with d-OTP and auto-activates customer on eKYC submit", async () => {
-  const { app, s, authUsers } = registrationFixture();
+const profile = {
+  fullName: "Nguyen Van A",
+  phoneNumber: "0901234567",
+  nationalIdNumber: "079200012345",
+};
 
-  const reqRes = await request(app)
-    .post("/auth/register/request")
-    .send({
-      email: "NewCustomer@Example.com",
-      password: "Password123!",
-      fullName: "Nguyen Van A",
-      phoneNumber: "0901234567",
-      nationalIdNumber: "079200012345",
-    })
-    .expect(200);
-
-  expect(reqRes.body.method).toBe("DEMO_DISPLAY_CODE");
-  expect(reqRes.body.code).toMatch(/^\d{6}$/);
-  expect(reqRes.body.phoneMasked).toBe("••••4567");
-  const { challengeId, code } = reqRes.body;
-
-  await request(app)
-    .post("/auth/register/confirm")
-    .send({ challengeId, code: "000000", password: "Password123!" })
-    .expect(400)
-    .expect(({ body }) => expect(body.error).toBe("INVALID_OTP"));
-
+it("completes verified self-registration and activates the customer after eKYC", async () => {
+  const { app, s, grants } = registrationFixture();
   const confirmRes = await request(app)
-    .post("/auth/register/confirm")
-    .send({ challengeId, code, password: "Password123!" })
+    .post("/auth/register/complete")
+    .set("Authorization", "Bearer newcustomer")
+    .send(profile)
     .expect(200);
 
   const { uid, accountId, status } = confirmRes.body;
+  expect(uid).toBe("newcustomer");
   expect(status).toBe("ONBOARDING");
-  expect(authUsers.has("newcustomer@example.com")).toBe(true);
+  expect(grants.has(uid)).toBe(true);
+  expect(await s.run((t) => t.get("users/" + uid))).toMatchObject({ contactEmail: "newcustomer@example.com" });
 
   const authHeader = `Bearer token-${uid}`;
   const draftRes = await request(app)
@@ -128,58 +123,35 @@ it("completes self-registration with d-OTP and auto-activates customer on eKYC s
   });
 });
 
-it("rejects duplicate email, phone, and nationalIdNumber during registration request", async () => {
+it("rejects unverified identities, invalid tokens and officers", async () => {
+  const { app, s, grants } = registrationFixture();
+  for (const [token, status] of [["unverified", 403], ["invalid", 401], ["officer", 403]] as const) {
+    await request(app).post("/auth/register/complete").set("Authorization", "Bearer " + token)
+      .send(profile).expect(status);
+  }
+  expect(grants.size).toBe(0);
+  expect(await s.run((t) => t.list("users"))).toHaveLength(0);
+});
+
+it("rejects duplicate phone numbers and national IDs", async () => {
   const { app } = registrationFixture();
-
-  const first = await request(app)
-    .post("/auth/register/request")
-    .send({
-      email: "dup@example.com",
-      password: "Password123!",
-      fullName: "Tran Thi B",
-      phoneNumber: "0912345678",
-      nationalIdNumber: "079200054321",
-    })
-    .expect(200);
-
-  await request(app)
-    .post("/auth/register/confirm")
-    .send({ challengeId: first.body.challengeId, code: first.body.code, password: "Password123!" })
-    .expect(200);
-
-  await request(app)
-    .post("/auth/register/request")
-    .send({
-      email: "dup@example.com",
-      password: "Password123!",
-      fullName: "Other",
-      phoneNumber: "0988888888",
-      nationalIdNumber: "079200099999",
-    })
-    .expect(409)
-    .expect(({ body }) => expect(body.error).toBe("EMAIL_ALREADY_EXISTS"));
-
-  await request(app)
-    .post("/auth/register/request")
-    .send({
-      email: "other@example.com",
-      password: "Password123!",
-      fullName: "Other",
-      phoneNumber: "0912345678",
-      nationalIdNumber: "079200099999",
-    })
-    .expect(409)
-    .expect(({ body }) => expect(body.error).toBe("PHONE_ALREADY_EXISTS"));
-
-  await request(app)
-    .post("/auth/register/request")
-    .send({
-      email: "other2@example.com",
-      password: "Password123!",
-      fullName: "Other",
-      phoneNumber: "0977777777",
-      nationalIdNumber: "079200054321",
-    })
-    .expect(409)
+  const complete = (uid: string, info: typeof profile) => request(app)
+    .post("/auth/register/complete").set("Authorization", "Bearer " + uid).send(info);
+  await complete("first", profile).expect(200);
+  await complete("other", { ...profile, nationalIdNumber: "079200099999" }).expect(409)
+    .expect(({ body }) => expect(body.error).toBe("CONTACT_PHONE_EXISTS"));
+  await complete("other", { ...profile, phoneNumber: "0912345678" }).expect(409)
     .expect(({ body }) => expect(body.error).toBe("NATIONAL_ID_EXISTS"));
+});
+
+it("can retry a grant failure without duplicating the profile, account or audit", async () => {
+  const { app, s, grants } = registrationFixture({ failGrantOnce: true });
+  const complete = () => request(app).post("/auth/register/complete")
+    .set("Authorization", "Bearer newcustomer").send(profile);
+  await complete().expect(500);
+  const { body } = await complete().expect(200);
+  await complete().expect(200).expect(body);
+  expect(grants.has(body.uid)).toBe(true);
+  expect(await s.run((t) => t.list("accounts"))).toHaveLength(1);
+  expect(await s.run((t) => t.list("auditLogs"))).toHaveLength(1);
 });

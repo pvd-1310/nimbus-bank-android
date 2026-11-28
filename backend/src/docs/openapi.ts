@@ -64,6 +64,12 @@ const endpoints: [string, string, string, unknown?][] = [
       [],
     ),
   ],
+  ["post", "/auth/register/complete", "Create the customer profile after Firebase email verification",
+    object({
+      fullName: { type: "string", minLength: 2, maxLength: 120 },
+      phoneNumber: { type: "string" },
+      nationalIdNumber: { type: "string", pattern: "^\\d{12}$" },
+    }, ["fullName", "phoneNumber", "nationalIdNumber"])],
   ["get", "/capabilities", "Configured and deferred capabilities"],
   ["get", "/accounts", "Owned accounts"],
   ["get", "/accounts/{id}", "Owned account"],

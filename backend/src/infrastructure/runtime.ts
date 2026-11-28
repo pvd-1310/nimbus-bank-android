@@ -88,8 +88,7 @@ export function runtime() {
       process.env.EKYC_DEMO_SELFIE_ONLY === "true" ? "DEMO_SELFIE_ONLY" : "FULL_ID"),
     payments: new Payments(bank, stripe),
     stripeSandboxAccounts,
-    stripeSandboxMovements: stripeClient ? new StripeSandboxMovements(bank, stripeClient, process.env.STRIPE_SANDBOX_DEMO_RECIPIENT,
-      stripeSandboxAccounts) : undefined,
+    stripeSandboxMovements: stripeClient ? new StripeSandboxMovements(bank, stripeClient, stripeSandboxAccounts) : undefined,
     chatbot: createChatbot(process.env),
     ...(localChatbotEnabled(process.env) && { chatbotMode: "DEMO_ONLY" as const }),
   };

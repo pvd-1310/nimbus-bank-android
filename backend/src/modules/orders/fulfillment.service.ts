@@ -1,4 +1,18 @@
-import type { Store } from "../../core/store.js";
+import type { Doc, Store, Tx } from "../../core/store.js";
+export async function fulfillDemoOrder(t: Tx, bill: Doc, paymentId: string) {
+  if (bill.demo !== true || !bill.orderId) return;
+  const order = await t.get("orders/" + bill.orderId);
+  if (order?.demo !== true || order.ownerUid !== bill.ownerUid ||
+    order.fulfillmentStatus === "DEMO_FULFILLED") return;
+  t.set("orders/" + bill.orderId, {
+    ...order,
+    fulfillmentStatus: "DEMO_FULFILLED",
+    paymentId,
+    providerReference: "DEMO-FULFILLMENT-" + paymentId,
+  });
+}
+
+// One-off processing for outbox entries created before fulfillment moved into settlement.
 export async function drainOutbox(store: Store) {
   return store.run(async (t) => {
     const jobs = await t.list("outbox", { status: "PENDING" }, { limit: 25 });
