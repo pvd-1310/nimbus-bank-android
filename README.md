@@ -138,6 +138,8 @@ Mật khẩu của tài khoản mới là `DEMO_PASSWORD` trong `.env`. Đăng x
 
 Để thử chuyển khoản nội bộ, đăng nhập khách hàng chính, chọn tài khoản thanh toán và tra cứu người nhận bằng số điện thoại mẫu `0907364000` của khách hàng recipient. Kiểm tra tên/số tiền trước khi xác nhận. Với giao dịch demo cần OTP, app hiển thị mã để tiếp tục. Số dư và các giao dịch trong emulator là dữ liệu thử nghiệm.
 
+Để thử đăng ký hoặc quên mật khẩu, mở link xác minh hoặc đặt lại mật khẩu hiện trong terminal chạy Firebase Auth Emulator. Với project test dùng Firebase thật, bật phương thức Email/Password và dùng hộp thư bạn có quyền truy cập. Sau khi xác minh email đăng ký, quay lại app để tiếp tục nhập hồ sơ và thực hiện eKYC.
+
 Cách A không tự cấu hình S3, Face API, FPT.AI, Stripe hay Maps. Các tính năng phụ thuộc chúng sẽ báo chưa khả dụng; bản Firebase demo cũng không gắn Maps key vào Android. Xem mục 5 khi cần thử các tích hợp đó trong cấu hình connected.
 
 ## 4. Cách B — Firebase test và Docker

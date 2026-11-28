@@ -12,6 +12,7 @@ import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.Source;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.ListenerRegistration;
+import com.google.firebase.firestore.MetadataChanges;
 
 public final class FirebaseAuthRepository implements AuthRepository {
     private final FirebaseAuth firebaseAuth;
@@ -33,25 +34,19 @@ public final class FirebaseAuthRepository implements AuthRepository {
                     authState.postValue(AuthState.signedOut());
                 } else {
                     authState.postValue(AuthState.loading());
-                    resolveProfile(current).addOnFailureListener(error -> {
-                        authState.postValue(AuthState.error("Không thể xác thực hồ sơ người dùng."));
-                        firebaseAuth.signOut();
-                    });
                     String uid = current.getUid();
                     profileListener = firestore.collection("users").document(uid)
-                            .addSnapshotListener((snapshot, error) -> {
+                            .addSnapshotListener(MetadataChanges.INCLUDE, (snapshot, error) -> {
+                                if (!isCurrent(current)) return;
                                 if (error != null) {
-                                    authState.postValue(AuthState.error("Không thể cập nhật trạng thái hồ sơ."));
-                                    return;
-                                }
-                                try {
-                                    if (snapshot == null || !snapshot.exists()) {
-                                        authState.postValue(AuthState.error("Không tìm thấy hồ sơ người dùng."));
-                                        return;
-                                    }
-                                    authState.postValue(AuthState.signedIn(toAppUser(current, snapshot)));
-                                } catch (IllegalStateException invalid) {
-                                    authState.postValue(AuthState.error("Tài khoản chưa được kích hoạt."));
+                                    authState.setValue(AuthState.error("Không thể cập nhật trạng thái hồ sơ."));
+                                } else if (snapshot != null
+                                        && (snapshot.exists() || !snapshot.getMetadata().isFromCache())) {
+                                    publishProfile(current, snapshot).addOnFailureListener(failure -> {
+                                        if (isCurrent(current)) {
+                                            authState.setValue(AuthState.error("Không thể xác thực hồ sơ người dùng."));
+                                        }
+                                    });
                                 }
                             });
                 }
@@ -101,17 +96,70 @@ public final class FirebaseAuthRepository implements AuthRepository {
         return firebaseAuth.sendPasswordResetEmail(email.trim());
     }
 
+    @Override
+    public Task<Void> createRegistrationIdentity(String email, String password) {
+        if (firebaseAuth == null) return Tasks.forException(new IllegalStateException("FIREBASE_SETUP_REQUIRED"));
+        return firebaseAuth.createUserWithEmailAndPassword(email, password)
+                .onSuccessTask(result -> Tasks.forResult(null));
+    }
+
+    @Override
+    public Task<Void> sendRegistrationEmail() {
+        FirebaseUser user = firebaseAuth == null ? null : firebaseAuth.getCurrentUser();
+        if (user == null) return Tasks.forException(new IllegalStateException("SIGN_IN_REQUIRED"));
+        return user.sendEmailVerification();
+    }
+
+    @Override
+    public Task<Boolean> refreshRegistrationEmail() {
+        FirebaseUser user = firebaseAuth == null ? null : firebaseAuth.getCurrentUser();
+        if (user == null) return Tasks.forException(new IllegalStateException("SIGN_IN_REQUIRED"));
+        return user.reload().onSuccessTask(ignored -> user.getIdToken(true))
+                .onSuccessTask(token -> Tasks.forResult(Boolean.TRUE.equals(token.getClaims().get("email_verified"))));
+    }
+
+    @Override
+    public Task<AppUser> refreshRegisteredProfile() {
+        FirebaseUser user = firebaseAuth == null ? null : firebaseAuth.getCurrentUser();
+        if (user == null) return Tasks.forException(new IllegalStateException("SIGN_IN_REQUIRED"));
+        return user.getIdToken(true).onSuccessTask(ignored -> resolveProfile(user));
+    }
+
+    @Override
+    public String currentEmail() {
+        FirebaseUser user = firebaseAuth == null ? null : firebaseAuth.getCurrentUser();
+        return user == null ? null : user.getEmail();
+    }
+
+    private boolean isCurrent(FirebaseUser user) {
+        FirebaseUser current = firebaseAuth.getCurrentUser();
+        return current != null && current.getUid().equals(user.getUid());
+    }
+
     private Task<AppUser> resolveProfile(FirebaseUser user) {
         return firestore.collection("users").document(user.getUid()).get(Source.SERVER)
-                .continueWith(profileTask -> {
-                    if (!profileTask.isSuccessful() || profileTask.getResult() == null
-                            || !profileTask.getResult().exists()) {
-                        throw new IllegalStateException("PROFILE_NOT_FOUND");
-                    }
-                    AppUser appUser = toAppUser(user, profileTask.getResult());
-                    authState.postValue(AuthState.signedIn(appUser));
-                    return appUser;
-                });
+                .onSuccessTask(profile -> publishProfile(user, profile));
+    }
+
+    private Task<AppUser> publishProfile(FirebaseUser user, DocumentSnapshot profile) {
+        return user.getIdToken(false).onSuccessTask(token -> {
+            if (!isCurrent(user)) return Tasks.forException(new IllegalStateException("SIGN_IN_REQUIRED"));
+            Object role = token.getClaims().get("role");
+            if (role == null && (!profile.exists()
+                    || "FIREBASE_EMAIL".equals(profile.getString("registrationMethod")))) {
+                authState.setValue(AuthState.registrationPending());
+                return Tasks.forResult(null);
+            }
+            try {
+                if (!profile.exists()) throw new IllegalStateException("PROFILE_NOT_FOUND");
+                AppUser appUser = toAppUser(user, profile);
+                authState.setValue(AuthState.signedIn(appUser));
+                return Tasks.forResult(appUser);
+            } catch (IllegalStateException invalid) {
+                authState.setValue(AuthState.error("Tài khoản chưa được kích hoạt."));
+                return Tasks.forException(invalid);
+            }
+        });
     }
 
     private AppUser toAppUser(FirebaseUser user, DocumentSnapshot profile) {

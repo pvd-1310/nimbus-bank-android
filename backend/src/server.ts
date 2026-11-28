@@ -2,7 +2,7 @@ import { Fault } from "./shared/errors.js";
 import { createApp } from "./app.js";
 import { runtime } from "./infrastructure/runtime.js";
 import { createCustomerProvisioner } from "./modules/officer/firebase-customer.adapter.js";
-import { createFirebaseAuthenticator } from "./modules/auth/firebase-auth.adapter.js";
+import { createFirebaseAuthenticator, createRegistrationIdentityVerifier } from "./modules/auth/firebase-auth.adapter.js";
 const r = runtime();
 const provisionCustomer = createCustomerProvisioner(r.bank, r.auth);
 const app = createApp({
@@ -15,15 +15,8 @@ const app = createApp({
   provision: async (actor, input) => {
     return provisionCustomer(actor, input);
   },
-  lookupUserByEmail: async (email) => {
-    const account = await r.auth.getUserByEmail(email).catch(() => null);
-    return account ? { uid: account.uid, disabled: Boolean(account.disabled) } : null;
-  },
-  updateUserPassword: async (uid, password) => {
-    await r.auth.updateUser(uid, { password });
-  },
-  createCustomerIdentity: async (uid, email, password) => {
-    await r.auth.createUser({ uid, email, password, emailVerified: false });
+  verifyRegistrationIdentity: createRegistrationIdentityVerifier(r.auth),
+  grantCustomerRole: async (uid) => {
     await r.auth.setCustomUserClaims(uid, { role: "CUSTOMER", permissions: [] });
   },
   authenticate: createFirebaseAuthenticator(r.auth),

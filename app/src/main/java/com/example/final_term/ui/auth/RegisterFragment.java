@@ -1,284 +1,205 @@
 package com.example.final_term.ui.auth;
 
 import android.os.Bundle;
-import android.os.CountDownTimer;
-import android.text.TextUtils;
 import android.util.Patterns;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.navigation.fragment.NavHostFragment;
 
 import com.example.final_term.R;
 import com.example.final_term.auth.AuthRepository;
+import com.example.final_term.auth.AuthState;
 import com.example.final_term.core.FinalTermApplication;
 import com.example.final_term.data.BackendApiClient;
 import com.example.final_term.databinding.FragmentRegisterBinding;
 import com.example.final_term.ui.ekyc.EkycDialogFragment;
-import com.example.final_term.ui.transaction.OtpBottomSheetDialog;
+import com.google.firebase.auth.FirebaseAuthUserCollisionException;
 
+import org.json.JSONException;
 import org.json.JSONObject;
-
-import java.util.Locale;
 
 public final class RegisterFragment extends Fragment {
     private static final String EKYC_TAG = "register-ekyc-dialog";
-
     private FragmentRegisterBinding binding;
+    private AuthRepository auth;
     private BackendApiClient api;
-    private AuthRepository authRepository;
-    @Nullable
-    private OtpBottomSheetDialog otpDialog;
-    @Nullable
-    private CountDownTimer resendTimer;
-
-    private String challengeId = "";
-    private String pendingEmail = "";
-    private String pendingPassword = "";
+    private boolean emailVerified;
     private boolean busy;
 
-    @Nullable
     @Override
-    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
-                             @Nullable Bundle savedInstanceState) {
+    public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle state) {
         binding = FragmentRegisterBinding.inflate(inflater, container, false);
         return binding.getRoot();
     }
 
     @Override
-    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
-        super.onViewCreated(view, savedInstanceState);
-        FinalTermApplication application = (FinalTermApplication) requireActivity().getApplication();
-        api = application.getAppContainer().getBackendApiClient();
-        authRepository = application.getAppContainer().getAuthRepository();
-
+    public void onViewCreated(@NonNull View view, Bundle state) {
+        var container = ((FinalTermApplication) requireActivity().getApplication()).getAppContainer();
+        auth = container.getAuthRepository();
+        api = container.getBackendApiClient();
         binding.registerBackButton.setOnClickListener(v -> returnToLogin());
         binding.registerBackToLoginButton.setOnClickListener(v -> returnToLogin());
-        binding.registerSubmitButton.setOnClickListener(v -> requestRegistrationOtp(false));
+        binding.registerSignOutButton.setOnClickListener(v -> returnToLogin());
+        binding.registerResendEmailButton.setOnClickListener(v -> sendEmail());
         binding.registerOpenEkycButton.setOnClickListener(v -> openEkycDialog());
-        binding.registerSignOutButton.setOnClickListener(v -> {
-            if (authRepository != null) authRepository.signOut();
-            returnToLogin();
+        binding.registerSubmitButton.setOnClickListener(v -> {
+            if (auth.currentEmail() == null) createIdentity();
+            else if (!emailVerified) checkEmail(true);
+            else completeRegistration();
+        });
+        auth.observeAuthState().observe(getViewLifecycleOwner(), ignored -> render());
+        render();
+        if (auth.currentEmail() != null && !isOnboarding()) checkEmail(false);
+    }
+
+    private boolean isOnboarding() {
+        AuthState state = auth.observeAuthState().getValue();
+        return state != null && state.getUser() != null && state.getUser().isOnboarding();
+    }
+
+    private void render() {
+        if (binding == null) return;
+        String email = auth.currentEmail();
+        boolean hasIdentity = email != null;
+        boolean onboarding = isOnboarding();
+        binding.registerFormCard.setVisibility(onboarding ? View.GONE : View.VISIBLE);
+        binding.registerEkycCard.setVisibility(onboarding ? View.VISIBLE : View.GONE);
+        binding.registerFullNameField.setVisibility(emailVerified ? View.VISIBLE : View.GONE);
+        binding.registerPhoneField.setVisibility(emailVerified ? View.VISIBLE : View.GONE);
+        binding.registerNationalIdField.setVisibility(emailVerified ? View.VISIBLE : View.GONE);
+        binding.registerPasswordField.setVisibility(hasIdentity ? View.GONE : View.VISIBLE);
+        binding.registerConfirmPasswordField.setVisibility(hasIdentity ? View.GONE : View.VISIBLE);
+        binding.registerEmailField.setEnabled(!hasIdentity);
+        if (hasIdentity) binding.registerEmailInput.setText(email);
+
+        binding.registerStepBadge.setText(onboarding ? "Bước 3/3" : emailVerified ? "Bước 2/3" : "Bước 1/3");
+        binding.registerFormTitle.setText(emailVerified ? "Thông tin mở tài khoản"
+                : hasIdentity ? "Xác minh email" : "Tạo thông tin đăng nhập");
+        binding.registerFormHint.setText(emailVerified ? "Nhập thông tin để tạo hồ sơ và tiếp tục eKYC."
+                : hasIdentity ? "Mở link trong email, sau đó quay lại đây để tiếp tục."
+                : "Nhập email và mật khẩu để nhận link xác minh.");
+        binding.registerSubmitButton.setText(emailVerified ? "Tiếp tục eKYC"
+                : hasIdentity ? "Tôi đã xác minh" : "Tạo tài khoản");
+        binding.registerResendEmailButton.setVisibility(hasIdentity && !emailVerified ? View.VISIBLE : View.GONE);
+        binding.registerResendEmailButton.setEnabled(!busy);
+        binding.registerSubmitButton.setEnabled(!busy);
+        binding.registerProgress.setVisibility(busy ? View.VISIBLE : View.GONE);
+    }
+
+    private void createIdentity() {
+        var form = binding;
+        String email = text(form.registerEmailInput).trim();
+        String password = text(form.registerPasswordInput);
+        if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            form.registerEmailInput.setError("Vui lòng nhập email hợp lệ.");
+            return;
+        }
+        if (password.length() < 8 || password.length() > 128) {
+            form.registerPasswordInput.setError("Mật khẩu phải từ 8 đến 128 ký tự.");
+            return;
+        }
+        if (!password.equals(text(form.registerConfirmPasswordInput))) {
+            form.registerConfirmPasswordInput.setError("Mật khẩu nhập lại chưa khớp.");
+            return;
+        }
+        startRequest();
+        auth.createRegistrationIdentity(email, password).addOnCompleteListener(task -> {
+            if (binding != form) return;
+            if (task.isSuccessful()) {
+                form.registerPasswordInput.setText("");
+                form.registerConfirmPasswordInput.setText("");
+                sendEmail();
+            } else {
+                finishRequest(task.getException() instanceof FirebaseAuthUserCollisionException
+                        ? "Email đã có tài khoản. Hãy đăng nhập để tiếp tục."
+                        : "Chưa tạo được tài khoản. Vui lòng kiểm tra thông tin và thử lại.");
+            }
         });
     }
 
-    private void requestRegistrationOtp(boolean fromResend) {
-        if (binding == null || busy) return;
-        clearError();
-        if (api == null) {
-            showError("Không thể kết nối máy chủ đăng ký.");
-            return;
-        }
-
-        String fullName = textOf(binding.registerFullNameInput);
-        String email = textOf(binding.registerEmailInput);
-        String phone = textOf(binding.registerPhoneInput);
-        String nationalId = textOf(binding.registerNationalIdInput);
-        String password = rawTextOf(binding.registerPasswordInput);
-        String confirmPassword = rawTextOf(binding.registerConfirmPasswordInput);
-
-        if (fullName.length() < 2) {
-            binding.registerFullNameInput.setError("Vui lòng nhập họ và tên hợp lệ.");
-            return;
-        }
-        binding.registerFullNameInput.setError(null);
-
-        if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-            binding.registerEmailInput.setError("Vui lòng nhập email hợp lệ.");
-            return;
-        }
-        binding.registerEmailInput.setError(null);
-
-        if (!phone.matches("^(?:0[0-9]{9}|\\+84[0-9]{9})$")) {
-            binding.registerPhoneInput.setError("Số điện thoại phải gồm 10 số (VD: 0901234567).");
-            return;
-        }
-        binding.registerPhoneInput.setError(null);
-
-        if (!nationalId.matches("^\\d{12}$")) {
-            binding.registerNationalIdInput.setError("Số CCCD phải gồm đúng 12 chữ số.");
-            return;
-        }
-        binding.registerNationalIdInput.setError(null);
-
-        if (password.length() < 8 || password.length() > 128) {
-            binding.registerPasswordInput.setError("Mật khẩu phải từ 8 đến 128 ký tự.");
-            return;
-        }
-        binding.registerPasswordInput.setError(null);
-
-        if (!password.equals(confirmPassword)) {
-            binding.registerConfirmPasswordInput.setError("Mật khẩu xác nhận không khớp.");
-            return;
-        }
-        binding.registerConfirmPasswordInput.setError(null);
-
-        setBusy(true);
-        if (fromResend && otpDialog != null) {
-            otpDialog.setBusy(true);
-            otpDialog.setStatusMessage(null);
-        }
-
-        try {
-            JSONObject payload = new JSONObject();
-            payload.put("fullName", fullName);
-            payload.put("email", email);
-            payload.put("phoneNumber", phone);
-            payload.put("nationalIdNumber", nationalId);
-            payload.put("password", password);
-
-            api.postPublic("/auth/register/request", payload.toString())
-                    .addOnCompleteListener(task -> {
-                        if (!isAdded() || binding == null) return;
-                        setBusy(false);
-                        if (otpDialog != null) otpDialog.setBusy(false);
-
-                        if (!task.isSuccessful() || task.getResult() == null) {
-                            String detail = task.getException() != null && !TextUtils.isEmpty(task.getException().getMessage())
-                                    ? " (" + task.getException().getMessage() + ")"
-                                    : "";
-                            String msg = "Không thể kết nối máy chủ" + detail + ". Vui lòng thử lại.";
-                            if (fromResend && otpDialog != null) otpDialog.setStatusMessage(msg);
-                            else showError(msg);
-                            return;
-                        }
-
-                        BackendApiClient.Response response = task.getResult();
-                        JSONObject json = parseJson(response.body);
-                        if (response.statusCode < 200 || response.statusCode >= 300 || json == null) {
-                            String errCode = json != null ? json.optString("error", "") : "";
-                            String requestId = json != null ? json.optString("requestId", "") : "";
-                            String msg = mapRegisterError(errCode, response.statusCode, requestId);
-                            if (fromResend && otpDialog != null) otpDialog.setStatusMessage(msg);
-                            else showError(msg);
-                            return;
-                        }
-
-                        challengeId = json.optString("challengeId", "");
-                        pendingEmail = email;
-                        pendingPassword = password;
-                        String demoCode = json.optString("code", "");
-                        String phoneMasked = json.optString("phoneMasked", "");
-                        showOtpSheet(email, phoneMasked, demoCode);
-                    });
-        } catch (Exception e) {
-            setBusy(false);
-            if (otpDialog != null) otpDialog.setBusy(false);
-            showError("Không thể tạo yêu cầu đăng ký.");
-        }
+    private void sendEmail() {
+        var form = binding;
+        startRequest();
+        auth.sendRegistrationEmail().addOnCompleteListener(task -> {
+            if (binding != form) return;
+            finishRequest(task.isSuccessful() ? null : "Chưa gửi được email xác minh. Vui lòng thử lại.");
+        });
     }
 
-    private void showOtpSheet(String email, String phoneMasked, String demoCode) {
-        if (getContext() == null) return;
-        if (otpDialog == null) {
-            otpDialog = new OtpBottomSheetDialog(requireContext(), new OtpBottomSheetDialog.Listener() {
-                @Override
-                public void onSubmitOtp(@NonNull String code) {
-                    confirmRegistrationOtp(code);
-                }
-
-                @Override
-                public void onResendRequested() {
-                    requestRegistrationOtp(true);
-                }
-
-                @Override
-                public void onDismissRequested() {
-                    stopResendTimer();
-                    if (otpDialog != null) otpDialog.dismiss();
-                }
-            });
-        }
-
-        String target = !TextUtils.isEmpty(phoneMasked) ? email + " (" + phoneMasked + ")" : email;
-        otpDialog.setSubtitle("Nhập mã OTP 6 số xác thực đăng ký cho " + target);
-        otpDialog.setStatusMessage(null);
-        otpDialog.setBusy(false);
-        otpDialog.setDemoCode(demoCode);
-        if (!otpDialog.isShowing()) {
-            otpDialog.show();
-        }
-        startResendCountdown();
-    }
-
-    private void confirmRegistrationOtp(String code) {
-        if (binding == null || api == null || TextUtils.isEmpty(challengeId)) return;
-        if (otpDialog != null) {
-            otpDialog.setBusy(true);
-            otpDialog.setStatusMessage(null);
-        }
-
-        try {
-            JSONObject payload = new JSONObject();
-            payload.put("challengeId", challengeId);
-            payload.put("code", code);
-            payload.put("password", pendingPassword);
-
-            api.postPublic("/auth/register/confirm", payload.toString())
-                    .addOnCompleteListener(task -> {
-                        if (!isAdded() || binding == null) return;
-
-                        if (!task.isSuccessful() || task.getResult() == null) {
-                            if (otpDialog != null) {
-                                otpDialog.setBusy(false);
-                                String detail = task.getException() != null && !TextUtils.isEmpty(task.getException().getMessage())
-                                        ? " (" + task.getException().getMessage() + ")"
-                                        : "";
-                                otpDialog.setStatusMessage("Lỗi kết nối khi xác thực OTP" + detail + ". Vui lòng thử lại.");
-                            }
-                            return;
-                        }
-
-                        BackendApiClient.Response response = task.getResult();
-                        JSONObject json = parseJson(response.body);
-                        if (response.statusCode < 200 || response.statusCode >= 300 || json == null) {
-                            if (otpDialog != null) {
-                                otpDialog.setBusy(false);
-                                String errCode = json != null ? json.optString("error", "") : "";
-                                String requestId = json != null ? json.optString("requestId", "") : "";
-                                otpDialog.setStatusMessage(mapRegisterError(errCode, response.statusCode, requestId));
-                            }
-                            return;
-                        }
-
-                        stopResendTimer();
-                        if (otpDialog != null && otpDialog.isShowing()) {
-                            otpDialog.dismiss();
-                        }
-                        signInAndStartEkyc();
-                    });
-        } catch (Exception e) {
-            if (otpDialog != null) {
-                otpDialog.setBusy(false);
-                otpDialog.setStatusMessage("Không thể xác nhận đăng ký.");
+    private void checkEmail(boolean explicit) {
+        var form = binding;
+        startRequest();
+        auth.refreshRegistrationEmail().addOnCompleteListener(task -> {
+            if (binding != form) return;
+            emailVerified = task.isSuccessful() && Boolean.TRUE.equals(task.getResult());
+            String error = !task.isSuccessful() ? "Chưa kiểm tra được email. Vui lòng thử lại."
+                    : explicit && !emailVerified ? "Email chưa được xác minh. Hãy mở link trong hộp thư." : null;
+            if (!emailVerified) {
+                finishRequest(error);
+                return;
             }
+            auth.refreshRegisteredProfile().addOnCompleteListener(profile -> {
+                if (binding != form) return;
+                finishRequest(profile.isSuccessful() ? null : "Chưa tải được hồ sơ. Vui lòng thử lại.");
+            });
+        });
+    }
+
+    private void completeRegistration() {
+        var form = binding;
+        String name = text(form.registerFullNameInput).trim();
+        String phone = text(form.registerPhoneInput).trim();
+        String nationalId = text(form.registerNationalIdInput).trim();
+        if (name.length() < 2 || name.length() > 120) {
+            form.registerFullNameInput.setError("Vui lòng nhập họ và tên hợp lệ.");
+            return;
+        }
+        if (!phone.matches("^(?:0[0-9]{9}|\\+84[0-9]{9})$")) {
+            form.registerPhoneInput.setError("Vui lòng nhập số điện thoại Việt Nam hợp lệ.");
+            return;
+        }
+        if (!nationalId.matches("^\\d{12}$")) {
+            form.registerNationalIdInput.setError("Số CCCD phải gồm 12 chữ số.");
+            return;
+        }
+        startRequest();
+        try {
+            String body = new JSONObject().put("fullName", name).put("phoneNumber", phone)
+                    .put("nationalIdNumber", nationalId).toString();
+            api.post("/auth/register/complete", body).addOnCompleteListener(task -> {
+                if (binding != form) return;
+                if (!task.isSuccessful() || task.getResult().statusCode != 200) {
+                    finishRequest(task.isSuccessful() ? registrationError(task.getResult().body)
+                            : "Chưa thể kết nối máy chủ. Vui lòng thử lại.");
+                    return;
+                }
+                auth.refreshRegisteredProfile().addOnCompleteListener(profile -> {
+                    if (binding != form) return;
+                    boolean ready = profile.isSuccessful() && profile.getResult() != null;
+                    finishRequest(ready ? null : "Chưa tải được hồ sơ. Vui lòng thử lại.");
+                    if (ready && profile.getResult().isOnboarding()) openEkycDialog();
+                });
+            });
+        } catch (JSONException invalid) {
+            finishRequest("Thông tin đăng ký không hợp lệ.");
         }
     }
 
-    private void signInAndStartEkyc() {
-        if (binding == null || authRepository == null) return;
-        setBusy(true);
-        authRepository.signIn(pendingEmail, pendingPassword)
-                .addOnCompleteListener(task -> {
-                    if (!isAdded() || binding == null) return;
-                    setBusy(false);
-                    if (!task.isSuccessful()) {
-                        Toast.makeText(requireContext(),
-                                "Đã tạo tài khoản. Vui lòng đăng nhập để hoàn tất eKYC.",
-                                Toast.LENGTH_LONG).show();
-                        returnToLogin();
-                        return;
-                    }
-                    binding.registerStepBadge.setText("Bước 2/2");
-                    binding.registerFormCard.setVisibility(View.GONE);
-                    binding.registerEkycCard.setVisibility(View.VISIBLE);
-                    openEkycDialog();
-                });
+    private String registrationError(String body) {
+        try {
+            switch (new JSONObject(body).optString("error")) {
+                case "CONTACT_PHONE_EXISTS": return "Số điện thoại này đã được sử dụng.";
+                case "NATIONAL_ID_EXISTS": return "Số CCCD này đã được sử dụng.";
+                case "EMAIL_NOT_VERIFIED": return "Vui lòng xác minh email và thử lại.";
+                default: return "Chưa hoàn tất được đăng ký. Vui lòng thử lại.";
+            }
+        } catch (JSONException invalid) {
+            return "Chưa hoàn tất được đăng ký. Vui lòng thử lại.";
+        }
     }
 
     private void openEkycDialog() {
@@ -288,126 +209,35 @@ public final class RegisterFragment extends Fragment {
         }
     }
 
-    private void startResendCountdown() {
-        stopResendTimer();
-        if (otpDialog == null) return;
-        resendTimer = new CountDownTimer(30_000L, 1_000L) {
-            @Override
-            public void onTick(long millisUntilFinished) {
-                if (otpDialog == null || !isAdded()) return;
-                long seconds = (millisUntilFinished + 999L) / 1_000L;
-                otpDialog.setCountdownText(
-                        String.format(Locale.ROOT, "Gửi lại mã sau 00:%02d", seconds),
-                        false
-                );
-            }
-
-            @Override
-            public void onFinish() {
-                if (otpDialog == null || !isAdded()) return;
-                otpDialog.setCountdownText("Gửi lại mã", true);
-            }
-        }.start();
-    }
-
-    private void stopResendTimer() {
-        if (resendTimer != null) {
-            resendTimer.cancel();
-            resendTimer = null;
-        }
-    }
-
-    private void setBusy(boolean value) {
-        busy = value;
-        if (binding == null) return;
-        binding.registerProgress.setVisibility(value ? View.VISIBLE : View.GONE);
-        binding.registerSubmitButton.setEnabled(!value);
-        binding.registerBackButton.setEnabled(!value);
-    }
-
-    private void showError(String message) {
-        if (binding == null) return;
-        binding.registerErrorText.setText(message);
-        binding.registerErrorText.setVisibility(View.VISIBLE);
-    }
-
-    private void clearError() {
-        if (binding == null) return;
-        binding.registerErrorText.setText("");
+    private void startRequest() {
+        busy = true;
         binding.registerErrorText.setVisibility(View.GONE);
+        render();
+    }
+
+    private void finishRequest(String error) {
+        busy = false;
+        binding.registerErrorText.setText(error);
+        binding.registerErrorText.setVisibility(error == null ? View.GONE : View.VISIBLE);
+        render();
     }
 
     private void returnToLogin() {
-        if (!isAdded()) return;
-        NavHostFragment.findNavController(this).popBackStack(R.id.login, false);
+        if (auth.currentEmail() != null) auth.signOut();
+        var nav = NavHostFragment.findNavController(this);
+        if (!nav.popBackStack(R.id.login, false)) {
+            nav.navigate(R.id.login);
+        }
     }
 
     @Override
     public void onDestroyView() {
-        super.onDestroyView();
-        stopResendTimer();
-        if (otpDialog != null && otpDialog.isShowing()) {
-            otpDialog.dismiss();
-        }
-        otpDialog = null;
         binding = null;
+        busy = false;
+        super.onDestroyView();
     }
 
-    private static String textOf(com.google.android.material.textfield.TextInputEditText input) {
-        return input.getText() == null ? "" : input.getText().toString().trim();
-    }
-
-    private static String rawTextOf(com.google.android.material.textfield.TextInputEditText input) {
+    private static String text(android.widget.EditText input) {
         return input.getText() == null ? "" : input.getText().toString();
-    }
-
-    @Nullable
-    private static JSONObject parseJson(@Nullable String body) {
-        if (TextUtils.isEmpty(body)) return null;
-        try {
-            return new JSONObject(body);
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
-
-    private static String mapRegisterError(String code, int statusCode, String requestId) {
-        String normalized = code == null ? "" : code.toUpperCase(Locale.ROOT);
-        switch (normalized) {
-            case "EMAIL_ALREADY_EXISTS":
-                return "Email này đã được đăng ký. Vui lòng dùng email khác hoặc đăng nhập.";
-            case "PHONE_ALREADY_EXISTS":
-                return "Số điện thoại này đã được sử dụng cho tài khoản khác.";
-            case "NATIONAL_ID_EXISTS":
-                return "Số CCCD này đã tồn tại trên hệ thống.";
-            case "INVALID_REQUEST":
-                return "Thông tin đăng ký chưa hợp lệ. Vui lòng kiểm tra lại họ tên, email, SĐT, CCCD và mật khẩu.";
-            case "REGISTRATION_IDENTITY_FAILED":
-                return "Không thể tạo tài khoản xác thực (email hoặc mật khẩu không hợp lệ trên Firebase).";
-            case "CHALLENGE_NOT_FOUND":
-                return "Phiên OTP không tồn tại. Vui lòng gửi lại yêu cầu đăng ký.";
-            case "INVALID_OTP":
-                return "Mã OTP không đúng. Vui lòng kiểm tra lại.";
-            case "OTP_EXPIRED":
-                return "Mã OTP đã hết hạn. Vui lòng gửi lại mã mới.";
-            case "OTP_LOCKED":
-                return "Bạn đã nhập sai OTP quá 5 lần. Vui lòng gửi lại yêu cầu mới.";
-            case "OTP_USED":
-                return "Mã OTP này đã được sử dụng.";
-            case "RATE_LIMITED":
-                return "Bạn thao tác quá nhanh. Vui lòng đợi vài phút rồi thử lại.";
-            case "REGISTRATION_UNAVAILABLE":
-                return "Chức năng đăng ký hiện chưa khả dụng trên máy chủ.";
-            case "INTERNAL_ERROR":
-                return "Lỗi máy chủ nội bộ (INTERNAL_ERROR"
-                        + (TextUtils.isEmpty(requestId) ? "" : ", ref: " + requestId) + ").";
-            default:
-                if (statusCode == 404 && normalized.isEmpty()) {
-                    return "Máy chủ chưa cập nhật API đăng ký (HTTP 404). Vui lòng rebuild/restart backend.";
-                }
-                if (statusCode == 429) return "Quá nhiều yêu cầu. Vui lòng thử lại sau.";
-                return "Không thể hoàn tất đăng ký (HTTP " + statusCode
-                        + (normalized.isEmpty() ? "" : ", mã: " + normalized) + ").";
-        }
     }
 }

@@ -99,6 +99,7 @@ Tất cả endpoint nghiệp vụ yêu cầu bearer token, ngoại trừ webhook
 
 | Nghiệp vụ | Endpoint |
 | --- | --- |
+| Hoàn tất đăng ký | POST `/auth/register/complete` với Firebase ID token đã xác minh email |
 | Hồ sơ | GET/PATCH `/me` |
 | Khả năng đã cấu hình | GET `/capabilities` |
 | Tài khoản | GET `/accounts`, `/accounts/:id`, `/accounts/:id/details` |
@@ -184,7 +185,7 @@ Firestore là nguồn số dư VND chính của app. Số dư checking, lịch s
 
 Stripe chỉ thu tiền thẻ ở chế độ test. `POST /topups/intents` tạo intent nạp VND gắn với tài khoản checking; người dùng hoàn thành OTP/face rồi gọi `POST /topups` để nhận PaymentIntent cho Stripe PaymentSheet. Tiền chỉ được ghi có vào Firebase sau webhook có chữ ký `payment_intent.succeeded`, khớp payment ID, mục đích, số tiền, currency, tài khoản và provider ID. PaymentSheet đóng hoặc báo hoàn tất chưa phải bằng chứng ghi có. Stripe VND dùng số nguyên đồng; việc thu VND phụ thuộc currency/capability của Stripe account.
 
-Hóa đơn điện/nước và đơn hàng tiện ích dùng PaymentIntent thẻ riêng. Webhook thành công đánh dấu hóa đơn đã trả và tạo outbox cho fulfillment; không trừ Firebase wallet lần nữa. Fulfillment hiện vẫn là demo và ghi trạng thái `DEMO_FULFILLED`.
+Khi thanh toán thành công, backend đánh dấu hóa đơn đã trả và cập nhật đơn demo sang `DEMO_FULFILLED` trong cùng Firestore transaction. Các intent Treasury cũ tiếp tục dùng provider ban đầu.
 
 Cấu hình `STRIPE_SECRET_KEY=sk_test_...`, `STRIPE_WEBHOOK_SECRET=whsec_...` và Android `STRIPE_PUBLISHABLE_KEY=pk_test_...` trong file env cục bộ. Không commit các khóa này. Chạy Stripe CLI để chuyển webhook tới đúng port backend đang nghe, ví dụ `stripe listen --events payment_intent.succeeded,payment_intent.payment_failed,payment_intent.canceled --forward-to http://127.0.0.1:3000/webhooks/stripe`; lấy signing secret CLI in ra làm `STRIPE_WEBHOOK_SECRET` rồi khởi động lại backend. Khi port backend khác 3000, thay URL tương ứng. Dùng thẻ test `4242 4242 4242 4242`, ngày hết hạn tương lai và CVC bất kỳ.
 
@@ -209,7 +210,7 @@ firebase emulators:exec --project demo-mobile-banking --only auth,firestore "npm
 
 Kiểm thử emulator được chạy riêng, không âm thầm kết nối project thật. Unit suite thường đánh dấu nó skipped. Chưa chạy kiểm thử connected với AWS/Stripe/Firebase thật do chưa có cấu hình. Test HTTP cần quyền mở cổng loopback.
 
-Truy vấn phân trang ngay trên Firestore; cursor là opaque token, cần gửi lại nguyên giá trị. Lịch sử có bộ lọc ngày có thể cần composite index trên Spark; chốt/deploy index theo truy vấn khi kết nối thật. Worker xử lý tối đa 25 job mỗi lần, chạy lại để drain. Hạn mức ngày checking được kiểm tra và tăng usage nguyên tử theo ngày UTC; policy thay đổi yêu cầu tạo intent mới.
+Truy vấn phân trang ngay trên Firestore; cursor là opaque token, cần gửi lại nguyên giá trị. Lịch sử có bộ lọc ngày có thể cần composite index trên Spark; chốt/deploy index theo truy vấn khi kết nối thật. Worker dành cho outbox cũ và xử lý tối đa 25 job mỗi lần. Hạn mức ngày checking được kiểm tra và tăng usage nguyên tử theo ngày UTC; policy thay đổi yêu cầu tạo intent mới.
 
 Giới hạn demo còn lại: kích hoạt khách hàng cần hardening, chưa có real SMS/face/Routes/interbank/inventory provider, webhook reconciliation sau timeout cần thao tác retry cùng request ID, chưa có credential rotation, metrics, backup hoặc production deployment. Chưa triển khai refund, dispute hoặc các luồng Stripe live. Việc triển khai app hoàn chỉnh là giai đoạn tiếp theo.
 
@@ -243,7 +244,7 @@ npm --prefix backend start
 npm --prefix backend run worker
 ```
 
-Lệnh xử lý outbox cập nhật fulfillment của đơn demo. Màn tra cứu hiển thị trạng thái thanh toán, trạng thái thực hiện và mã demo. Tài khoản giả lập có cờ `demo: true`; các API mô phỏng chuyển khoản và nạp/rút kiểm tra phạm vi tài khoản. Kiểm thử liên ngân hàng dùng `DEMO_BANK` với `0000000001` (chấp nhận) hoặc `0000000002` (từ chối). Sau OTP và step-up nếu cần, đợi ít nhất 5 giây và bấm kiểm tra để đối soát. Mã OTP demo chỉ hiện trong ứng dụng, không phải 2FA độc lập.
+Lệnh xử lý outbox chỉ dành cho các bản ghi đang chờ từ phiên bản cũ. Màn tra cứu hiển thị trạng thái thanh toán, trạng thái thực hiện và mã demo. Tài khoản giả lập có cờ `demo: true`; các API mô phỏng chuyển khoản và nạp/rút kiểm tra phạm vi tài khoản. Kiểm thử liên ngân hàng dùng `DEMO_BANK` với `0000000001` (chấp nhận) hoặc `0000000002` (từ chối). Sau OTP và step-up nếu cần, đợi ít nhất 5 giây và bấm kiểm tra để đối soát. Mã OTP demo chỉ hiện trong ứng dụng, không phải 2FA độc lập.
 
 ## Chatbot tùy chọn
 

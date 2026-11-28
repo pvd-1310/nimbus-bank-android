@@ -121,6 +121,8 @@ public class MainActivity extends AppCompatActivity {
         }
         if (route == RootViewModel.RootRoute.CUSTOMER_HOME && current != R.id.customerHome) {
             navController.navigate(R.id.customerHome);
+        } else if (route == RootViewModel.RootRoute.REGISTRATION && current != R.id.register) {
+            navController.navigate(R.id.register);
         } else if (route == RootViewModel.RootRoute.ONBOARDING
                 && current != R.id.profile && current != R.id.register) {
             navController.navigate(R.id.profile);

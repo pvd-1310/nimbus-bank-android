@@ -24,11 +24,15 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.LiveData;
 import androidx.navigation.Navigation;
 
 import com.example.final_term.BuildConfig;
 import com.example.final_term.R;
 import com.example.final_term.core.FinalTermApplication;
+import com.example.final_term.data.FirestoreReadRepository;
+import com.example.final_term.data.ReadModelResult;
+import com.example.final_term.data.ReadModels.AccountSummary;
 import com.example.final_term.data.BackendApiClient;
 import com.example.final_term.data.ReadSummaryFormatter;
 import com.example.final_term.databinding.FragmentTransactionFlowBinding;
@@ -107,7 +111,9 @@ public final class TransactionExecutionFragment extends Fragment {
     private long selectedPaymentAvailableMinor;
     private boolean accountsLoading;
     private boolean paymentAccountsLoadFailed;
-    private final ArrayList<JSONObject> eligiblePaymentAccounts = new ArrayList<>();
+    private final ArrayList<AccountSummary> eligiblePaymentAccounts = new ArrayList<>();
+    private FirestoreReadRepository readRepository;
+    private LiveData<ReadModelResult<List<AccountSummary>>> paymentAccounts;
     private ListPopupWindow paymentSourceMenu;
 
     private String customerUid;
@@ -200,6 +206,7 @@ public final class TransactionExecutionFragment extends Fragment {
         faceCamera.attach();
         FinalTermApplication app = (FinalTermApplication) requireActivity().getApplication();
         api = app.getAppContainer().getBackendApiClient();
+        readRepository = app.getAppContainer().getReadRepository();
         if (BuildConfig.STRIPE_PUBLISHABLE_KEY.startsWith("pk_test_")) {
             PaymentConfiguration.init(requireContext(), BuildConfig.STRIPE_PUBLISHABLE_KEY);
             paymentSheet = new PaymentSheet.Builder(this::onPaymentSheetResult).build(this);
@@ -239,8 +246,15 @@ public final class TransactionExecutionFragment extends Fragment {
 
         app.getAppContainer().getAuthRepository().observeAuthState().observe(getViewLifecycleOwner(), auth -> {
             if (auth != null && auth.getUser() != null) {
-                customerUid = auth.getUser().getUid();
+                String uid = auth.getUser().getUid();
+                if (!uid.equals(customerUid)) {
+                    if (paymentAccounts != null) paymentAccounts.removeObservers(getViewLifecycleOwner());
+                    paymentAccounts = null;
+                    eligiblePaymentAccounts.clear();
+                }
+                customerUid = uid;
                 customerName = auth.getUser().getFullName();
+                if (paymentAccounts == null && !completed) loadPaymentAccounts();
                 renderPaymentSource();
             }
         });
@@ -249,7 +263,7 @@ public final class TransactionExecutionFragment extends Fragment {
             renderSuccessStep();
         } else {
             renderConfirmationStep();
-            if (isBillOrOrderPayment()) loadPaymentAccounts();
+            if (isBillOrOrderPayment() && paymentAccounts == null) loadPaymentAccounts();
             if (commitPending && intentId != null) {
                 showPendingCard("Giao dịch đang chờ hoàn tất thanh toán hoặc đối soát.");
                 inspectIntent(false);
@@ -312,36 +326,29 @@ public final class TransactionExecutionFragment extends Fragment {
     }
 
     private void loadPaymentAccounts() {
-        if (accountsLoading || !isBillOrOrderPayment() || api == null) return;
+        if (!isBillOrOrderPayment() || customerUid == null || readRepository == null) return;
+        if (paymentAccounts != null) paymentAccounts.removeObservers(getViewLifecycleOwner());
         accountsLoading = true;
         paymentAccountsLoadFailed = false;
         dismissPaymentSourceMenu();
         renderPaymentSource();
         updateConfirmButtonState();
 
-        var view = binding;
-        api.get("/accounts?limit=100").addOnCompleteListener(task -> {
-            if (binding == null || binding != view || !isAdded()) return;
-            accountsLoading = false;
-            try {
-                if (task.isSuccessful() && ok(task.getResult())) {
-                    JSONArray items = new JSONObject(task.getResult().body).getJSONArray("items");
-                    eligiblePaymentAccounts.clear();
-                    for (int i = 0; i < items.length(); i++) {
-                        JSONObject account = items.optJSONObject(i);
-                        if (account != null && !account.optString("id").isEmpty()
-                                && "CHECKING".equalsIgnoreCase(account.optString("type"))
-                                && "ACTIVE".equalsIgnoreCase(account.optString("status"))
-                                && "VND".equalsIgnoreCase(account.optString("currency"))) {
-                            eligiblePaymentAccounts.add(account);
-                        }
+        paymentAccounts = readRepository.observeAccounts(customerUid);
+        paymentAccounts.observe(getViewLifecycleOwner(), result -> {
+            if (binding == null || result == null) return;
+            accountsLoading = result.getStatus() == ReadModelResult.Status.LOADING;
+            paymentAccountsLoadFailed = result.getStatus() == ReadModelResult.Status.ERROR
+                    || result.getStatus() == ReadModelResult.Status.CACHED;
+            if (!accountsLoading && !paymentAccountsLoadFailed) {
+                eligiblePaymentAccounts.clear();
+                for (AccountSummary account : result.getData()) {
+                    if (!account.id.isEmpty() && "CHECKING".equalsIgnoreCase(account.type)
+                            && "ACTIVE".equalsIgnoreCase(account.status) && "VND".equalsIgnoreCase(account.currency)) {
+                        eligiblePaymentAccounts.add(account);
                     }
-                    restorePaymentAccount();
-                } else {
-                    paymentAccountsLoadFailed = true;
                 }
-            } catch (JSONException ignored) {
-                paymentAccountsLoadFailed = true;
+                restorePaymentAccount();
             }
             dismissPaymentSourceMenu();
             renderPaymentSource();
@@ -352,8 +359,8 @@ public final class TransactionExecutionFragment extends Fragment {
 
     private void restorePaymentAccount() {
         String preferredId = selectedPaymentAccountId != null ? selectedPaymentAccountId : request.sourceAccountId;
-        for (JSONObject account : eligiblePaymentAccounts) {
-            if (account.optString("id").equals(preferredId)) {
+        for (AccountSummary account : eligiblePaymentAccounts) {
+            if (account.id.equals(preferredId)) {
                 rememberPaymentAccount(account);
                 return;
             }
@@ -369,8 +376,8 @@ public final class TransactionExecutionFragment extends Fragment {
             return;
         }
 
-        JSONObject fallbackAccount = eligiblePaymentAccounts.get(0);
-        for (JSONObject account : eligiblePaymentAccounts) {
+        AccountSummary fallbackAccount = eligiblePaymentAccounts.get(0);
+        for (AccountSummary account : eligiblePaymentAccounts) {
             if (paymentAccountBalance(account) >= request.amountMinor) {
                 fallbackAccount = account;
                 break;
@@ -389,14 +396,14 @@ public final class TransactionExecutionFragment extends Fragment {
         dismissPaymentSourceMenu();
 
         boolean showAccounts = !accountsLoading && !paymentAccountsLoadFailed && !eligiblePaymentAccounts.isEmpty();
-        List<JSONObject> options = showAccounts ? new ArrayList<>(eligiblePaymentAccounts) : List.of();
+        List<AccountSummary> options = showAccounts ? new ArrayList<>(eligiblePaymentAccounts) : List.of();
         List<String> labels = new ArrayList<>();
         labels.add(getString(R.string.payment_source_stripe));
         int checked = "NIMBUS_ACCOUNT".equals(selectedPaymentMethod) ? -1 : 0;
         if (showAccounts) {
-            for (JSONObject account : options) {
-                String id = account.optString("id");
-                String number = AccountSourcePresentation.number(requireContext(), id, paymentAccountNumber(account));
+            for (AccountSummary account : options) {
+                String id = account.id;
+                String number = AccountSourcePresentation.number(requireContext(), id, account.accountNumber);
                 if ("NIMBUS_ACCOUNT".equals(selectedPaymentMethod) && id.equals(selectedPaymentAccountId)) {
                     checked = labels.size();
                 }
@@ -456,9 +463,9 @@ public final class TransactionExecutionFragment extends Fragment {
         menu.show();
     }
 
-    private void selectPaymentSource(@Nullable JSONObject account) {
+    private void selectPaymentSource(@Nullable AccountSummary account) {
         String method = account == null ? "STRIPE_CARD" : "NIMBUS_ACCOUNT";
-        boolean accountChanged = account != null && !Objects.equals(account.optString("id"), selectedPaymentAccountId);
+        boolean accountChanged = account != null && !Objects.equals(account.id, selectedPaymentAccountId);
         if (!method.equals(selectedPaymentMethod) || accountChanged) invalidatePaymentIntent();
         if (account != null) rememberPaymentAccount(account);
         selectedPaymentMethod = method;
@@ -466,19 +473,14 @@ public final class TransactionExecutionFragment extends Fragment {
         renderConfirmationStep();
     }
 
-    private void rememberPaymentAccount(JSONObject account) {
-        selectedPaymentAccountId = account.optString("id");
-        selectedPaymentAccountNumber = paymentAccountNumber(account);
+    private void rememberPaymentAccount(AccountSummary account) {
+        selectedPaymentAccountId = account.id;
+        selectedPaymentAccountNumber = account.accountNumber;
         selectedPaymentAvailableMinor = paymentAccountBalance(account);
     }
 
-    @Nullable
-    private static String paymentAccountNumber(JSONObject account) {
-        return account.isNull("accountNumber") ? null : account.optString("accountNumber");
-    }
-
-    private static long paymentAccountBalance(JSONObject account) {
-        return account.optLong("availableMinor", account.optLong("balanceMinor"));
+    private static long paymentAccountBalance(AccountSummary account) {
+        return account.availableMinor != null ? account.availableMinor : account.balanceMinor;
     }
 
     private void invalidatePaymentIntent() {
@@ -1752,6 +1754,7 @@ public final class TransactionExecutionFragment extends Fragment {
         handler.removeCallbacksAndMessages(null);
         binding = null;
         accountsLoading = false;
+        paymentAccounts = null;
         busy = false;
         super.onDestroyView();
     }

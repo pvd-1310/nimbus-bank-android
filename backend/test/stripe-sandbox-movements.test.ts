@@ -2,9 +2,11 @@ import Stripe from "stripe";
 import { expect, it, vi } from "vitest";
 import { Banking } from "../src/core/banking.js";
 import { StripeSandboxMovements } from "../src/modules/accounts/stripe-sandbox-movements.service.js";
+import { digest } from "../src/shared/crypto.js";
+import { intentDigest } from "../src/modules/security/intent.js";
 import { MemoryStore } from "./support/memory-store.js";
 
-it("requires OTP, transfers once through Stripe and leaves the old Firestore balances untouched", async () => {
+it("can finish existing Treasury intents once after OTP", async () => {
   const store = new MemoryStore();
   const bank = new Banking(store, { otpSecret: "test" });
   const stripe = new Stripe("sk_test_fixture");
@@ -24,20 +26,18 @@ it("requires OTP, transfers once through Stripe and leaves the old Firestore bal
   const send = vi.spyOn(stripe.treasury.outboundPayments, "create").mockResolvedValue({
     livemode: false, id: "obp_test", status: "posted",
   } as Stripe.Treasury.OutboundPayment);
-  const input = { requestId: "unique-request", sourceAccountId: "alice", destinationAccountId: "bob",
-    amountMinor: 500, currency: "USD" };
-  await store.run(async (t) => {
-    t.set("users/bob", { role: "CUSTOMER", active: true, fullName: "Người nhận", contactPhone: "+84901234567",
-      primaryCheckingAccountId: "bob" });
-    t.set("accounts/secondary", { ownerUid: "bob", type: "CHECKING", status: "ACTIVE" });
-  });
-  await expect(service.lookupRecipient(actor, "alice", "0901234567")).resolves.toEqual({
-    accountId: "bob", fullName: "Người nhận",
-  });
-  await expect(service.prepare(actor, "TRANSFER", { ...input, destinationAccountId: "+84901234567", recipientAccountId: "secondary" }))
-    .rejects.toMatchObject({ code: "RECIPIENT_CHANGED" });
-  input.destinationAccountId = "+84901234567";
-  const intent = await service.prepare(actor, "TRANSFER", input);
+  const id = digest(["alice", "TRANSFER", "legacy-request"]);
+  const source = { connectedAccountId: "acct_alice", financialAccountId: "fa_alice", cardId: "ic_alice" };
+  const destination = { connectedAccountId: "acct_bob", financialAccountId: "fa_bob", cardId: "ic_bob" };
+  const now = bank.now();
+  const intent = {
+    id, source, destination, actorUid: "alice", sourceAccountId: "alice", destinationAccountId: "bob",
+    provider: "STRIPE_TREASURY", requestId: "legacy-request", payloadDigest: "legacy-digest",
+    kind: "TRANSFER", movement: "TRANSFER", amountMinor: 500, currency: "USD", feeMinor: 0,
+    policyDigest: digest([Object.values(source), Object.values(destination), "TRANSFER", null]),
+    status: "CREATED", securityVersion: 1, createdAt: now, expiresAt: now + 300000,
+  };
+  await store.run(async (t) => t.set("transactionIntents/" + id, { ...intent, digest: intentDigest(intent) }));
   await expect(service.commit(actor, intent.id, "TRANSFER")).rejects.toMatchObject({ code: "OTP_REQUIRED" });
   expect(send).not.toHaveBeenCalled();
   const c = await bank.security.challenge(actor, intent.id);

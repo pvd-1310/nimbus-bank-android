@@ -220,7 +220,7 @@ it("webhooks deduplicate and cannot regress successful payment", async () => {
     type: "payment_intent.payment_failed",
   });
   expect((await s.run((t) => t.get("payments/p")))!.status).toBe("SUCCEEDED");
-  expect(await s.run((t) => t.list("outbox"))).toHaveLength(1);
+  expect(await s.run((t) => t.list("outbox"))).toHaveLength(0);
 });
 it("webhook amount mismatch never settles bill", async () => {
   const p = new Payments(b, undefined);

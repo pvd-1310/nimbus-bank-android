@@ -27,9 +27,10 @@ export interface AppDependencies {
   stripeSandboxAccounts?: StripeSandboxAccounts;
   stripeSandboxMovements?: StripeSandboxMovements;
   authenticate: (token: string) => Promise<Actor>;
-  lookupUserByEmail?: (email: string) => Promise<{ uid: string; disabled: boolean } | null>;
-  updateUserPassword?: (uid: string, password: string) => Promise<void>;
-  createCustomerIdentity?: (uid: string, email: string, password: string) => Promise<void>;
+  verifyRegistrationIdentity?: (token: string) => Promise<{
+    uid: string; email?: string; emailVerified: boolean; role?: unknown;
+  }>;
+  grantCustomerRole?: (uid: string) => Promise<void>;
   provision?: (a: Actor, body: Doc) => Promise<unknown>;
 }
 export type Route = (

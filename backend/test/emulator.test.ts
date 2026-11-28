@@ -1,3 +1,8 @@
+import request from "supertest";
+import { createApp } from "../src/app.js";
+import { createFirebaseAuthenticator, createRegistrationIdentityVerifier } from "../src/modules/auth/firebase-auth.adapter.js";
+import { Evidence } from "../src/modules/ekyc/ekyc.service.js";
+import { Payments } from "../src/modules/payments/payment.service.js";
 import { deleteApp, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
@@ -330,3 +335,68 @@ it.skipIf(!enabled)(
   },
   30000,
 );
+
+it.skipIf(!enabled)("uses Firebase email actions for signup and password reset", async () => {
+  const stamp = Date.now();
+  const firebaseApp = initializeApp({ projectId }, "email-actions-" + stamp);
+  const auth = getAuth(firebaseApp);
+  const db = getFirestore(firebaseApp);
+  const host = "http://" + process.env.FIREBASE_AUTH_EMULATOR_HOST;
+  const email = "email-actions-" + stamp + "@example.com";
+  const firstPassword = randomBytes(16).toString("hex");
+  const newPassword = randomBytes(16).toString("hex");
+  const authApi = async (operation: string, body: Record<string, unknown>) => {
+    const response = await fetch(host + "/identitytoolkit.googleapis.com/v1/accounts:" + operation + "?key=demo-key", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    const data = await response.json();
+    expect(response.ok, JSON.stringify(data.error ?? {})).toBe(true);
+    return data;
+  };
+  const emailCode = async (requestType: string) => {
+    const response = await fetch(host + "/emulator/v1/projects/" + projectId + "/oobCodes");
+    expect(response.ok).toBe(true);
+    const { oobCodes } = await response.json() as {
+      oobCodes: Array<{ email: string; requestType: string; oobCode: string }>;
+    };
+    const code = oobCodes.find((entry) => entry.email === email && entry.requestType === requestType);
+    expect(code).toBeDefined();
+    return code!.oobCode;
+  };
+
+  try {
+    const bank = new Banking(new FirestoreStore(db), { otpSecret: "emulator" });
+    const app = createApp({
+      bank, evidence: new Evidence(bank), payments: new Payments(bank),
+      authenticate: createFirebaseAuthenticator(auth),
+      verifyRegistrationIdentity: createRegistrationIdentityVerifier(auth),
+      grantCustomerRole: (uid) => auth.setCustomUserClaims(uid, { role: "CUSTOMER", permissions: [] }),
+    });
+    const created = await authApi("signUp", { email, password: firstPassword, returnSecureToken: true });
+    const uid = created.localId;
+    const profile = {
+      fullName: "Emulator Customer",
+      phoneNumber: "0" + String(stamp).slice(-9),
+      nationalIdNumber: String(stamp).slice(-12),
+    };
+    const complete = (token: string) => request(app).post("/auth/register/complete")
+      .set("Authorization", "Bearer " + token).send(profile);
+    await complete(created.idToken).expect(403);
+    expect((await db.doc("users/" + uid).get()).exists).toBe(false);
+
+    await authApi("sendOobCode", { requestType: "VERIFY_EMAIL", idToken: created.idToken });
+    await authApi("update", { oobCode: await emailCode("VERIFY_EMAIL") });
+    const verified = await authApi("signInWithPassword", { email, password: firstPassword, returnSecureToken: true });
+    const { body } = await complete(verified.idToken).expect(200);
+    await complete(verified.idToken).expect(200).expect(body);
+    expect((await db.doc("accounts/" + body.accountId).get()).data()).toMatchObject({ ownerUid: uid, status: "INACTIVE" });
+
+    await authApi("sendOobCode", { requestType: "PASSWORD_RESET", email });
+    await authApi("resetPassword", { oobCode: await emailCode("PASSWORD_RESET"), newPassword });
+    const signedIn = await authApi("signInWithPassword", { email, password: newPassword, returnSecureToken: true });
+    await request(app).get("/me").set("Authorization", "Bearer " + signedIn.idToken).expect(200);
+  } finally {
+    await db.terminate();
+    await deleteApp(firebaseApp);
+  }
+}, 30000);

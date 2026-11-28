@@ -9,6 +9,12 @@ import static org.junit.Assert.*;
 public class RoleNavigationTest {
     private final RootViewModel viewModel = new RootViewModel();
 
+    @Test public void pendingRegistrationResumesRegistration() {
+        AuthState pending = AuthState.registrationPending();
+        assertEquals(RootViewModel.RootRoute.REGISTRATION, viewModel.routeFor(pending));
+        org.junit.Assert.assertFalse(viewModel.keepsDestination(pending, pending));
+    }
+
     @Test public void signedOutGoesToLogin() { assertEquals(RootViewModel.RootRoute.LOGIN, viewModel.routeFor(AuthState.signedOut())); }
     @Test public void activeCustomerGoesOnlyToCustomerHome() {
         AppUser user = new AppUser("c", "customer.demo@example.com", UserRole.CUSTOMER, true);

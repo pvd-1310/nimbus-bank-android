@@ -6,7 +6,7 @@ import { check, key, minor } from "../../shared/errors.js";
 import { type Actor } from "../auth/auth.types.js";
 import type { StripeGateway } from "./stripe.provider.js";
 import { intentDigest } from "../security/intent.js";
-import { drainOutbox } from "../orders/fulfillment.service.js";
+import { fulfillDemoOrder } from "../orders/fulfillment.service.js";
 const compatiblePayment = (d: Doc | undefined): Doc | undefined =>
   d
     ? {
@@ -326,7 +326,7 @@ export class Payments {
         t.set("transactionIntents/" + id, { ...i, status: "COMMITTED", committedAt: settledAt });
         t.set("bills/" + billId, { ...bill, status: "PAID", paymentId: id });
         t.set("billPaymentLocks/" + billId, { paymentId: id });
-        t.set("outbox/" + id, { paymentId: id, billId, ownerUid: a.uid, status: "PENDING", attempts: 0, createdAt: settledAt });
+        await fulfillDemoOrder(t, bill, id);
         this.bank.audit(t, a, "NIMBUS_PAYMENT_SETTLED", id, requestId);
         this.bank.notifications.emit(t, {
           id: `pay_${id}`,
@@ -358,7 +358,6 @@ export class Payments {
       return p;
     });
     if (record._nimbusSettled === true || (record.paymentMethod === "NIMBUS_ACCOUNT" && record.status === "SUCCEEDED")) {
-      await drainOutbox(this.bank.store);
       const { _nimbusSettled, ...result } = record;
       return { ...result, id, paymentId: id, gateway: "NIMBUS", status: "SUCCEEDED" };
     }
@@ -425,7 +424,7 @@ export class Payments {
     check(o.livemode === false, "LIVE_MODE_FORBIDDEN");
     key(o.metadata?.paymentId);
     const success = event.type === "payment_intent.succeeded";
-    const outcome = await this.bank.store.run(async (t) => {
+    return this.bank.store.run(async (t) => {
       const id = o.metadata.paymentId,
         previousEvent = await t.get("webhookEvents/" + event.id),
         p = compatiblePayment(await t.get("payments/" + id));
@@ -506,14 +505,7 @@ export class Payments {
             status: "PAID",
             paymentId: id,
           });
-          t.set("outbox/" + id, {
-            paymentId: id,
-            billId: p.billId,
-            ownerUid: p.ownerUid,
-            status: "PENDING",
-            attempts: 0,
-            createdAt: this.bank.now(),
-          });
+          await fulfillDemoOrder(t, bill!, id);
           this.bank.audit(
             t,
             { uid: p.ownerUid, role: "CUSTOMER", permissions: [] },
@@ -537,8 +529,6 @@ export class Payments {
       });
       return { received: true };
     });
-    if (success) await drainOutbox(this.bank.store);
-    return outcome;
   }
 
   async listStripeCards(a: Actor) {

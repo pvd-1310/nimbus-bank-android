@@ -4,7 +4,6 @@ import { expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import { Banking } from "../src/core/banking.js";
 import { Evidence } from "../src/modules/ekyc/ekyc.service.js";
-import { drainOutbox } from "../src/modules/orders/fulfillment.service.js";
 import { Payments } from "../src/modules/payments/payment.service.js";
 import { StripeGateway } from "../src/modules/payments/stripe.provider.js";
 import { MemoryStore } from "./support/memory-store.js";
@@ -119,7 +118,6 @@ it("settles a demo order once after OTP and a signed sandbox webhook", async () 
   expect(await store.run((t) => t.list("transactions"))).toEqual([
     expect.objectContaining({ paymentId: id, status: "SETTLED" }),
   ]);
-  await drainOutbox(store);
   expect((await store.run((t) => t.get("orders/demo")))?.fulfillmentStatus).toBe("DEMO_FULFILLED");
 });
 
