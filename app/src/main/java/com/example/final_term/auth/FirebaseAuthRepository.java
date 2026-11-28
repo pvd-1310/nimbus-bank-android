@@ -104,13 +104,6 @@ public final class FirebaseAuthRepository implements AuthRepository {
     }
 
     @Override
-    public Task<Void> sendRegistrationEmail() {
-        FirebaseUser user = firebaseAuth == null ? null : firebaseAuth.getCurrentUser();
-        if (user == null) return Tasks.forException(new IllegalStateException("SIGN_IN_REQUIRED"));
-        return user.sendEmailVerification();
-    }
-
-    @Override
     public Task<Boolean> refreshRegistrationEmail() {
         FirebaseUser user = firebaseAuth == null ? null : firebaseAuth.getCurrentUser();
         if (user == null) return Tasks.forException(new IllegalStateException("SIGN_IN_REQUIRED"));

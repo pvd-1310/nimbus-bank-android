@@ -1,4 +1,5 @@
 import { registerFaceLogin, registerFaceStepUp } from "./modules/security/face.routes.js";
+import { registerEmailOtpRoutes } from "./modules/security/email-otp.routes.js";
 import { registerSelfRegistrationRoutes } from "./modules/security/register.routes.js";
 import express from "express";
 import { registerChatbotRoutes } from "./modules/chatbot/chatbot.js";
@@ -37,6 +38,7 @@ export function createApp(d: AppDependencies) {
   registerStripeWebhook(app, d);
   registerFaceLogin(app, d);
   app.use(express.json({ limit: "64kb" }));
+  registerEmailOtpRoutes(app, d);
   registerSelfRegistrationRoutes(app, d);
   app.use(authenticateRequests(d));
   let recognitionRequests = 0;

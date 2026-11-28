@@ -2,8 +2,9 @@ import type { Express } from "express";
 import { z } from "zod";
 import type { AppDependencies } from "../../core/http.js";
 import { digest, generateAccountNumber } from "../../shared/crypto.js";
-import { check, Fault, key } from "../../shared/errors.js";
+import { check, key } from "../../shared/errors.js";
 import { normalizeSearchText, phoneSearchTokens } from "../../shared/search.js";
+import { registrationIdentity } from "./email-otp.routes.js";
 import { reserveContactPhone } from "../profile/contact-phone-reservations.js";
 
 const profileSchema = z.object({
@@ -15,12 +16,8 @@ const profileSchema = z.object({
 
 export function registerSelfRegistrationRoutes(app: Express, d: AppDependencies) {
   app.post("/auth/register/complete", async (req, res) => {
-    const token = req.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
-    check(token, "UNAUTHENTICATED", 401);
-    check(d.verifyRegistrationIdentity && d.grantCustomerRole, "REGISTRATION_UNAVAILABLE", 503);
-    const identity = await d.verifyRegistrationIdentity(token).catch(() => {
-      throw new Fault("UNAUTHENTICATED", 401);
-    });
+    check(d.grantCustomerRole, "REGISTRATION_UNAVAILABLE", 503);
+    const identity = await registrationIdentity(req, d);
     check(identity.emailVerified && identity.email, "EMAIL_NOT_VERIFIED", 403);
     check(identity.role === undefined || identity.role === "CUSTOMER", "FORBIDDEN", 403);
     const { uid } = identity;

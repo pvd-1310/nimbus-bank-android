@@ -1,8 +1,9 @@
+import { createAuthEmailSender } from "./modules/security/auth-email.js";
 import { Fault } from "./shared/errors.js";
 import { createApp } from "./app.js";
 import { runtime } from "./infrastructure/runtime.js";
 import { createCustomerProvisioner } from "./modules/officer/firebase-customer.adapter.js";
-import { createFirebaseAuthenticator, createRegistrationIdentityVerifier } from "./modules/auth/firebase-auth.adapter.js";
+import { createFirebaseAuthenticator, createFirebaseEmailOtpAccounts, createRegistrationIdentityVerifier } from "./modules/auth/firebase-auth.adapter.js";
 const r = runtime();
 const provisionCustomer = createCustomerProvisioner(r.bank, r.auth);
 const app = createApp({
@@ -16,6 +17,8 @@ const app = createApp({
     return provisionCustomer(actor, input);
   },
   verifyRegistrationIdentity: createRegistrationIdentityVerifier(r.auth),
+  sendAuthEmail: createAuthEmailSender(process.env.RESEND_API_KEY, process.env.AUTH_EMAIL_FROM),
+  ...createFirebaseEmailOtpAccounts(r.auth),
   grantCustomerRole: async (uid) => {
     await r.auth.setCustomUserClaims(uid, { role: "CUSTOMER", permissions: [] });
   },
