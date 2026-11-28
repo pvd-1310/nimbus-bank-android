@@ -138,7 +138,7 @@ Mật khẩu của tài khoản mới là `DEMO_PASSWORD` trong `.env`. Đăng x
 
 Để thử chuyển khoản nội bộ, đăng nhập khách hàng chính, chọn tài khoản thanh toán và tra cứu người nhận bằng số điện thoại mẫu `0907364000` của khách hàng recipient. Kiểm tra tên/số tiền trước khi xác nhận. Với giao dịch demo cần OTP, app hiển thị mã để tiếp tục. Số dư và các giao dịch trong emulator là dữ liệu thử nghiệm.
 
-Đăng ký và quên mật khẩu dùng mã OTP qua email, kể cả khi backend kết nối Firebase Emulator. Cấu hình Resend ở backend theo hướng dẫn bên dưới trước khi thử gửi email.
+Để thử đăng ký hoặc quên mật khẩu, mở link xác minh hoặc đặt lại mật khẩu hiện trong terminal chạy Firebase Auth Emulator. Với project test dùng Firebase thật, bật phương thức Email/Password và dùng hộp thư bạn có quyền truy cập. Sau khi xác minh email đăng ký, quay lại app để tiếp tục nhập hồ sơ và thực hiện eKYC.
 
 Cách A không tự cấu hình S3, Face API, FPT.AI, Stripe hay Maps. Các tính năng phụ thuộc chúng sẽ báo chưa khả dụng; bản Firebase demo cũng không gắn Maps key vào Android. Xem mục 5 khi cần thử các tích hợp đó trong cấu hình connected.
 
@@ -305,11 +305,13 @@ Webhook phải tới backend và xác thực thành công để đồng bộ k�
 
 Nếu muốn dùng chatbot với OpenAI, đặt `CHATBOT_ENABLED=true`, `OPENAI_API_KEY` và `OPENAI_MODEL` trong `backend/.env`, rồi tạo lại backend. Nếu không dùng, để `CHATBOT_ENABLED=false`. Chế độ emulator còn có thể bật chatbot hướng dẫn cục bộ bằng `CHATBOT_LOCAL_DEMO=true`; chế độ này không cần OpenAI key.
 
-### 5.5 OTP email cho đăng ký và quên mật khẩu
+### 5.5 Link email xác thực mở lại Nimbus Bank
 
-Đặt `RESEND_API_KEY` và `AUTH_EMAIL_FROM` trong `backend/.env`, rồi tạo lại container backend. Có thể thử gửi từ `Nimbus Bank <onboarding@resend.dev>` đến hộp thư của tài khoản Resend. Để gửi cho người dùng khác, xác minh tên miền gửi và dùng địa chỉ thuộc tên miền đó.
+Với bản connected, Firebase Auth gửi email tiếng Việt cho đăng ký và quên mật khẩu. Mở link mới trên thiết bị đã cài app để xác minh hoặc đặt mật khẩu mới trong Nimbus Bank. Firebase mở trang xác thực trên web khi thiết bị chưa có app hoặc chưa bật mở liên kết được hỗ trợ. Bản local dùng link in trong terminal của Firebase Auth Emulator.
 
-App dùng cùng hộp thoại nhập mã với giao dịch. Người dùng tự nhập 6 chữ số từ email. Mã có hiệu lực 5 phút và chỉ dùng được một lần. D-OTP giao dịch vẫn theo cơ chế demo hiện tại.
+Firebase Hosting phục vụ tệp xác minh tại `firebase-auth-hosting/.well-known/assetlinks.json`. Tệp hiện dùng chữ ký của APK debug trên máy phát triển. Khi dùng keystore khác hoặc phát hành qua Google Play, đăng ký SHA-1 và SHA-256 của chứng chỉ ký app mới trong Firebase Console, thêm SHA-256 tương ứng vào tệp này và deploy lại Hosting. Lệnh kiểm tra chữ ký là `.\gradlew.bat signingReport`.
+
+Có thể chỉnh tên người gửi và tiêu đề của cả hai email trong **Firebase Console → Authentication → Templates**. Mẫu đặt lại mật khẩu cho sửa phần nội dung. Mẫu xác minh email sử dụng bố cục mặc định của Firebase.
 
 ## 6. Kiểm tra, dừng và xử lý lỗi
 

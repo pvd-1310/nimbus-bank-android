@@ -1,6 +1,6 @@
 import request from "supertest";
 import { createApp } from "../src/app.js";
-import { createFirebaseAuthenticator, createFirebaseEmailOtpAccounts, createRegistrationIdentityVerifier } from "../src/modules/auth/firebase-auth.adapter.js";
+import { createFirebaseAuthenticator, createRegistrationIdentityVerifier } from "../src/modules/auth/firebase-auth.adapter.js";
 import { Evidence } from "../src/modules/ekyc/ekyc.service.js";
 import { Payments } from "../src/modules/payments/payment.service.js";
 import { deleteApp, initializeApp } from "firebase-admin/app";
@@ -336,7 +336,7 @@ it.skipIf(!enabled)(
   30000,
 );
 
-it.skipIf(!enabled)("completes signup and password reset with emailed OTPs and Firebase Auth", async () => {
+it.skipIf(!enabled)("uses Firebase email actions for signup and password reset", async () => {
   const stamp = Date.now();
   const firebaseApp = initializeApp({ projectId }, "email-actions-" + stamp);
   const auth = getAuth(firebaseApp);
@@ -353,7 +353,16 @@ it.skipIf(!enabled)("completes signup and password reset with emailed OTPs and F
     expect(response.ok, JSON.stringify(data.error ?? {})).toBe(true);
     return data;
   };
-  const mailbox: Array<{ purpose: string; code: string }> = [];
+  const emailCode = async (requestType: string) => {
+    const response = await fetch(host + "/emulator/v1/projects/" + projectId + "/oobCodes");
+    expect(response.ok).toBe(true);
+    const { oobCodes } = await response.json() as {
+      oobCodes: Array<{ email: string; requestType: string; oobCode: string }>;
+    };
+    const code = oobCodes.find((entry) => entry.email === email && entry.requestType === requestType);
+    expect(code).toBeDefined();
+    return code!.oobCode;
+  };
 
   try {
     const bank = new Banking(new FirestoreStore(db), { otpSecret: "emulator" });
@@ -361,11 +370,6 @@ it.skipIf(!enabled)("completes signup and password reset with emailed OTPs and F
       bank, evidence: new Evidence(bank), payments: new Payments(bank),
       authenticate: createFirebaseAuthenticator(auth),
       verifyRegistrationIdentity: createRegistrationIdentityVerifier(auth),
-      ...createFirebaseEmailOtpAccounts(auth),
-      sendAuthEmail: async ({ to, purpose, code }) => {
-        expect(to).toBe(email);
-        mailbox.push({ purpose, code });
-      },
       grantCustomerRole: (uid) => auth.setCustomUserClaims(uid, { role: "CUSTOMER", permissions: [] }),
     });
     const created = await authApi("signUp", { email, password: firstPassword, returnSecureToken: true });
@@ -380,23 +384,15 @@ it.skipIf(!enabled)("completes signup and password reset with emailed OTPs and F
     await complete(created.idToken).expect(403);
     expect((await db.doc("users/" + uid).get()).exists).toBe(false);
 
-    const authHeader = "Bearer " + created.idToken;
-    const registrationOtp = await request(app).post("/auth/register/email-otp")
-      .set("Authorization", authHeader).expect(200);
-    expect(mailbox[0].purpose).toBe("REGISTRATION");
-    await request(app).post("/auth/register/email-otp/verify").set("Authorization", authHeader)
-      .send({ challengeId: registrationOtp.body.challengeId, code: mailbox[0].code }).expect(200);
+    await authApi("sendOobCode", { requestType: "VERIFY_EMAIL", idToken: created.idToken });
+    await authApi("update", { oobCode: await emailCode("VERIFY_EMAIL") });
     const verified = await authApi("signInWithPassword", { email, password: firstPassword, returnSecureToken: true });
     const { body } = await complete(verified.idToken).expect(200);
     await complete(verified.idToken).expect(200).expect(body);
     expect((await db.doc("accounts/" + body.accountId).get()).data()).toMatchObject({ ownerUid: uid, status: "INACTIVE" });
 
-    const passwordOtp = await request(app).post("/auth/password-reset/email-otp").send({ email }).expect(200);
-    expect(mailbox[1].purpose).toBe("PASSWORD_RESET");
-    const reset = await request(app).post("/auth/password-reset/email-otp/verify")
-      .send({ challengeId: passwordOtp.body.challengeId, code: mailbox[1].code }).expect(200);
-    await request(app).post("/auth/password-reset/email-otp/confirm")
-      .send({ resetToken: reset.body.resetToken, password: newPassword }).expect(200);
+    await authApi("sendOobCode", { requestType: "PASSWORD_RESET", email });
+    await authApi("resetPassword", { oobCode: await emailCode("PASSWORD_RESET"), newPassword });
     const signedIn = await authApi("signInWithPassword", { email, password: newPassword, returnSecureToken: true });
     await request(app).get("/me").set("Authorization", "Bearer " + signedIn.idToken).expect(200);
   } finally {

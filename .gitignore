@@ -27,7 +27,8 @@ backend/firebase-admin.json
 # Sensitive demo artifacts
 /eKYC/
 
-# Local Firebase Emulator output
+# Local Firebase CLI and Emulator output
+/.firebase/
 firestore-debug.log
 firebase-debug.log
 ui-debug.log

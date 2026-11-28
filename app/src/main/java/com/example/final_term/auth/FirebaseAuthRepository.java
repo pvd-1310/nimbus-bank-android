@@ -3,9 +3,12 @@ package com.example.final_term.auth;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
+import com.example.final_term.BuildConfig;
 import com.example.final_term.core.AppConfig;
 import com.google.android.gms.tasks.Task;
 import com.google.android.gms.tasks.Tasks;
+import com.google.firebase.auth.ActionCodeResult;
+import com.google.firebase.auth.ActionCodeSettings;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
@@ -101,6 +104,52 @@ public final class FirebaseAuthRepository implements AuthRepository {
         if (firebaseAuth == null) return Tasks.forException(new IllegalStateException("FIREBASE_SETUP_REQUIRED"));
         return firebaseAuth.createUserWithEmailAndPassword(email, password)
                 .onSuccessTask(result -> Tasks.forResult(null));
+    }
+
+    @Override
+    public Task<Void> sendRegistrationEmail() {
+        FirebaseUser user = firebaseAuth == null ? null : firebaseAuth.getCurrentUser();
+        if (user == null) return Tasks.forException(new IllegalStateException("SIGN_IN_REQUIRED"));
+        firebaseAuth.setLanguageCode("vi");
+        return BuildConfig.FIREBASE_DEMO ? user.sendEmailVerification() : user.sendEmailVerification(emailActionSettings());
+    }
+
+    @Override
+    public Task<Void> sendPasswordRecoveryEmail(String email) {
+        if (firebaseAuth == null) return Tasks.forException(new IllegalStateException("FIREBASE_SETUP_REQUIRED"));
+        firebaseAuth.setLanguageCode("vi");
+        return BuildConfig.FIREBASE_DEMO
+                ? firebaseAuth.sendPasswordResetEmail(email)
+                : firebaseAuth.sendPasswordResetEmail(email, emailActionSettings());
+    }
+
+    private ActionCodeSettings emailActionSettings() {
+        return ActionCodeSettings.newBuilder()
+                .setUrl("https://" + BuildConfig.FIREBASE_AUTH_HOST + "/")
+                .setAndroidPackageName(BuildConfig.APPLICATION_ID, false, null)
+                .setHandleCodeInApp(true)
+                .build();
+    }
+
+    @Override
+    public Task<Void> applyEmailVerification(String code) {
+        if (firebaseAuth == null) return Tasks.forException(new IllegalStateException("FIREBASE_SETUP_REQUIRED"));
+        return firebaseAuth.checkActionCode(code).onSuccessTask(result ->
+                result.getOperation() == ActionCodeResult.VERIFY_EMAIL
+                        ? firebaseAuth.applyActionCode(code)
+                        : Tasks.forException(new IllegalArgumentException("INVALID_EMAIL_ACTION")));
+    }
+
+    @Override
+    public Task<String> verifyPasswordResetCode(String code) {
+        if (firebaseAuth == null) return Tasks.forException(new IllegalStateException("FIREBASE_SETUP_REQUIRED"));
+        return firebaseAuth.verifyPasswordResetCode(code);
+    }
+
+    @Override
+    public Task<Void> confirmPasswordReset(String code, String password) {
+        if (firebaseAuth == null) return Tasks.forException(new IllegalStateException("FIREBASE_SETUP_REQUIRED"));
+        return firebaseAuth.confirmPasswordReset(code, password);
     }
 
     @Override

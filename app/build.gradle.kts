@@ -1,3 +1,5 @@
+import groovy.json.JsonSlurper
+
 plugins {
     alias(libs.plugins.android.application)
 }
@@ -26,6 +28,16 @@ if (!firebaseDemo) {
         "Connected Android builds require app/google-services.json"
     }
     apply(plugin = "com.google.gms.google-services")
+}
+
+val firebaseAuthHost = if (firebaseDemo) "demo-mobile-banking.firebaseapp.com" else {
+    val config = JsonSlurper().parseText(
+        providers.fileContents(layout.projectDirectory.file("google-services.json")).asText.get()
+    ) as Map<*, *>
+    val projectInfo = config["project_info"] as Map<*, *>
+    val projectId = projectInfo["project_id"] as String
+    check(projectId.matches(Regex("[a-z0-9-]+"))) { "Invalid Firebase project ID" }
+    "$projectId.firebaseapp.com"
 }
 
 android {
@@ -72,6 +84,9 @@ android {
         buildConfigField("String", "BACKEND_BASE_URL", "\"$simulatorBackendUrl\"")
         buildConfigField("String", "STRIPE_PUBLISHABLE_KEY", "\"$stripePublishableKey\"")
 
+        buildConfigField("String", "FIREBASE_AUTH_HOST", "\"$firebaseAuthHost\"")
+        manifestPlaceholders["bankAuthLinkHost"] = firebaseAuthHost
+        manifestPlaceholders["bankAuthLinkEnabled"] = (!firebaseDemo).toString()
         manifestPlaceholders["bankAppLabel"] = if (firebaseDemo) "Nimbus Bank (Local)" else "@string/app_name"
         manifestPlaceholders["bankAllowBackup"] = (!firebaseDemo).toString()
         manifestPlaceholders["MAPS_API_KEY"] = if (firebaseDemo) "" else androidEnv["MAPS_API_KEY"].orEmpty()

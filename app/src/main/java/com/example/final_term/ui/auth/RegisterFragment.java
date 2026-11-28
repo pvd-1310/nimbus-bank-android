@@ -28,7 +28,6 @@ public final class RegisterFragment extends Fragment {
     private AuthRepository auth;
     private BackendApiClient api;
     private boolean emailVerified;
-    private EmailOtpSheet otpSheet;
     private boolean busy;
 
     @Override
@@ -45,15 +44,21 @@ public final class RegisterFragment extends Fragment {
         binding.registerBackButton.setOnClickListener(v -> returnToLogin());
         binding.registerBackToLoginButton.setOnClickListener(v -> returnToLogin());
         binding.registerSignOutButton.setOnClickListener(v -> returnToLogin());
+        binding.registerResendEmailButton.setOnClickListener(v -> sendEmail());
         binding.registerOpenEkycButton.setOnClickListener(v -> openEkycDialog());
         binding.registerSubmitButton.setOnClickListener(v -> {
             if (auth.currentEmail() == null) createIdentity();
-            else if (!emailVerified) sendEmail();
+            else if (!emailVerified) checkEmail(true);
             else completeRegistration();
         });
         auth.observeAuthState().observe(getViewLifecycleOwner(), ignored -> render());
         render();
-        if (auth.currentEmail() != null && !isOnboarding()) checkEmail(false);
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (!busy && !emailVerified && auth.currentEmail() != null && !isOnboarding()) checkEmail(false);
     }
 
     private boolean isOnboarding() {
@@ -80,10 +85,12 @@ public final class RegisterFragment extends Fragment {
         binding.registerFormTitle.setText(emailVerified ? "Thông tin mở tài khoản"
                 : hasIdentity ? "Xác minh email" : "Tạo thông tin đăng nhập");
         binding.registerFormHint.setText(emailVerified ? "Nhập thông tin để tạo hồ sơ và tiếp tục eKYC."
-                : hasIdentity ? "Nhận mã qua email và nhập mã tại đây để tiếp tục."
-                : "Nhập email và mật khẩu để nhận mã xác minh.");
+                : hasIdentity ? "Mở link trong email để xác minh và tiếp tục đăng ký."
+                : "Nhập email và mật khẩu để nhận link xác minh.");
         binding.registerSubmitButton.setText(emailVerified ? "Tiếp tục eKYC"
-                : hasIdentity ? "Nhập mã OTP" : "Tạo tài khoản");
+                : hasIdentity ? "Tôi đã xác minh" : "Tạo tài khoản");
+        binding.registerResendEmailButton.setVisibility(hasIdentity && !emailVerified ? View.VISIBLE : View.GONE);
+        binding.registerResendEmailButton.setEnabled(!busy);
         binding.registerSubmitButton.setEnabled(!busy);
         binding.registerProgress.setVisibility(busy ? View.VISIBLE : View.GONE);
     }
@@ -120,74 +127,12 @@ public final class RegisterFragment extends Fragment {
     }
 
     private void sendEmail() {
-        if (otpSheet != null && !otpSheet.isShowing()) {
-            otpSheet.reopen();
-            return;
-        }
         var form = binding;
         startRequest();
-        if (otpSheet != null) otpSheet.setBusy(true);
-        api.post("/auth/register/email-otp", "{}").addOnCompleteListener(task -> {
+        auth.sendRegistrationEmail().addOnCompleteListener(task -> {
             if (binding != form) return;
-            if (!task.isSuccessful()) {
-                emailFailure("Chưa thể kết nối máy chủ. Vui lòng thử lại.");
-                return;
-            }
-            var response = task.getResult();
-            try {
-                JSONObject data = new JSONObject(response.body);
-                if (response.statusCode != 200) {
-                    emailFailure(EmailOtpSheet.responseError(response.body));
-                    return;
-                }
-                if (data.optBoolean("verified")) {
-                    if (otpSheet != null) otpSheet.dismiss();
-                    otpSheet = null;
-                    checkEmail(true);
-                    return;
-                }
-                if (otpSheet == null) {
-                    otpSheet = new EmailOtpSheet(requireContext(),
-                            "Nhập mã 6 số đã gửi đến " + auth.currentEmail() + ".", this::verifyOtp, this::sendEmail);
-                }
-                otpSheet.show(data.getString("challengeId"), data.getInt("resendAfterSeconds"));
-                finishRequest(null);
-            } catch (JSONException invalid) {
-                emailFailure("Không đọc được phản hồi gửi mã. Vui lòng thử lại.");
-            }
+            finishRequest(task.isSuccessful() ? null : "Chưa gửi được email xác minh. Vui lòng thử lại.");
         });
-    }
-
-    private void verifyOtp(String code) {
-        var form = binding;
-        startRequest();
-        otpSheet.setBusy(true);
-        try {
-            String body = new JSONObject().put("challengeId", otpSheet.challengeId()).put("code", code).toString();
-            api.post("/auth/register/email-otp/verify", body).addOnCompleteListener(task -> {
-                if (binding != form) return;
-                if (!task.isSuccessful()) {
-                    emailFailure("Chưa thể kết nối máy chủ. Vui lòng thử lại.");
-                } else if (task.getResult().statusCode != 200) {
-                    emailFailure(EmailOtpSheet.responseError(task.getResult().body));
-                } else {
-                    otpSheet.dismiss();
-                    otpSheet = null;
-                    checkEmail(true);
-                }
-            });
-        } catch (JSONException invalid) {
-            emailFailure("Không đọc được mã. Vui lòng nhập lại.");
-        }
-    }
-
-    private void emailFailure(String message) {
-        if (otpSheet != null && otpSheet.isShowing()) {
-            otpSheet.fail(message);
-            finishRequest(null);
-        } else {
-            finishRequest(message);
-        }
     }
 
     private void checkEmail(boolean explicit) {
@@ -197,7 +142,7 @@ public final class RegisterFragment extends Fragment {
             if (binding != form) return;
             emailVerified = task.isSuccessful() && Boolean.TRUE.equals(task.getResult());
             String error = !task.isSuccessful() ? "Chưa kiểm tra được email. Vui lòng thử lại."
-                    : explicit && !emailVerified ? "Email chưa được xác minh. Hãy nhập mã gửi qua email." : null;
+                    : explicit && !emailVerified ? "Email chưa được xác minh. Hãy mở link trong hộp thư." : null;
             if (!emailVerified) {
                 finishRequest(error);
                 return;
@@ -292,8 +237,6 @@ public final class RegisterFragment extends Fragment {
 
     @Override
     public void onDestroyView() {
-        if (otpSheet != null) otpSheet.dismiss();
-        otpSheet = null;
         binding = null;
         busy = false;
         super.onDestroyView();

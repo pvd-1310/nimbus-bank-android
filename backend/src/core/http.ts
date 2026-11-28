@@ -1,7 +1,6 @@
 import type { Express, NextFunction, Request, Response } from "express";
 import { randomUUID } from "node:crypto";
 import { ZodError } from "zod";
-import type { AuthEmail } from "../modules/security/auth-email.js";
 import type { Actor } from "../modules/auth/auth.types.js";
 import type { StripeSandboxAccounts } from "../modules/accounts/stripe-sandbox-accounts.service.js";
 import type { StripeSandboxMovements } from "../modules/accounts/stripe-sandbox-movements.service.js";
@@ -31,10 +30,6 @@ export interface AppDependencies {
   verifyRegistrationIdentity?: (token: string) => Promise<{
     uid: string; email?: string; emailVerified: boolean; role?: unknown;
   }>;
-  sendAuthEmail?: (email: AuthEmail) => Promise<void>;
-  markRegistrationEmailVerified?: (uid: string, email: string) => Promise<void>;
-  lookupPasswordResetUser?: (email: string) => Promise<string | null>;
-  updatePasswordAfterEmailOtp?: (uid: string, password: string, matchesEmail: (email: string) => boolean) => Promise<void>;
   grantCustomerRole?: (uid: string) => Promise<void>;
   provision?: (a: Actor, body: Doc) => Promise<unknown>;
 }

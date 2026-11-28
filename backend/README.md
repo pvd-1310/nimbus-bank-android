@@ -99,8 +99,6 @@ Tất cả endpoint nghiệp vụ yêu cầu bearer token, ngoại trừ webhook
 
 | Nghiệp vụ | Endpoint |
 | --- | --- |
-| OTP đăng ký | POST `/auth/register/email-otp` và `/auth/register/email-otp/verify` với Firebase ID token |
-| OTP quên mật khẩu | POST `/auth/password-reset/email-otp`, `/auth/password-reset/email-otp/verify` và `/auth/password-reset/email-otp/confirm` |
 | Hoàn tất đăng ký | POST `/auth/register/complete` với Firebase ID token đã xác minh email |
 | Hồ sơ | GET/PATCH `/me` |
 | Khả năng đã cấu hình | GET `/capabilities` |
@@ -150,7 +148,7 @@ Chỉ cần thực hiện khi muốn dùng Spark project hiện tại thay emula
 4. Trước seed, xem dry run. Chỉ đặt `CONFIRM_SEED_PROJECT` bằng project ID sau khi kiểm tra namespace và tài khoản đích. Không chạy seed đè lên hai tài khoản Android cũ; seed mới tạo các UID có namespace.
 5. Migration hai UID demo cũ sang custom claims sẽ thực hiện riêng sau khi đối chiếu dữ liệu. Sign out/in lại sau đổi claims. Không tự deploy rules/indexes lúc này; rules gốc vẫn chặn client ghi dữ liệu tài chính. API sử dụng Admin nên luôn tự kiểm tra quyền.
 
-OTP giao dịch dùng chế độ hiển thị demo trong emulator và connected mode. Đăng ký và quên mật khẩu dùng OTP email gửi qua Resend. Cấu hình `RESEND_API_KEY` và `AUTH_EMAIL_FROM` ở backend. Luồng nhân viên gửi email đặt mật khẩu cho khách hàng mới vẫn dùng Firebase Auth.
+OTP giao dịch dùng chung chế độ hiển thị demo trong emulator và connected mode. Có thể bỏ cấu hình FIREBASE_PHONE_DEMO_SCOPE cũ. Email đặt mật khẩu tiếp tục dùng Firebase Auth.
 
 ## Face API và bước xác minh giao dịch giá trị cao
 
